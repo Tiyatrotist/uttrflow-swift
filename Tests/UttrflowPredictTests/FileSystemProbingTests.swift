@@ -109,14 +109,14 @@ struct SystemFileSystemTests {
         clock.advance(by: SystemFileSystem.slowVolumeLifetimeInSeconds + 1)
         #expect(disk.kind(atPath: "/Volumes/Slow/c") == .unknown)
         #expect(boxed.withLock { $0 } == 2)
-        let quick = SystemFileSystem(
-            environment: [:], homeDirectory: "/h", budget: .never, probe: { _ in .missing })
-        #expect(quick.kind(atPath: "/Volumes/Quick/a") == .missing)
+        let answered = SystemFileSystem(
+            environment: [:], homeDirectory: "/h", probe: { _ in .missing }, timeBox: { _, work in work() })
+        #expect(answered.kind(atPath: "/Volumes/Quick/a") == .missing)
     }
 
     @Test("Work held to a time box is its answer once it finishes, and nothing while it has not.")
     func timeBox() {
-        #expect(SystemFileSystem.timeBoxed(within: .never) { PathKind.directory } == .directory)
+        #expect(SystemFileSystem.timeBoxed(within: .seconds(3_600)) { PathKind.directory } == .directory)
         let latch = Latch()
         defer { latch.release(1) }
         let answer = SystemFileSystem.timeBoxed(within: .nanoseconds(0)) {
