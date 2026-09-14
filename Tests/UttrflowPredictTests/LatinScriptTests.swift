@@ -7,7 +7,7 @@ struct LatinScriptTests {
     @Test(
         "Latin with accents, emoji, symbols and any script's punctuation is Latin text.",
         arguments: [
-            "haan thik hai", "café naïve Zoë", "cafe\u{301}", "on my way 🚗 👍🏽 🇮🇳 1️⃣ ❤️ 👨‍👩‍👧",
+            "haan theek hai", "café naïve Zoë", "cafe\u{301}", "on my way 🚗 👍🏽 🇮🇳 1️⃣ ❤️ 👨‍👩‍👧",
             "MitoActive™ ®©", "₹500 — “quoted” ½ ²", "ﬁne Ｆｕｌｌ ① 𝐚𝟏", "done।", "ok。", "",
             "git commit -m 'fix'",
         ])

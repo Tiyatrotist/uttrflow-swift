@@ -86,7 +86,7 @@ both scorer and generator, and `AppDelegate` builds it. `PLAN.md` tracks the pha
 ## A suggestion is written in English, in the Latin alphabet
 
 **Everything Uttrflow writes is English in the Latin alphabet.** Hindi is written romanised,
-the way people type it ("haan thik hai"), and never in Devanagari. Uttrflow is not a
+the way people type it ("haan theek hai"), and never in Devanagari. Uttrflow is not a
 translator, and no suggestion ever puts another script into a field. This is a product
 decision, not a limitation waiting to be lifted, and dictation holds to the same rule.
 

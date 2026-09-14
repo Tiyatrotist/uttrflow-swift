@@ -40,8 +40,8 @@ struct SuggestionSessionScriptTests {
         var other = SuggestionSession()
         let beside = try draw(
             &other, typing: "ok",
-            candidates: [remembered("ok नहीं", count: 40), remembered("ok thik hai", count: 40)], in: composer)
-        #expect(beside?.suggestion == .certain("ok thik hai"))
+            candidates: [remembered("ok नहीं", count: 40), remembered("ok theek hai", count: 40)], in: composer)
+        #expect(beside?.suggestion == .certain("ok theek hai"))
     }
 
     @Test("A candidate the gates hand back in another script is not drawn.")
