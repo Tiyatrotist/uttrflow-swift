@@ -119,7 +119,7 @@ public struct SystemFileSystem: FileSystemProbing {
         let result = Outcome<Value>()
         let done = DispatchSemaphore(value: 0)
         // A queue of its own gets a thread at once, where a busy shared pool could leave the work unstarted past the budget.
-        DispatchQueue(label: "com.uttrflow.predict.remote-stat", qos: .userInitiated).async {
+        DispatchQueue(label: "com.uttrflow.predict.remote-stat", qos: .utility).async {
             result.set(work())
             done.signal()
         }
