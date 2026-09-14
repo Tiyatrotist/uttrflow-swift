@@ -99,6 +99,23 @@ Measured on an Apple silicon Mac under heavy load (load average above 20), on a 
 `/Network` or `/net` is stat'ed on a utility thread and waited for 20 ms; a volume that misses the
 deadline is answered `unknown`, which refuses the line, and is left alone for 30 seconds.
 
+## Fixtures
+
+`uttrflow-bakeoff complete --fixtures --only terminal`, Release, Gemma 3 4B from disk, 256 cuts.
+`Grounding` stands each fixture on a `FixtureDisk` built from its machine.
+
+| | Hit | Precision (wrong shown) | Coverage | p50 |
+|---|---|---|---|---|
+| before the check | 247 | 96.77 % (8) | 96.88 % | 166 ms |
+| with the check | 239 | 97.07 % (7) | 93.36 % | 136 ms |
+
+Every one of the eight hits lost was a first line the check refuses because running it would fail
+or harm: `cat docs`, `tail logs`, `tail -f logs`, `cat ~/Desktop` and `node public` stop at a
+directory where a file is needed; `cd ~Projects` names a user's home that is not there;
+`cat projects/api/README.md` names a file the fixture's disk does not hold; and
+`kubectl delete api` is destructive. The catalogue counts a line ending on a whole word of the
+right answer as a hit, which is why they counted before.
+
 ## Limits, each a false negative or an open question
 
 - A shell function, a `CDPATH` entry, or a program installed somewhere the search path does not
