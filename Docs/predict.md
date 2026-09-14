@@ -106,20 +106,18 @@ It is enforced in four places. Each one alone would leave a way through.
 | `SuggestionSession.drawable`, `MLXCandidateScorer.parse` | A generated line containing another script is dropped where the reply is parsed, so the bake-off sees it too, and again before anything is drawn |
 | `PromptBuilder.scriptInstruction`, `GenerationSituation.recentLines` | Where the screen, the window title or the text before the line holds another script, the model is told to write English, or romanised Hinglish where the person writes that, in the Latin alphabet only. The person's earlier lines in other scripts are left out of what it is shown and of what the register is inferred from |
 
-**Why a non-Latin line is silent rather than completed in Latin.** There were two other
-choices. Continuing Devanagari in Devanagari breaks the rule. Continuing it in Latin letters
-glues a romanised tail onto a Devanagari word ("नहीं jaana"), which is text nobody types. That
-is a transliteration Uttrflow would be inventing, not a completion. A field being typed in
-another script is one where Uttrflow has nothing it may write, so it draws nothing. The
+**A non-Latin line is silent, not completed in Latin.** A completion in that script breaks
+the rule, and a Latin one glues a romanised tail onto a Devanagari word ("नहीं jaana"), which
+is text nobody types. A line being typed in another script is one where Uttrflow has nothing
+it may write, so it draws nothing. The
 decision is made per line, because the line is the unit of a completion: the next line in the
 same field, typed in Latin letters, is completed as usual.
 
-**Why the instruction is only given where another script is in view.** Written into
-`MLXCandidateScorer.instructions` for every pass, the same sentence changed the model's first
-line on 296 of the 1,154 bake-off fixtures and cost three English hits, while no fixture's
-answer had contained another script to begin with. Only context in another script draws the
-model towards one, so the instruction is added exactly there, and an all-Latin prompt stays
-byte for byte what was measured. The output filters catch a stray line either way.
+**The instruction is given only where another script is in view.** Only context in another
+script draws the model towards one. Given on every pass, the same sentence changes the model's
+first line on 296 of the 1,154 bake-off fixtures and costs three English hits, and no fixture
+answers in another script without it. So an all-Latin prompt carries no instruction, and the
+output filters catch a stray line either way.
 
 **What stays.** Capture still records a line the person typed in Devanagari. It is their
 text, and forgetting or editing it is not the suggestion loop's decision. It is simply never

@@ -8,7 +8,8 @@ struct LatinScriptTests {
         "Latin with accents, emoji, symbols and any script's punctuation is Latin text.",
         arguments: [
             "haan thik hai", "café naïve Zoë", "cafe\u{301}", "on my way 🚗 👍🏽 🇮🇳 1️⃣ ❤️ 👨‍👩‍👧",
-            "MitoActive™ ®©", "₹500 — “quoted” ½ ²", "ﬁne Ｆｕｌｌ ①", "done।", "ok。", "", "git commit -m 'fix'",
+            "MitoActive™ ®©", "₹500 — “quoted” ½ ²", "ﬁne Ｆｕｌｌ ① 𝐚𝟏", "done।", "ok。", "",
+            "git commit -m 'fix'",
         ])
     func latinTextIsLatin(text: String) {
         #expect(LatinScript.writes(text))
@@ -17,7 +18,8 @@ struct LatinScriptTests {
     @Test(
         "A letter, mark or digit of any other script makes the text not Latin, however little of it there is.",
         arguments: [
-            "नहीं", "ok नहीं", "ज़िंदगी", "abc ०१२", "你好", "こんにちは", "مرحبا", "Привет", "γειά", "٣", "a\u{93C}",
+            "नहीं", "ok नहीं", "ज़िंदगी", "abc ०१२", "你好", "こんにちは", "مرحبا", "Привет", "γειά", "٣", "𝛼", "𝐚𝛼",
+            "a\u{93C}",
         ])
     func otherScriptsAreNot(text: String) {
         #expect(!LatinScript.writes(text))

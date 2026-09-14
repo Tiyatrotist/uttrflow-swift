@@ -40,7 +40,8 @@ public enum LatinScript {
         0xFF10...0xFF19,  // Fullwidth digits
         0xFF21...0xFF3A,  // Fullwidth Latin capitals
         0xFF41...0xFF5A,  // Fullwidth Latin small letters
-        0x1D400...0x1D7FF,  // Mathematical Alphanumeric Symbols
+        0x1D400...0x1D6A5,  // Mathematical Latin letters
+        0x1D7CE...0x1D7FF,  // Mathematical digits
         0x1F100...0x1F1FF,  // Enclosed Alphanumeric Supplement, which flags use
         0xE0000...0xE01EF,  // Tags and Variation Selectors Supplement, which emoji use
     ]

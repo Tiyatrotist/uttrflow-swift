@@ -77,7 +77,7 @@ enum PromptBuilder {
             located += ", document \(Self.head(document, within: locatorCap))"
         }
         var opening = "In \(located).\nHints: \(register.hints.joined(separator: "; "))."
-        // Only another script in the context could draw the model into it, so a Latin moment's prompt is left as measured.
+        // Adds the script instruction only when the context shows another script. See `Docs/predict.md`.
         if !situation.readsOnlyLatin { opening += "\n\(scriptInstruction)" }
         // The machine's own values are the only right next words, so the model is told them and chooses rather than invents.
         if ask == .one, !situation.choices.isEmpty {
