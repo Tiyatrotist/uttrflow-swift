@@ -23,8 +23,10 @@ public struct SystemFileSystem: FileSystemProbing {
     public let searchPaths: [String]
     /// How long a remote stat may take.
     private let budget: DispatchTimeInterval
-    /// The stat itself, injected so a test can make it hang.
+    /// The stat itself, injected so a test can stand in for the disk.
     private let probe: @Sendable (String) -> PathKind
+    /// How a remote stat is held to its budget, injected so a test can miss the deadline without blocking a thread.
+    private let timeBox: @Sendable (DispatchTimeInterval, @escaping @Sendable () -> PathKind) -> PathKind?
     /// The clock a slow volume is remembered on.
     private let now: @Sendable () -> Date
     /// The volumes that missed a deadline, and until when they are skipped.
@@ -35,6 +37,8 @@ public struct SystemFileSystem: FileSystemProbing {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         homeDirectory: String = NSHomeDirectory(), budget: DispatchTimeInterval = Self.remoteBudget,
         probe: @escaping @Sendable (String) -> PathKind = Self.statKind,
+        timeBox: @escaping @Sendable (DispatchTimeInterval, @escaping @Sendable () -> PathKind) -> PathKind? =
+            { Self.timeBoxed(within: $0, $1) },
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.homeDirectory = homeDirectory
@@ -48,6 +52,7 @@ public struct SystemFileSystem: FileSystemProbing {
             home: homeDirectory)
         self.budget = budget
         self.probe = probe
+        self.timeBox = timeBox
         self.now = now
     }
 
@@ -67,7 +72,7 @@ public struct SystemFileSystem: FileSystemProbing {
         guard let volume = Self.remoteVolume(of: path) else { return probe(path) }
         guard !slow.isSlow(volume, at: now()) else { return .unknown }
         let probe = self.probe
-        guard let kind = Self.timeBoxed(within: budget, { probe(path) }) else {
+        guard let kind = timeBox(budget, { probe(path) }) else {
             slow.markSlow(volume, until: now().addingTimeInterval(Self.slowVolumeLifetimeInSeconds))
             return .unknown
         }
@@ -108,7 +113,7 @@ public struct SystemFileSystem: FileSystemProbing {
     }
 
     /// Runs work on a utility thread and waits for it only as long as the budget, absent when it has not finished.
-    static func timeBoxed<Value: Sendable>(
+    public static func timeBoxed<Value: Sendable>(
         within budget: DispatchTimeInterval, _ work: @escaping @Sendable () -> Value
     ) -> Value? {
         let result = Outcome<Value>()

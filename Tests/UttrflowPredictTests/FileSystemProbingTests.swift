@@ -16,16 +16,12 @@ private final class HandClock: Sendable {
 /// A gate a blocked stat waits on until the test lets it go.
 private final class Latch: Sendable {
     private let semaphore = DispatchSemaphore(value: 0)
-    private let entered = Mutex(0)
 
     func wait() {
-        entered.withLock { $0 += 1 }
         semaphore.wait()
     }
 
     func release(_ count: Int) { for _ in 0..<count { semaphore.signal() } }
-
-    var entries: Int { entered.withLock { $0 } }
 }
 
 @Suite("Asking this Mac's disk without running anything")
@@ -98,24 +94,36 @@ struct SystemFileSystemTests {
     @Test(
         "A remote stat that misses its deadline is unknown, and its volume is skipped until the time is up.")
     func slowVolume() {
-        let latch = Latch()
         let clock = HandClock()
+        let boxed = Mutex(0)
         let disk = SystemFileSystem(
-            environment: [:], homeDirectory: "/h", budget: .nanoseconds(0),
-            probe: { _ in
-                latch.wait()
-                return .directory
+            environment: [:], homeDirectory: "/h", probe: { _ in .directory },
+            timeBox: { _, _ in
+                boxed.withLock { $0 += 1 }
+                return nil
             }, now: { clock.now })
         #expect(disk.kind(atPath: "/Volumes/Slow/a") == .unknown)
         #expect(disk.kind(atPath: "/Volumes/Slow/b") == .unknown)
-        #expect(latch.entries <= 1)
+        #expect(boxed.withLock { $0 } == 1)
+        #expect(disk.kind(atPath: "/Users/a") == .directory)
         clock.advance(by: SystemFileSystem.slowVolumeLifetimeInSeconds + 1)
         #expect(disk.kind(atPath: "/Volumes/Slow/c") == .unknown)
-        latch.release(2)
+        #expect(boxed.withLock { $0 } == 2)
         let quick = SystemFileSystem(
-            environment: [:], homeDirectory: "/h", budget: .seconds(60), probe: { _ in .missing })
+            environment: [:], homeDirectory: "/h", budget: .never, probe: { _ in .missing })
         #expect(quick.kind(atPath: "/Volumes/Quick/a") == .missing)
-        #expect(quick.kind(atPath: "/Users/a") == .missing)
+    }
+
+    @Test("Work held to a time box is its answer once it finishes, and nothing while it has not.")
+    func timeBox() {
+        #expect(SystemFileSystem.timeBoxed(within: .never) { PathKind.directory } == .directory)
+        let latch = Latch()
+        defer { latch.release(1) }
+        let answer = SystemFileSystem.timeBoxed(within: .nanoseconds(0)) {
+            latch.wait()
+            return PathKind.missing
+        }
+        #expect(answer == nil)
     }
 
     @Test("A cached answer is believed for its lifetime and asked again after it.")
