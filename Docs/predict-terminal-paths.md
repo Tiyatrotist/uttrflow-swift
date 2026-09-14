@@ -96,7 +96,7 @@ Measured on an Apple silicon Mac under heavy load (load average above 20), on a 
 | and its directories, one `stat` per entry | 41 ms |
 
 `CachedFileSystem` believes a stat or a small read for two seconds. A path on `/Volumes`,
-`/Network` or `/net` is stat'ed on a utility thread and waited for 20 ms; a volume that misses the
+`/Network` or `/net` is stat'ed on a queue of its own and waited for 20 ms; a volume that misses the
 deadline is answered `unknown`, which refuses the line, and is left alone for 30 seconds.
 
 ## Fixtures

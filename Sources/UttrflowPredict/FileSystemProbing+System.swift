@@ -112,13 +112,14 @@ public struct SystemFileSystem: FileSystemProbing {
         return name.isEmpty ? nil : root + name
     }
 
-    /// Runs work on a utility thread and waits for it only as long as the budget, absent when it has not finished.
+    /// Runs work on a queue of its own and waits for it only as long as the budget, absent when it has not finished.
     public static func timeBoxed<Value: Sendable>(
         within budget: DispatchTimeInterval, _ work: @escaping @Sendable () -> Value
     ) -> Value? {
         let result = Outcome<Value>()
         let done = DispatchSemaphore(value: 0)
-        DispatchQueue.global(qos: .utility).async {
+        // A queue of its own gets a thread at once, where a busy shared pool could leave the work unstarted past the budget.
+        DispatchQueue(label: "com.uttrflow.predict.remote-stat", qos: .userInitiated).async {
             result.set(work())
             done.signal()
         }
