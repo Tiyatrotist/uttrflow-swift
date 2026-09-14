@@ -83,6 +83,50 @@ directory — a terminal's working directory — is scoped to itself, which is t
 loop, verification sits between ranking and drawing, one `MLXCandidateScorer` is wired in as
 both scorer and generator, and `AppDelegate` builds it. `PLAN.md` tracks the phases.
 
+## A suggestion is written in English, in the Latin alphabet
+
+**Everything Uttrflow writes is English in the Latin alphabet.** Hindi is written romanised,
+the way people type it ("haan thik hai"), and never in Devanagari. Uttrflow is not a
+translator, and no suggestion ever puts another script into a field. This is a product
+decision, not a limitation waiting to be lifted, and dictation holds to the same rule.
+
+`LatinScript.writes` in `UttrflowPredict` is the one question asked about a piece of text: does
+any letter, combining mark or digit in it belong to a script other than Latin? Accents
+(café, naïve, a decomposed é), fullwidth and styled Latin, emoji with their variation
+selectors, skin tones, flags and keycaps, symbols such as ™, ₹ and ½, and punctuation of any
+script never count. Devanagari, Arabic, Cyrillic, Greek, Han, kana, and the digits of those
+scripts do.
+
+It is enforced in four places. Each one alone would leave a way through.
+
+| Where | What is refused |
+|---|---|
+| `SuggestionSession.turn` | A line containing another script gets no turn at all. It settles as `Quieting.Reason.nonLatinLine`, and neither the store nor the model is asked |
+| `SuggestionSession.resolve` | A remembered or machine candidate containing another script is never ranked or drawn, even though capture keeps it |
+| `SuggestionSession.drawable`, `MLXCandidateScorer.parse` | A generated line containing another script is dropped where the reply is parsed, so the bake-off sees it too, and again before anything is drawn |
+| `PromptBuilder.scriptInstruction`, `GenerationSituation.recentLines` | Where the screen, the window title or the text before the line holds another script, the model is told to write English, or romanised Hinglish where the person writes that, in the Latin alphabet only. The person's earlier lines in other scripts are left out of what it is shown and of what the register is inferred from |
+
+**Why a non-Latin line is silent rather than completed in Latin.** There were two other
+choices. Continuing Devanagari in Devanagari breaks the rule. Continuing it in Latin letters
+glues a romanised tail onto a Devanagari word ("नहीं jaana"), which is text nobody types. That
+is a transliteration Uttrflow would be inventing, not a completion. A field being typed in
+another script is one where Uttrflow has nothing it may write, so it draws nothing. The
+decision is made per line, because the line is the unit of a completion: the next line in the
+same field, typed in Latin letters, is completed as usual.
+
+**Why the instruction is only given where another script is in view.** Written into
+`MLXCandidateScorer.instructions` for every pass, the same sentence changed the model's first
+line on 296 of the 1,154 bake-off fixtures and cost three English hits, while no fixture's
+answer had contained another script to begin with. Only context in another script draws the
+model towards one, so the instruction is added exactly there, and an all-Latin prompt stays
+byte for byte what was measured. The output filters catch a stray line either way.
+
+**What stays.** Capture still records a line the person typed in Devanagari. It is their
+text, and forgetting or editing it is not the suggestion loop's decision. It is simply never
+offered back. Screen text around the field is still shown to the model as context, because a
+reply in romanised Hinglish to a message written in Devanagari is a legitimate line. What the
+model writes back is held to the rule by the filters above.
+
 ## Turning it on
 
 Settings → AI suggestions → **Finish what I am typing**. Off for everybody who has not asked
