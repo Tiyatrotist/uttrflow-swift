@@ -1841,8 +1841,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if outcome == .granted, settings.hotkey.heldModifier != nil {
                 startWatchingForTheShortcut()
             }
-        case .microphone, .appleIntelligence:
-            _ = await MicrophonePermissionGate().request()
+        case .microphone:
+            _ = await MicrophonePermissionGate().requestOrOpenSettings()
+        case .appleIntelligence:
+            SystemSettingsOpener().open(.appleIntelligence)
         }
     }
 }
