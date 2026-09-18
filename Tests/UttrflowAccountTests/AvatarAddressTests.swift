@@ -110,12 +110,23 @@ struct AvatarAddressTests {
         #expect(transport.requests.allSatisfy { sameOrigin($0.url, as: "https://api.example.com") })
     }
 
-    @Test("asks for nothing when the path is refused")
-    func aRefusedPathSendsNothing() async throws {
-        let transport = backend()
-        let bytes = try await service("https://api.example.com", transport: transport).avatar(at: "/../x")
+    @Test(
+        "refuses a path that is not a plain absolute path, before asking for anything",
+        arguments: [
+            "//other.example/x", "https://other.example/x", "///other.example/x", "/%2e%2e/x", "/../x",
+            "/./x",
+            "/x#part", "v1/me/avatar", "",
+        ])
+    func aRefusedPathSendsNothing(path: String) async throws {
+        for root in [
+            "https://api.example.com", "https://api.example.com/", "https://api.example.com:8443/base",
+        ] {
+            let transport = backend()
+            let bytes = try await service(root, transport: transport).avatar(at: path)
 
-        #expect(bytes == nil)
-        #expect(transport.requests.isEmpty)
+            #expect(bytes == nil, "\(path) against \(root)")
+            #expect(
+                transport.requests.isEmpty, "\(path) against \(root) sent \(transport.requests.map(\.url))")
+        }
     }
 }
