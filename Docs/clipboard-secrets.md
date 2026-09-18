@@ -76,7 +76,7 @@ patterns by the number of prefixes and runs, not the clip's length. The before a
 ## The oracle sweep
 
 The two oracle suites are fixed-seed and deterministic, and the full sweep costs over a minute
-locally and several on the CI runner, where it starved the rest of the test run (#632). So
+locally and several on the CI runner, where it starved the rest of the test run. So
 `swift test` and `make verify` run a sample: the first two seeds of every generator, each on the
 first twenty-fifth of the strings the full sweep gives that seed, plus every planted shape and
 hand-written case. The sample is a prefix of the sweep, so anything it finds the sweep finds too.
