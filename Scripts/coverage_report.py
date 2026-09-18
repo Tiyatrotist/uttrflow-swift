@@ -32,6 +32,7 @@ EXCLUDED_FILES = {
     "UttrflowAudio/RecordingCue+System.swift": "plays a sound out of the speakers",
     "UttrflowPermissions/MicrophonePermissionGate+System.swift": "puts a system dialog on screen",
     "UttrflowPermissions/AccessibilityPermissionGate+System.swift": "opens System Settings",
+    "UttrflowPermissions/SystemSettingsOpener+System.swift": "hands a System Settings address to the system to open",
     "UttrflowSettings/LaunchAtLogin+System.swift": "registers a login item with the system",
     "UttrflowContext/MacContextEngine+System.swift": "reads other apps' windows through Accessibility",
     "UttrflowContext/SurfaceProbe+System.swift": "asks other apps about their focused field",
