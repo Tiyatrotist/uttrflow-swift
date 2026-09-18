@@ -1,4 +1,4 @@
-// Tests that the single-pass secret readers and the rewritten classifier patterns agree with the patterns they replace.
+// Tests that the single-pass secret readers and the rewritten classifier patterns agree with the patterns they replace, on a fixed sample unless `UTTRFLOW_ORACLE_SWEEP=1` asks for every seed in full.
 
 import Foundation
 import Testing
@@ -93,12 +93,12 @@ struct SecretShapesOracleTests {
         return found
     }
 
-    @Test("Random text: 200,000 strings over eight seeds", arguments: 0..<8)
+    @Test("Random text: 200,000 strings over eight seeds in the full sweep", arguments: OracleSweep.seeds(8))
     func randomStrings(seed: Int) async {
         let failures = await offTheTestPool {
             var random = Seeded(seed: 443_000 + seed)
             var failures: [String] = []
-            for _ in 0..<25_000 {
+            for _ in 0..<OracleSweep.strings(25_000) {
                 let text = Self.randomText(&random)
                 let found = Self.disagreements(text)
                 if !found.isEmpty, failures.count < 20 {
@@ -110,13 +110,15 @@ struct SecretShapesOracleTests {
         #expect(failures.isEmpty, "\(failures)")
     }
 
-    @Test("Planted secrets and near-misses, cut and spliced into random text", arguments: 0..<4)
+    @Test(
+        "Planted secrets and near-misses, cut and spliced into random text", arguments: OracleSweep.seeds(4))
     func plantedSecrets(seed: Int) async {
+        let count = OracleSweep.strings(10_000)
         let (failures, detected) = await offTheTestPool {
             var random = Seeded(seed: 397_000 + seed)
             var failures: [String] = []
             var detected = 0
-            for _ in 0..<10_000 {
+            for _ in 0..<count {
                 let text = Self.plantedText(&random)
                 let found = Self.disagreements(text)
                 if !found.isEmpty, failures.count < 20 {
@@ -128,7 +130,7 @@ struct SecretShapesOracleTests {
         }
         #expect(failures.isEmpty, "\(failures)")
         // Most planted texts still carry a secret, so agreement is measured on positives as well as negatives.
-        #expect(detected > 2_500)
+        #expect(detected > count / 4)
     }
 
     @Test("Every planted shape, untouched, reads the same")
@@ -138,12 +140,14 @@ struct SecretShapesOracleTests {
         }
     }
 
-    @Test("The rewritten classifier patterns accept exactly what the backtracking ones did", arguments: 0..<4)
+    @Test(
+        "The rewritten classifier patterns accept exactly what the backtracking ones did",
+        arguments: OracleSweep.seeds(4))
     func classifierPatterns(seed: Int) async {
         let failures = await offTheTestPool {
             var random = Seeded(seed: 405_000 + seed)
             var failures: [String] = []
-            for _ in 0..<10_000 {
+            for _ in 0..<OracleSweep.strings(10_000) {
                 let text = random.chance(0.5) ? Self.plantedText(&random) : Self.randomText(&random)
                 for name in Self.classifierDisagreements(text) where failures.count < 20 {
                     failures.append("\(name) on \(text.debugDescription)")
@@ -189,6 +193,22 @@ struct SecretShapesOracleTests {
                 "\(text.debugDescription)")
         }
     }
+}
+
+/// How much of each randomised oracle comparison runs: the first seeds' prefix by default, all of it under `UTTRFLOW_ORACLE_SWEEP=1`.
+enum OracleSweep {
+    /// Whether the full sweep was asked for; see the nightly `oracle-sweep.yml` workflow.
+    static let isFull =
+        ProcessInfo.processInfo.environment["UTTRFLOW_ORACLE_SWEEP"].map { !["", "0"].contains($0) } ?? false
+
+    /// The seeds to run: every one of `full` in the sweep, the first two by default.
+    static func seeds(_ full: Int) -> Range<Int> { 0..<(isFull ? full : min(full, 2)) }
+
+    /// The strings per seed: `full` in the sweep, a fixed sample by default drawn from the start of the same stream.
+    static func strings(_ full: Int) -> Int { isFull ? full : max(1, full / sampleDivisor) }
+
+    /// How much smaller each seed's default run is than its full one.
+    static let sampleDivisor = 25
 }
 
 /// Runs CPU-bound work on its own thread, so a long loop does not hold a thread other suites' async tests are waiting for.

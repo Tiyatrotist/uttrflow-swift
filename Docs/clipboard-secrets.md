@@ -36,7 +36,8 @@ did, character for character: ASCII classes match only a lone ASCII scalar, `\s`
 `Character.isWhitespace`, `$` stands before any `Character.isNewline`, a case-insensitive `k`
 also matches U+212A KELVIN SIGN, and `\b` is the Unicode word boundary the pattern engine uses.
 `SecretShapesOracleTests` keeps the old patterns as the oracle and compares them with the readers
-on 200,000 random strings and on planted secrets. `SecretShapesScalingTests` bounds the
+on 200,000 random strings and on planted secrets (see "The oracle sweep" below for when the
+whole sweep runs). `SecretShapesScalingTests` bounds the
 characters read per character of the clip, so the check is a count, not a clock.
 
 The same pass found four classifier patterns with the same flaw, rewritten as patterns that
@@ -68,9 +69,21 @@ clip each pattern is handed. `PatternWindows.swift` holds the pieces.
   clip's bytes as its characters, which they are.
 
 `ClipKindOracleTests` keeps the whole-clip reading as the oracle and compares it on 50,000 random,
-planted and realistic clips; `ClipClassifyScalingTests` bounds the characters handed to the two
+planted and realistic clips in the full sweep; `ClipClassifyScalingTests` bounds the characters handed to the two
 patterns by the number of prefixes and runs, not the clip's length. The before and after are in
 `Docs/performance.md`.
+
+## The oracle sweep
+
+The two oracle suites are fixed-seed and deterministic, and the full sweep costs over a minute
+locally and several on the CI runner, where it starved the rest of the test run. So
+`swift test` and `make verify` run a sample: the first two seeds of every generator, each on the
+first twenty-fifth of the strings the full sweep gives that seed, plus every planted shape and
+hand-written case. The sample is a prefix of the sweep, so anything it finds the sweep finds too.
+
+`UTTRFLOW_ORACLE_SWEEP=1 swift test --filter Oracle` runs every seed in full. The
+`oracle-sweep.yml` workflow does that nightly, on demand, and on pull requests that touch
+`Sources/UttrflowClipboard`; it is not a required check.
 
 ## The entropy floor: 3.8 bits per character
 
