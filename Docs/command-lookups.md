@@ -38,6 +38,6 @@ output pipe is closed in the child.
 
 The program starts as the leader of a new process group. Its output is read as it arrives,
 against a deadline that starts at launch: 0.5 s for git, 2 s for help. At the deadline, or past
-1 MiB of output, the whole group is killed and the lookup has no answer. When the program exits
+1 MiB of output, the whole group is killed, and the lookup has no answer. When the program exits
 while something it started still holds the pipe, what it wrote is kept and the group is killed.
 A lookup with no answer leaves the words it would have checked unverified, never refused.

@@ -234,9 +234,13 @@ struct SpawnedProgramLauncherTests {
         #expect(hasExited(child))
     }
 
-    @Test("kills a program that writes more than the limit")
-    func tooMuchOutput() async {
-        let endless = ProgramLaunch(executable: "/usr/bin/yes", arguments: [], environment: [:], timeout: 30)
-        #expect(await SpawnedProgramLauncher(outputLimit: 4_096).output(of: endless) == nil)
+    @Test("has no answer for a program that writes more than the limit, and keeps one that writes less")
+    func tooMuchOutput() async throws {
+        let eightKilobytes = ProgramLaunch(
+            executable: "/usr/bin/head", arguments: ["-c", "8192", "/dev/zero"], environment: [:], timeout: 30
+        )
+        #expect(await SpawnedProgramLauncher(outputLimit: 4_096).output(of: eightKilobytes) == nil)
+        let kept = try #require(await SpawnedProgramLauncher(outputLimit: 16_384).output(of: eightKilobytes))
+        #expect(kept.utf8.count == 8_192)
     }
 }

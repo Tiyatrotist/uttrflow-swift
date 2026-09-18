@@ -122,10 +122,14 @@ public struct SpawnedProgramLauncher: ProgramLaunching {
             posix_spawn_file_actions_destroy(&actions)
             posix_spawnattr_destroy(&attributes)
         }
-        posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0)
-        posix_spawn_file_actions_adddup2(&actions, writing, 1)
-        posix_spawn_file_actions_adddup2(&actions, writing, 2)
-        posix_spawn_file_actions_addchdir(&actions, directory)
+        // A child whose descriptors or directory could not be arranged is never started.
+        let arranged = [
+            posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0),
+            posix_spawn_file_actions_adddup2(&actions, writing, 1),
+            posix_spawn_file_actions_adddup2(&actions, writing, 2),
+            posix_spawn_file_actions_addchdir(&actions, directory),
+        ]
+        guard arranged.allSatisfy({ $0 == 0 }) else { return nil }
 
         var defaults = sigset_t()
         sigemptyset(&defaults)

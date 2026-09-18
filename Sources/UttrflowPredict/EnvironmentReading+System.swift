@@ -183,20 +183,21 @@ public struct SystemEnvironmentReader: EnvironmentReading {
         return names.count >= Self.fewestListedVerbs ? Array(names.prefix(Self.verbLimit)) : nil
     }
 
+    /// The first git installed at one of `gitPaths`, which every git lookup runs.
+    static func installedGit() -> String? {
+        gitPaths.first(where: FileManager.default.isExecutableFile(atPath:))
+    }
+
     /// Every subcommand this machine's git accepts, asked of git rather than written down here.
     private func gitSubcommands() async -> [String]? {
-        guard let git = Self.gitPaths.first(where: FileManager.default.isExecutableFile(atPath:)) else {
-            return nil
-        }
+        guard let git = Self.installedGit() else { return nil }
         let listed = await run(git, arguments: ["--list-cmds=builtins,main,others,alias"])
         return listed.map { Array($0.split(separator: "\n").map(String.init).prefix(Self.verbLimit)) }
     }
 
     /// Every name the user's git configuration binds, which no typo model may be allowed to undo.
     private func gitAliases(in directory: String) async -> [String]? {
-        guard let git = Self.gitPaths.first(where: FileManager.default.isExecutableFile(atPath:)) else {
-            return nil
-        }
+        guard let git = Self.installedGit() else { return nil }
         // A configuration with no aliases is an exit status of one and an answer of none, not a failure.
         let declared =
             await run(git, arguments: ["-C", directory, "config", "--get-regexp", "^alias\\."]) ?? ""
