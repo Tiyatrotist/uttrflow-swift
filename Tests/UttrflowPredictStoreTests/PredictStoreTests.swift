@@ -599,6 +599,7 @@ struct QueryPlanTests {
         let plan = try database.plan(of: PredictStore.recentQuery).joined(separator: " | ")
         #expect(plan.contains("USING INDEX entry_recent"), "the plan was: \(plan)")
         #expect(!plan.contains("SCAN entry"), "the plan was: \(plan)")
+        #expect(!plan.contains("TEMP B-TREE"), "nothing is grouped or sorted in a temporary: \(plan)")
     }
 
     @Test(

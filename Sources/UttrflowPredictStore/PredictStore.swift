@@ -70,30 +70,56 @@ public actor PredictStore: PredictionStore {
 
     /// The lines this person recently entered in this field, each once, the ones from this document first.
     public func recent(in surface: Surface, limit: Int) throws(PredictStoreError) -> [String] {
-        guard limit > 0 else { return [] }
+        let ids = try surfaceIdentifiers(of: surface)
+        guard !ids.isEmpty, limit > 0 else { return [] }
         let here = try identifier(of: surface, creating: false) ?? -1
-        return try database.rows(
-            Self.recentQuery,
-            { statement in
-                statement.bind(1, surface.bundleIdentifier)
-                statement.bind(2, surface.role)
-                statement.bind(3, surface.locator ?? "")
-                statement.bind(4, here)
-                statement.bind(5, Int64(limit))
+        // One indexed read per scope, ordered and de-duplicated here, so SQLite groups nothing. See #880.
+        var newest: [String: (used: Double, isHere: Bool)] = [:]
+        var order: [String] = []
+        for id in ids {
+            for line in try recentLines(surfaceIdentifier: id, limit: limit) {
+                let isHere = id == here
+                guard let seen = newest[line.text] else {
+                    newest[line.text] = (line.used, isHere)
+                    order.append(line.text)
+                    continue
+                }
+                newest[line.text] = (max(seen.used, line.used), seen.isHere || isHere)
             }
-        ) { $0.text(0) }
+        }
+        // The document in hand first, then the newest; arrival order breaks a tie, as the grouped read did.
+        let ranked = order.enumerated().sorted { left, right in
+            let one = newest[left.element] ?? (0, false)
+            let other = newest[right.element] ?? (0, false)
+            if one.isHere != other.isHere { return one.isHere }
+            if one.used != other.used { return one.used > other.used }
+            return left.offset < right.offset
+        }
+        return ranked.prefix(limit).map(\.element)
+    }
+
+    /// The per-scope recency read, exposed so a test can check its plan groups and sorts nothing.
+    static let recentQuery = """
+        SELECT text, last_used FROM entry
+        WHERE surface_id = ? AND superseded_by IS NULL AND count > self_sourced
+        ORDER BY last_used DESC LIMIT ?
+        """
+
+    /// One scope's most recent lines, read straight off `entry_recent` rather than grouped.
+    private func recentLines(
+        surfaceIdentifier id: Int64, limit: Int
+    ) throws(PredictStoreError) -> [(text: String, used: Double)] {
+        try database.rows(
+            Self.recentQuery,
+            {
+                $0.bind(1, id)
+                $0.bind(2, Int64(limit))
+            }
+        ) { ($0.text(0), $0.double(1)) }
     }
 
     /// How many compiled statements the open file keeps.
     var cachedStatements: Int { database.cachedStatements }
-
-    /// The recency read `entry_recent` serves, one SQL text however many documents the field has been in.
-    static let recentQuery = """
-        SELECT text, MAX(last_used) AS used, MAX(surface_id = ?4) AS here FROM entry
-        WHERE surface_id IN (SELECT id FROM surface WHERE bundle_id = ?1 AND role = ?2 AND locator = ?3)
-        AND superseded_by IS NULL AND count > self_sourced
-        GROUP BY text ORDER BY here DESC, used DESC LIMIT ?5
-        """
 
     /// Every surface that is the same field in the same application, whatever document it was in.
     private func surfaceIdentifiers(of surface: Surface) throws(PredictStoreError) -> [Int64] {
