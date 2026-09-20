@@ -76,6 +76,9 @@ The first release named by its date. Nothing about updating changes: an installe
 - **An AI suggestion pass no longer walks the other app's window twice for one line.** The
   alternatives pass reuses the context the first pass built, and an unchanged window is walked at
   most once a second (#879).
+- **Typing a new line in a field with a lot of learned history is no longer slower with every
+  keystroke.** Lines too short to match are ruled out in SQL, and only a line that matches is built
+  up and checked for being destructive (#870).
 - **Uttrflow crashed after a few thousand key presses.** Every keystroke the app passed on
   left the stack a little deeper, so after about 2,500 presses — and again when the
   keyboard monitor stopped — it ran out. A keystroke now costs the same at the five
