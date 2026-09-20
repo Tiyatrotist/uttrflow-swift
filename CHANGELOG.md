@@ -42,6 +42,9 @@ The first release named by its date. Nothing about updating changes: an installe
   state at once**, rather than after the panel is reopened (#947).
 - **A resumed Name, Move or Rename sheet has the caret again.** Reopening the clipboard panel over
   a half-typed sheet now types into the sheet, not the search behind it (#920).
+- **A search under a kind chip says which chip hid the match.** With Code chosen, a search that
+  finds nothing now reads "Nothing under Code mentions …" and points at All, instead of claiming
+  the whole clipboard was searched (#899).
 - **Uttrflow crashed after a few thousand key presses.** Every keystroke the app passed on
   left the stack a little deeper, so after about 2,500 presses — and again when the
   keyboard monitor stopped — it ran out. A keystroke now costs the same at the five
