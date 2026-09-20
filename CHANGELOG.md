@@ -25,6 +25,9 @@ The first release named by its date. Nothing about updating changes: an installe
 - **Hiding an AI suggestion that is already hidden no longer redraws the panel.** Each keystroke
   with nothing drawn used to rebuild the view and look up the screens two or three times on the
   main thread (#889).
+- **Dictating into a slow field while AI suggestions are on no longer times out after 100 ms.**
+  Each Accessibility caller now sets its timeout on its own elements, so a suggestion read can no
+  longer shorten an insertion write to 0.1 s, and the context read keeps its budget (#887).
 - **Uttrflow crashed after a few thousand key presses.** Every keystroke the app passed on
   left the stack a little deeper, so after about 2,500 presses — and again when the
   keyboard monitor stopped — it ran out. A keystroke now costs the same at the five
