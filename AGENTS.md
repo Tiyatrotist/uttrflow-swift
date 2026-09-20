@@ -391,6 +391,12 @@ than tidying it away.
 
 **Commit messages carry no `Co-Authored-By` trailer.** Not for an agent, not for a tool.
 The message says what the change does; who typed it is what `git log` already records.
+`.githooks/commit-msg` deletes the line instead of refusing the commit, and does the same
+to `Assisted-By:` and to a `Generated with …` line: an agent harness that adds one is
+following its own instructions, so there is nothing for anybody to decide and a gate that
+made you come back for it would only teach `--no-verify`. Install it with `make hooks` —
+without that the rule holds only as far as this paragraph gets read, which is how twelve
+of them reached `main`.
 
 **Merging is not reviewing.** Nobody else read the change, so the pull request is where
 you write down what you would have wanted a reviewer to know: what was measured, what

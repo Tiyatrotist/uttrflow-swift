@@ -15,6 +15,57 @@ set -euo pipefail
 
 message_file="$1"
 
+# Attribution trailers come out, they do not fail the commit.
+#
+# AGENTS.md says the message carries no `Co-Authored-By` trailer, not for an agent and not
+# for a tool, and the rule was still losing: an agent's own harness instructs it to add one,
+# so the trailer arrives on runs where this file was never read, which is most of them.
+#
+# Deleting beats refusing here. The line is never a judgement somebody made — nothing is
+# lost by removing it, and a gate that costs a round trip to delete a line nobody wanted is
+# how people learn to reach for --no-verify, which switches off the disclosure check below
+# at the same time. It runs before the merge and squash exit, because a squash message is
+# the branch's messages concatenated and carries whatever they carried.
+python3 - "$message_file" <<'PY'
+import re
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as handle:
+    lines = handle.read().split("\n")
+
+# Anchored at the start of the line, so a `#` comment and prose that merely mentions the
+# trailer are both left alone — only a line that *is* the attribution goes.
+attribution = re.compile(
+    r"""^[ \t]*(?:
+          co[-_ ]?authored[-_ ]?by[ \t]*:
+        | assisted[-_ ]?by[ \t]*:
+        | (?:\U0001F916[ \t]*)? generated[ \t]+with[ \t]+\[?
+            (?: claude | codex | cursor | copilot | paperclip )
+    )""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
+kept = [line for line in lines if not attribution.match(line)]
+removed = len(lines) - len(kept)
+if removed == 0:
+    sys.exit(0)
+
+# The blank line that separated the trailer block from the body is now trailing.
+while kept and not kept[-1].strip():
+    kept.pop()
+kept.append("")
+
+with open(path, "w", encoding="utf-8") as handle:
+    handle.write("\n".join(kept))
+
+print(
+    f"  commit-msg: removed {removed} attribution "
+    f"line{'' if removed == 1 else 's'} — see AGENTS.md, "
+    '"Commit messages carry no Co-Authored-By trailer".'
+)
+PY
+
 # The merge and squash messages GitHub writes, and the ones `git rebase` replays, are not
 # somebody typing — they are text that already passed this gate on the way in.
 case "$(basename "$message_file")" in
