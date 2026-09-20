@@ -46,13 +46,26 @@ extension DictationCorrection {
             let span = words[wanted.lowerBound].lowerBound..<words[wanted.upperBound - 1].upperBound
             guard span.lowerBound >= copiedUpTo else { continue }
 
+            // The recogniser hangs punctuation on the word, so only the word inside the token is replaced.
+            let opening = SpokenToken(text[words[wanted.lowerBound]]).leading
+            let closing = SpokenToken(text[words[wanted.upperBound - 1]]).trailing
+            let written = String(opening) + correction.wrote + closing
+
             result += text[copiedUpTo..<span.lowerBound]
-            result += correction.wrote
-            applied.append(correction)
+            result += written
+            // An undo looks for what was written, punctuation and all, not for what was proposed.
+            applied.append(correction.written(as: written))
             copiedUpTo = span.upperBound
         }
         result += text[copiedUpTo...]
         return CorrectedTranscript(text: result, corrections: applied)
+    }
+
+    /// A copy naming exactly what was written in the transcript, which is what an undo has to match.
+    private func written(as text: String) -> Self {
+        Self(
+            heard: heard, wrote: text, wordRange: wordRange, entryID: entryID, reason: reason,
+            heardConfidence: heardConfidence)
     }
 }
 
@@ -64,6 +77,33 @@ extension String {
     fileprivate func spokenWordRanges() -> [Range<String.Index>] {
         spokenWords.map { $0.startIndex..<$0.endIndex }
     }
+}
+
+/// One spoken token with the punctuation the recogniser attached to it held apart from the word itself.
+struct SpokenToken {
+    /// The punctuation before the word: an opening quote or bracket. A word with none is the usual case.
+    let leading: Substring
+    /// The word itself, empty when the token is punctuation through and through and so names no word.
+    let core: Substring
+    /// The punctuation after the word: a comma, a full stop, a question mark.
+    let trailing: Substring
+
+    init(_ token: Substring) {
+        var start = token.startIndex
+        var end = token.endIndex
+        while start < end, token[start].isPunctuation { token.formIndex(after: &start) }
+        while end > start, token[token.index(before: end)].isPunctuation {
+            token.formIndex(before: &end)
+        }
+        leading = token[..<start]
+        core = token[start..<end]
+        trailing = token[end...]
+    }
+
+    init(_ token: String) { self.init(token[...]) }
+
+    /// How both sides of a score lookup name this word: the word alone, lower-cased, empty for punctuation.
+    var scoreKey: String { core.lowercased() }
 }
 
 /// A transcript after the user's own dictionary has had its say.
