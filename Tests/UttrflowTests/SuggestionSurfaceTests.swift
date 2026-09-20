@@ -81,6 +81,11 @@ struct SuggestionSurfaceTests {
         #expect(panel.drawn.maximumWidth == field.maxX - caret.maxX)
     }
 
+    @Test("The panel has no window animation, so hiding a ghost does not wait out a fade")
+    func thePanelDoesNotFade() {
+        #expect(SuggestionPanelController.shared.window.animationBehavior == .none)
+    }
+
     @Test("Hiding a panel that is already hidden does not replace the view")
     func aRedundantHideDoesNothing() throws {
         let screen = try #require(NSScreen.screens.first).visibleFrame
