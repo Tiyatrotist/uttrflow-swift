@@ -47,6 +47,8 @@ The first release named by its date. Nothing about updating changes: an installe
   the whole clipboard was searched (#899).
 - **A clip whose text is exactly the search, or a picture in a collection named exactly, is always
   listed.** The six-rows-per-group cap no longer hides a match that typing more could not reach (#898).
+- **Copying one enormous decorated character no longer hangs clipboard history.** Text with tens
+  of KB of combining marks or joined emoji in a single character is classified in milliseconds (#896).
 - **Uttrflow crashed after a few thousand key presses.** Every keystroke the app passed on
   left the stack a little deeper, so after about 2,500 presses — and again when the
   keyboard monitor stopped — it ran out. A keystroke now costs the same at the five
