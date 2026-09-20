@@ -73,6 +73,7 @@ enum Schema {
             try database.transaction { () throws(PredictStoreError) in
                 try migrateToCanonicalSpelling(database)
             }
+            try relowercase(database)
         }
         if current < version {
             try database.run("UPDATE schema_version SET version = ?") { $0.bind(1, Int64(version)) }
@@ -84,9 +85,21 @@ enum Schema {
         if !hasColumn("text_lower", in: "entry", database) {
             try database.execute("ALTER TABLE entry ADD COLUMN text_lower TEXT NOT NULL DEFAULT ''")
         }
-        try database.execute("UPDATE entry SET text_lower = lower(text)")
         try database.execute("DROP INDEX IF EXISTS entry_prefix")
         try database.execute("CREATE INDEX entry_prefix ON entry (surface_id, text_lower)")
+    }
+
+    /// Rewrites every key that differs from Swift's lowercasing, which SQLite's `lower` applies to ASCII only.
+    private static func relowercase(_ database: Database) throws(PredictStoreError) {
+        let rows = try database.rows("SELECT id, text, text_lower FROM entry", { _ in }) {
+            (Int64($0.integer(0)), $0.text(1), $0.text(2))
+        }
+        for (id, text, stored) in rows where text.lowercased() != stored {
+            try database.run("UPDATE entry SET text_lower = ? WHERE id = ?") {
+                $0.bind(1, text.lowercased())
+                $0.bind(2, id)
+            }
+        }
     }
 
     /// Rewrites every stored line in its canonical encoding, folding the rows that turn out to be one line into one.
