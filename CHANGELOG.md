@@ -51,6 +51,8 @@ The first release named by its date. Nothing about updating changes: an installe
   of KB of combining marks or joined emoji in a single character is classified in milliseconds (#896).
 - **AI suggestions no longer read the focused field in applications where they are off or paused.**
   The per-application switch and the pause are checked before any Accessibility call (#903).
+- **AI suggestions step aside while you dictate.** No suggestion model pass starts while a dictation
+  records, recognises, tidies or inserts, and a drawn ghost is withdrawn when recording begins (#881).
 - **Uttrflow crashed after a few thousand key presses.** Every keystroke the app passed on
   left the stack a little deeper, so after about 2,500 presses — and again when the
   keyboard monitor stopped — it ran out. A keystroke now costs the same at the five
