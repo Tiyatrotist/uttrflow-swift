@@ -15,6 +15,7 @@ struct RulesCorpusTests {
         "filler-between-commas",
         "repeated-phrase", "i-mean-correction", "correction-between-commas", "actually-between-numbers",
         "number-correction-with-unit",
+        "correction-between-amounts", "correction-between-percentages",
         "false-no-stays",
         "coordinated-list-kept", "repeated-frame-kept", "emphatic-double-kept",
         "coordination-kept-not-restatement", "repeated-frame-for-kept",
