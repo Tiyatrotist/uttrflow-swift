@@ -18,7 +18,8 @@ struct DiagnosticsEngineProbeTests {
     /// #152: the snapshot's availability was never populated, so every row read `nil`.
     @Test("are asked, so the page has an answer rather than a pending check")
     func areAsked() async {
-        let app = AppDelegate(container: Sandbox().root)
+        let sandbox = Sandbox()
+        let app = AppDelegate(container: sandbox.root)
         #expect(app.transformerAvailability.isEmpty)
 
         let answered = await probed(app)
