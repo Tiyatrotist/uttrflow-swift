@@ -66,7 +66,7 @@ final class SuggestionCoordinator {
     /// A turn booked for the moment a rule stops refusing, so a prose pause is answered then, not at the next tick.
     private var pendingWake: Task<Void, Never>?
     /// How long a burst of keystrokes must pause before the model is asked about its last prefix.
-    private static let generationDebounceInMilliseconds = 120
+    nonisolated static let generationDebounceInMilliseconds = 120
     /// How much of the text before the caret's line the model is shown, enough for the sentence or command before it.
     private static let precedingContextLength = 400
     /// How many of this person's recent lines in the field the model is shown, enough to hear their voice in it.
@@ -483,9 +483,11 @@ final class SuggestionCoordinator {
             // The model's last word on this exact line was nothing, and a tick changes nothing about the line.
             return
         } else {
+            // Measured from the key, not from here, so a pause already long enough waits no second time.
+            let quiet = Self.remainingDebounce(sinceKeystroke: lastKeystroke, now: Date())
             let pass = Task { [generator, store, contextCache] in
                 // A short quiet first, so a burst of keystrokes costs one pass for its last prefix rather than one per key.
-                try? await Task.sleep(for: .milliseconds(Self.generationDebounceInMilliseconds))
+                try? await Task.sleep(for: quiet)
                 guard !Task.isCancelled else { return [String]() }
                 // The context is read only once a pass is certain, so a cancelled burst never pays for it.
                 let situation = await Self.situation(
@@ -581,6 +583,12 @@ final class SuggestionCoordinator {
         return standing
     }
 
+    /// What is left of the debounce for a key pressed at `keystroke`, which is nothing once the pause is long enough.
+    nonisolated static func remainingDebounce(sinceKeystroke keystroke: Date, now: Date) -> Duration {
+        let passed = now.timeIntervalSince(keystroke) * 1000
+        return .milliseconds(max(0, Double(Self.generationDebounceInMilliseconds) - passed))
+    }
+
     /// Everything the model is told about the moment: the field, what is on screen around it, and how this person writes here.
     private static func situation(
         of snapshot: FocusedFieldSnapshot, for query: SuggestionQuery, store: PredictStore,
@@ -588,12 +596,15 @@ final class SuggestionCoordinator {
     ) async -> GenerationSituation {
         // The alternatives pass asks about the same line in the same turn, so it is told what the first pass was.
         if let built = await cache.situation(forTurn: turn) { return built }
-        let around = await cache.surroundings(for: Self.windowKey(of: snapshot)) {
+        // Neither read needs the other, so the walk and the corpus query run side by side.
+        async let walk = cache.surroundings(for: Self.windowKey(of: snapshot)) {
             await FocusedFieldReader.surroundings()
         }
+        async let remembered =
+            (try? await store.recent(in: query.surface, limit: Self.recentLinesShown)) ?? []
+        let around = await walk
         // The line being written is not a line written before, however long the pause that had it remembered.
-        let recent = ((try? await store.recent(in: query.surface, limit: Self.recentLinesShown)) ?? [])
-            .filter { !query.typed.hasPrefix($0) }
+        let recent = await remembered.filter { !query.typed.hasPrefix($0) }
         let preceding = snapshot.preceding(maxLength: Self.precedingContextLength)
         // Lengths only, since what is on screen and what the person wrote are theirs and stay out of the log.
         Self.log.debug(
