@@ -154,12 +154,19 @@ decoder steps, which makes that density a latency cost rather than a matter of t
   depends on the clip is not a property the romaniser, the script guard or `LatinScript.enforced`
   can be reasoned about against.
 
-- **Decoding under the English token is the only option that hits a 1.3x target, and it translates.**
-  `हाँ ठीक है…` came back as English prose, which `Docs/latin-output.md` forbids outright; 2 of the
-  6 pure Hindi clips came back empty, and the times ranged from 0.72 s to 3.83 s because an English
-  token over Hindi audio trips the thresholds above and re-decodes the window warmer. The section on
+- **Decoding under the English token is the only option that spends fewer steps, and it
+  translates.** `हाँ ठीक है…` came back as English prose, which `Docs/latin-output.md` forbids outright. It is
+  not even reliably fast: 2 of the 6 pure Hindi clips came back empty, and the times ranged from
+  0.72 s to 3.83 s because an English token over Hindi audio trips the thresholds above and
+  re-decodes the window warmer, which is how 1.0 tokens a word still measures 2.3x. The section on
   which language the recogniser may answer in already constrains the language token for this reason;
   this is that failure measured.
+
+- **No option measured reaches 1.3x**, and the only one whose density could — English tokens over
+  Hindi audio — gets there by translating. Romanised decoding would land near it if it were
+  reliable: the fixed encoder cost is most of a short dictation, so 1.99 tokens a word against
+  English's 1.27 works out at about 1.2x by the step model above. It is the reliability that fails,
+  not the arithmetic.
 
 **So Devanagari stays.** The density is the tokenizer's property, not this repository's, and every
 way of spending fewer steps on it changes what the speaker sees: a translation, a spelling nobody
