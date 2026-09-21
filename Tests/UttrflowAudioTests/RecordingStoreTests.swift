@@ -121,6 +121,32 @@ struct RecordingStoreTests {
         #expect(!FileManager.default.fileExists(atPath: writer.url.path))
     }
 
+    /// A negative age passed the old check, so a recording dated ahead waited until the clock caught up.
+    @Test("a recording dated ahead of the clock is past its window, not kept until the clock catches up")
+    func aFutureStampIsDueRatherThanKept() async throws {
+        let sandbox = Sandbox()
+        let store = RecordingStore(directory: sandbox.directory, retention: .seconds(60))
+        let writer = try #require(await store.begin(at: now.addingTimeInterval(365 * 86_400)))
+        _ = await store.finish(writer)
+
+        #expect(await store.waiting(now: now).isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: writer.url.path))
+    }
+
+    /// The irreversible half: one read at a clock that jumped must not delete audio still wanted for a retry.
+    @Test("a clock far ahead of a recording hides it rather than deleting it")
+    func aJumpedClockLeavesTheFileAlone() async throws {
+        let sandbox = Sandbox()
+        let store = RecordingStore(directory: sandbox.directory, retention: .seconds(60))
+        let writer = try #require(await store.begin(at: now))
+        let finished = await store.finish(writer)
+
+        #expect(await store.waiting(now: now.addingTimeInterval(400 * 86_400)).isEmpty)
+        #expect(FileManager.default.fileExists(atPath: writer.url.path))
+        // And it is offered for a retry again once the clock is put right.
+        #expect(await store.waiting(now: now) == [finished])
+    }
+
     @Test("newest first, and only the files that are recordings")
     func listsNewestFirstIgnoringStrays() async throws {
         let sandbox = Sandbox()

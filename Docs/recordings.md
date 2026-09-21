@@ -78,6 +78,11 @@ retention setting. Opening the main window reads the list too, and deletes as it
 There is no timer: launch plus each dictation bounds a stale file to one day and one
 dictation, at no idle cost (`Docs/performance.md`).
 
+The window is `RetentionWindow`, the rule the history and the clipboard are held to as well,
+so a recording dated ahead of the clock counts as due rather than as not yet made, and a clock
+that jumped a year stops listing recordings without deleting the audio a retry still wants.
+`Docs/retention-clock.md` is the reasoning.
+
 ## What is not here
 
 - No playback. The row shows a waveform glyph and the duration.

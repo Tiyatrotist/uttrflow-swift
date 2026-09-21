@@ -263,7 +263,8 @@ struct ClipboardWriteCountTests {
         let old = Clip(text: "old", kind: .text, copiedAt: noon)
         let fresh = Clip(text: "fresh", kind: .text, copiedAt: noon.addingTimeInterval(6 * 86_400))
         try await store.record(old, keeping: week())
-        try await store.record(fresh, keeping: week())
+        // Copied at its own moment, since a clip stamped ahead of the clock is due, not young.
+        try await store.record(fresh, keeping: week(from: fresh.copiedAt))
         let eightDaysOn = week(from: noon.addingTimeInterval(8 * 86_400))
 
         let written = await Self.writes {

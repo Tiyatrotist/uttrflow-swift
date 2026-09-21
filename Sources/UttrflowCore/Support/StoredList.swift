@@ -64,17 +64,17 @@ extension LocalStore {
         return names.contains { $0.hasPrefix(prefix) }
     }
 
-    /// Deletes every copy set aside from this name, or only those stamped before `cutoff` when one is given.
-    public static func removeSetAside(_ url: URL, stampedBefore cutoff: Date? = nil) throws {
+    /// Deletes every copy set aside from this name, or only those stamped inside `range` when one is given.
+    public static func removeSetAside(_ url: URL, stamped range: Range<Date>? = nil) throws {
         let prefix = url.lastPathComponent + setAsideMarker
         let folder = url.deletingLastPathComponent()
         let doomed = try contents(of: folder).filter { name in
             guard name.hasPrefix(prefix) else { return false }
-            guard let cutoff else { return true }
+            guard let range else { return true }
             // A stamp that does not parse is kept, since its age cannot be known.
             let stamp = name.dropFirst(prefix.count).split(separator: "-").first
             guard let seconds = stamp.flatMap({ Int($0) }) else { return false }
-            return Date(timeIntervalSince1970: Double(seconds)) < cutoff
+            return range.contains(Date(timeIntervalSince1970: Double(seconds)))
         }
         try removeEach(doomed.map { folder.appending(path: $0, directoryHint: .notDirectory) })
     }

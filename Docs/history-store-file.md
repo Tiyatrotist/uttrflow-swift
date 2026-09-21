@@ -56,6 +56,12 @@ dictated once a fortnight ago and never again was still told the words would be 
 because the disk refused the tidying would punish the reader for something the reader cannot
 fix, and either way nothing the user was told is gone comes back on screen.
 
+What a read may hand back and what it may leave on the disk are two different lists, and they
+differ for exactly one kind of record: one the window has passed on a clock too far ahead of it
+to be believed. That record is hidden either way, and it stays on the disk until a clock that
+has been put right sweeps it. `Docs/retention-clock.md` is why, and why a dictation stamped
+ahead of the clock is treated as due rather than as young.
+
 `changes(in:keeping:)` goes through the same call, so a correction belonging to a dictation
 the user was told is gone cannot outlive it on the Corrections page. It answers with the
 list and its completeness together because the two are read together, and two separate reads

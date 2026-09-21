@@ -38,17 +38,11 @@ public actor DictationHistoryStore {
     /// Everything still within the window, newest first, tidying the disk as it goes.
     public func records(keeping retention: Retention) -> [DictationRecord] {
         let stored = load()
-        let kept = retained(stored, keeping: retention)
-        if kept.count != stored.count { try? persist(kept) }
+        let onDisk = keptOnDisk(stored, keeping: retention)
+        if onDisk.count != stored.count { try? persist(onDisk) }
         // A set-aside copy lasts as long as the transcripts in it would have. See `Docs/history-store-file.md`.
-        try? LocalStore.removeSetAside(file, stampedBefore: Self.cutoff(of: retention))
-        return kept
-    }
-
-    /// The moment before which nothing is kept under this promise; zero days keeps nothing at all.
-    static func cutoff(of retention: Retention) -> Date {
-        guard retention.days > 0 else { return .distantFuture }
-        return retention.now.addingTimeInterval(-Double(retention.days) * 86_400)
+        try? LocalStore.removeSetAside(file, stamped: Self.window(of: retention).sweepable)
+        return retained(stored, keeping: retention)
     }
 
     /// Every change across the history still within the window, with whether the list is complete.
@@ -66,9 +60,9 @@ public actor DictationHistoryStore {
         _ record: DictationRecord, keeping retention: Retention
     ) throws(HistoryStoreError) -> [DictationRecord] {
         // Prepended, not sorted in, so a machine whose clock moved cannot reshuffle the list.
-        let kept = retained([record] + load(), keeping: retention)
-        try persist(kept)
-        return kept
+        let all = [record] + load()
+        try persist(keptOnDisk(all, keeping: retention))
+        return retained(all, keeping: retention)
     }
 
     /// Forgets one dictation, and answers with what is left; an absent identifier is not an error.
@@ -76,9 +70,9 @@ public actor DictationHistoryStore {
     public func delete(
         _ id: UUID, keeping retention: Retention
     ) throws(HistoryStoreError) -> [DictationRecord] {
-        let kept = retained(load().filter { $0.id != id }, keeping: retention)
-        try persist(kept)
-        return kept
+        let left = load().filter { $0.id != id }
+        try persist(keptOnDisk(left, keeping: retention))
+        return retained(left, keeping: retention)
     }
 
     /// Puts one change back, answering with the dictionary entry to count it against, or `nil`.
@@ -89,7 +83,7 @@ public actor DictationHistoryStore {
         for (index, record) in records.enumerated() {
             guard let (undone, entryID) = record.undoing(id) else { continue }
             records[index] = undone
-            try persist(retained(records, keeping: retention))
+            try persist(keptOnDisk(records, keeping: retention))
             return entryID
         }
         return nil
@@ -104,7 +98,7 @@ public actor DictationHistoryStore {
         guard let index = records.firstIndex(where: { $0.id == id }) else { return nil }
         records[index].isFlagged.toggle()
         let flagged = records[index].isFlagged
-        try persist(retained(records, keeping: retention))
+        try persist(keptOnDisk(records, keeping: retention))
         return flagged
     }
 
@@ -117,12 +111,26 @@ public actor DictationHistoryStore {
 
     // MARK: - The rules
 
-    /// Applies the retention promise and then the cap, in that order.
+    /// Applies the retention promise and then the cap, in that order: what the caller may be shown.
     private func retained(
         _ records: [DictationRecord], keeping retention: Retention
     ) -> [DictationRecord] {
         let surviving = records.filter { $0.survives(days: retention.days, now: retention.now) }
         return Array(surviving.prefix(capacity))
+    }
+
+    /// The same, plus what a clock too far ahead to be believed says is past. See `Docs/retention-clock.md`.
+    private func keptOnDisk(
+        _ records: [DictationRecord], keeping retention: Retention
+    ) -> [DictationRecord] {
+        let window = Self.window(of: retention)
+        let held = records.filter { window.keeps($0.when) || !window.mayDelete($0.when) }
+        return Array(held.prefix(capacity))
+    }
+
+    /// The promise as the rule the three stores share states it.
+    static func window(of retention: Retention) -> RetentionWindow {
+        RetentionWindow(days: retention.days, now: retention.now)
     }
 
     // MARK: - The file
