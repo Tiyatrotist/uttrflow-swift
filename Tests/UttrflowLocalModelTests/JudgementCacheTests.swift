@@ -75,7 +75,7 @@ struct JudgedLineTests {
         #expect(judged.count == tokens.count - 2)
     }
 
-    @Test("A typed prefix that ends mid-token returns the slice from the cached rows, without running the model again.")
+    @Test("A typed prefix that ends mid-token returns the slice from the cached rows.")
     func typedMidTokenReturnsTheSlice() {
         let tokens = [0, 3, 4, 5, 6, 7]
         let vocab = scorerBytes.count
