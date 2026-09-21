@@ -83,7 +83,8 @@ This codebase has a particular style, and matching it will save a round trip:
 - **Coverage floor is 95% per module** and `make verify` enforces it. Exclusions live in
   `Scripts/coverage_report.py`, each with a written reason, and each has to be small enough
   that reading the file is a sufficient review — `make exclusion-audit` prints their line
-  counts and fails over 400 lines.
+  counts and fails over 400 lines, unless `OVERSIZED_EXCLUSIONS` records what reviews the
+  file instead.
 - **No personal data in fixtures.** `Scripts/pii_audit.sh` fails the build on a real email
   address or postal address. Use `example.com` and an invented street; this exists because
   a stranger's real address was once sample data here and reached eleven files.

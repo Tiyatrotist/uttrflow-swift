@@ -249,6 +249,11 @@ def exclusion_problems(
                 "test what it decides and drop the exclusion, or list it in OVERSIZED_EXCLUSIONS "
                 "with what reviews it instead"
             )
+        if lines > limit and not oversized.get(path, "x").strip():
+            problems.append(
+                f"{path} is listed as oversized with no reason; say what reviews it instead, "
+                "since an exclusion nobody can read is the silence this list exists to break"
+            )
         if lines <= limit and path in oversized:
             problems.append(
                 f"{path} is {lines} lines, back inside the {limit}-line limit; "
@@ -265,6 +270,7 @@ def self_test() -> int:
     cases = (
         ("an excluded file that has grown past the limit", {"A.swift": 401}, {}, "past the 400"),
         ("an exclusion whose file is gone", {"A.swift": None}, {}, "not in the tree"),
+        ("an oversized entry with a blank reason", {"A.swift": 401}, {"A.swift": " "}, "no reason"),
         ("an oversized entry whose file has shrunk", {"A.swift": 400}, {"A.swift": "why"}, "back inside"),
         ("an oversized entry for a file nobody excludes", {}, {"B.swift": "why"}, "is not excluded"),
     )
