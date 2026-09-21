@@ -213,6 +213,8 @@ public actor Verifier {
     private func admits(_ line: String, in surface: Surface, now: Date) async -> Bool {
         guard !DestructiveCommand.matches(line) else { return false }
         guard TerminalApplications.contains(surface.bundleIdentifier) else { return true }
+        // A remote session's files are on another machine, so nothing this disk could say stands behind the line.
+        guard !RemoteSession.names(surface.scope) else { return false }
         // Aliases are read from the shell's configuration as text; until they are, an alias is not a command.
         let aliases = await index.values(of: .alias, in: surface.scope ?? "~", now: now) ?? []
         return lines.allows(line, in: surface.scope, aliases: Set(aliases))
