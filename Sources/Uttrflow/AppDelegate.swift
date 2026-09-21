@@ -2015,6 +2015,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func settingsChanged(to updated: Settings) {
         let previous = settings
         settings = updated
+        settingsWindow.synchronize(settings: updated)
         recordingSounds?.apply(updated)
         applyAppearance()
         applyLaunchAtLogin()
