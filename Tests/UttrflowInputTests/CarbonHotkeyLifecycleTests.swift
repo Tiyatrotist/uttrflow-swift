@@ -38,9 +38,7 @@ struct CarbonHotkeyLifecycleTests {
         try expectHeld(bound)
     }
 
-    /// The AppDelegate's `startWatchingForClaimedShortcuts` stops every claimed monitor and registers a
-    /// fresh set; a missing unregister would leave the key held by nobody and the keypress on the
-    /// frontmost app. #142.
+    /// The AppDelegate stops every claimed monitor and registers a fresh set; a missing unregister would leave the key held by nobody. #142.
     @Test("the stop-all-then-start-all cycle leaves every claimed binding held by exactly one registration")
     func stopAllThenStartAllLeavesEveryClaimedBindingHeld() throws {
         let quiet: Set<HotkeyModifier> = [.control, .option, .shift]
