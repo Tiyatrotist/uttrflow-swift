@@ -207,5 +207,37 @@ struct DictationStageTimeoutTests {
         #expect(failure.transcript == "Tidied.")
         #expect(await metrics.measurements(for: .insertion).map(\.succeeded) == [false])
         #expect(await metrics.measurements(for: .transcription).map(\.succeeded) == [true])
+
+        // A hung application must not take the next dictation down with the one it never answered.
+        await pipeline.startRecording()
+        #expect(await pipeline.currentState == .recording)
+    }
+
+    /// The words are the only thing left when the application will not take them, so the failure carries them.
+    @Test("the words a hung application never took are still offered, untidied or not")
+    func insertionTimeoutKeepsTheWords() async {
+        let clock = ManualClock()
+        let pipeline = DictationPipeline(
+            capture: FakeAudioCaptureEngine(stopOutcome: .success(.silence(seconds: 2))),
+            speech: FakeSpeechEngine(
+                transcribeOutcome: .success(Transcription(text: "what I said"))),
+            cleaner: NeverAnsweringCleaner(),
+            context: FakeContextEngine(),
+            inserter: NeverAnsweringInserter(),
+            clock: clock)
+
+        await pipeline.startRecording()
+        let finishing = Task { await pipeline.finishRecording() }
+        await expire(StageTimeout.transformation, at: .tidying, of: pipeline, on: clock)
+        await expire(StageTimeout.quick, at: .inserting, of: pipeline, on: clock)
+        await settle(finishing)
+
+        guard case .failed(let failure) = await pipeline.currentState else {
+            Issue.record("expected the dictation to fail, got \(await pipeline.currentState)")
+            return
+        }
+        // Tidying timed out too, so what is offered is what the recogniser heard.
+        #expect(failure.transcript == "what I said")
+        #expect(await pipeline.currentState.isBusy == false)
     }
 }
