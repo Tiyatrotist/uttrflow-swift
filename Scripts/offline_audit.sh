@@ -9,19 +9,37 @@
 # every machine that runs the tests has Wi-Fi.
 #
 # So this script asserts the shape the promise depends on, against both the sources and
-# the linked binary, and fails loudly when it changes. The dynamic half — running the
-# pipeline with the network denied — is in Docs/offline.md, which also records what
-# this script deliberately does not cover.
+# the linked binary, and fails loudly when it changes. Every check is default-deny: it
+# looks at every module and every object in the app and asks which are *allowed* to reach
+# the network, rather than at a list of places to look — a list is a thing a new module is
+# absent from. The dynamic half — running the pipeline with the network denied — is in
+# Docs/offline.md, which also records what this script cannot cover and why.
 #
-# Usage:  ./Scripts/offline_audit.sh            audit, building the app if needed
-#         ./Scripts/offline_audit.sh --no-build skip the binary checks if unbuilt
+# Usage:  ./Scripts/offline_audit.sh                  audit, building the app if needed
+#         ./Scripts/offline_audit.sh --no-build       skip the binary checks if unbuilt
+#         ./Scripts/offline_audit.sh --require-binary fail rather than skip them
 set -euo pipefail
 
 PACKAGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PACKAGE_ROOT"
 
 SKIP_BUILD=0
-[[ "${1:-}" == "--no-build" ]] && SKIP_BUILD=1
+# Set in every GitHub Actions job, and the gate builds before it runs this, so there the
+# binary checks are never optional — not even with --no-build, which says "do not build
+# for me", not "do not mind if nobody did". See check 7 for why skipping them quietly is
+# the failure mode that matters.
+REQUIRE_BINARY=0
+[[ -n "${CI:-}" ]] && REQUIRE_BINARY=1
+for argument in "$@"; do
+    case "$argument" in
+    --no-build) SKIP_BUILD=1 ;;
+    --require-binary) REQUIRE_BINARY=1 ;;
+    *)
+        printf 'offline audit: unknown option %s\n' "$argument" >&2
+        exit 2
+        ;;
+    esac
+done
 
 failures=0
 
@@ -38,60 +56,189 @@ pass() { printf '  ✓ %s\n' "$1"; }
 note() { printf '  · %s\n' "$1"; }
 
 # ---------------------------------------------------------------------------
-# 1. No network call site in any module the dictation path runs through.
+# 1. Network capability lives only where it is named, and nowhere else.
 # ---------------------------------------------------------------------------
 #
-# These are the modules between the key going down and the text appearing. The app
-# shell and the developer CLI are deliberately absent: a first-run model download has
-# to live somewhere, and those are the two honest places for it.
-DICTATION_MODULES=(
-    UttrflowCore UttrflowAudio UttrflowSpeech UttrflowAI
-    UttrflowContext UttrflowInput UttrflowPipeline
-)
+# What this audit is trying to prove, stated once, because the checks below only mean
+# something against it. SECURITY.md makes two promises: dictation never touches the
+# network once the model is on disk, and the clipboard, history, dictionary and snippets
+# never leave the Mac. Both reduce to one claim a tree can be checked against — network
+# capability lives in a handful of named files and no other module has any — which is
+# also what AGENTS.md means by "UttrflowAccount is deliberately the only module that can
+# reach a server": one place to look.
+#
+# So this is default-deny over every module under Sources/, discovered at run time. The
+# earlier version named the seven modules to check, and a module nobody added to that
+# list was not audited at all — which is how the clipboard, the history, the dictionary,
+# the suggestion stores, the settings and the UX went unchecked (#665). A list of what is
+# *allowed* cannot fail that way: a module added tomorrow is covered by default.
+ALLOWED_NETWORK_MODULE='UttrflowAccount'
 
-# Anything that can open a connection, plus the literal that betrays an endpoint
-# someone meant to call. `Network` is listed as an import because NWConnection and
-# NWBrowser are unusable without it.
-NETWORK_PATTERN='URLSession|URLRequest|NWConnection|NWBrowser|NWListener|import Network|CFSocket|NSURLConnection|https?://|getaddrinfo|\bsocket\('
-
-# The files allowed to contain a network call. Each is a whole file with one job, which
-# is the only shape of exception this rule can actually police: a permitted *function*
-# sitting among the ones that run during a dictation is indistinguishable, to grep, from
-# one somebody added later.
+# The files outside that module which may name a networking type, and why each may.
 #
 #   the cloud island   — all of it inside `#if UTTRFLOW_CLOUD`, which no shipping build
-#                        defines. Check 4 below proves that separately.
-#   the model download — reached only from a model install, which the user asks for and
-#                        which plainly needs the network. Check 3 proves that loading and
-#                        decoding cannot reach it, which is the half that matters.
+#                        defines. Checks 2 and 7 prove that separately.
+#   the tokenizer      — fetched beside the weights at install time so that loading never
+#                        has to. Check 4 proves loading cannot reach it.
+#   the Apple backend  — not sanctioned. Listed in KNOWN_GAP_FILES below, and reported on
+#                        every run, because it downloads on a path the promise covers.
+#   onboarding         — first-run sign-in, and the reachability banner that says why it
+#                        failed. Signing in is the one thing the product says needs a
+#                        connection, and it happens before any dictation.
+#   the developer CLIs — `uttrflow-dev sign-in` and the evaluation harness. Neither is in
+#                        a shipped product; `Scripts/bundle.sh` is what proves that.
 CLOUD_ISLAND='Sources/UttrflowAI/HTTPCleanupModel.swift'
 DOWNLOAD_ISLAND='Sources/UttrflowSpeech/TokenizerDownload.swift'
+ALLOWED_NETWORK_FILES=(
+    "$CLOUD_ISLAND"
+    "$DOWNLOAD_ISLAND"
+    'Sources/UttrflowSpeech/AppleSpeechBackend.swift'
+    'Sources/Uttrflow/Onboarding/NetworkReachability+System.swift'
+    'Sources/Uttrflow/Onboarding/OnboardingAccountLayer.swift'
+    'Sources/Uttrflow/Onboarding/OnboardingWindowController.swift'
+    'Sources/uttrflow-dev/SignIn.swift'
+    'Sources/uttrflow-eval/CorpusConnection.swift'
+)
 
-printf 'Network call sites on the dictation path\n'
+# Files that may construct the model hub's client, which is a URLSession underneath. Two
+# of them name no networking type themselves — the hub does — so the source check above
+# still covers them, and it is only their object files that carry the symbol.
+# AnonymousHub.swift is the exception: it is where `HubClient(...)` is actually built, on
+# purpose, so that everything else can go through `AnonymousHub.client()` instead of a
+# bare client. Check 5 is what proves the suggestion model reads its cache before any of
+# this runs, and check 7 is where this list is what keeps the module from being allowed
+# one wholesale.
+SNAPSHOT_FILE='Sources/UttrflowLocalModel/CachedSnapshot.swift'
+HUB_CLIENT_FILES=(
+    "$SNAPSHOT_FILE"
+    'Sources/UttrflowLocalModel/MLXCandidateScorer.swift'
+    'Sources/UttrflowLocalModel/MLXCleanupModel.swift'
+    'Sources/UttrflowLocalModel/AnonymousHub.swift'
+)
 
-offenders=""
-for module in "${DICTATION_MODULES[@]}"; do
-    [[ -d "Sources/$module" ]] || {
-        fail "Sources/$module does not exist" \
-            "The audit is checking a module that has been renamed or removed, so" \
-            "whatever is in its place is not being checked at all."
-        continue
-    }
-    # grep exits 1 on no matches, which is the good case; `|| true` keeps `set -e`
-    # from treating a clean module as a script failure.
-    hits="$(grep -rEn "$NETWORK_PATTERN" "Sources/$module" --include='*.swift' \
-        | grep -v "^$CLOUD_ISLAND:" | grep -v "^$DOWNLOAD_ISLAND:" || true)"
-    [[ -n "$hits" ]] && offenders+="$hits"$'\n'
+# Allowed above only so that the rest of the tree can be checked at all, and named on
+# every run because each is a live defect rather than a design. Taking a file out of here
+# is how its fix gets recorded; deleting the note is not.
+#
+#   AppleSpeechBackend.load() installs the system locale asset, and transcribe() calls
+#   load(), so choosing the built-in recogniser and speaking downloads on a Mac that has
+#   not installed that locale. WhisperKitBackend has `download: false` for exactly this;
+#   the Apple asset API offers no equivalent, so the fix is a product decision about what
+#   the user is told, not a flag. Docs/offline.md § What this does not prove has the
+#   detail; this list is what keeps it from being forgotten.
+KNOWN_GAP_FILES=(
+    'Sources/UttrflowSpeech/AppleSpeechBackend.swift'
+)
+
+# Every way to reach the network that leaves a name in Swift source: Foundation's stack,
+# Network.framework in both its Swift and its C spelling, CFNetwork, the BSD calls those
+# sit on, XPC to a helper that could, the system speech asset installer, and the endpoint
+# literal that betrays a call somebody meant to make. Matching one symbol — the earlier
+# pattern was URLSession and four friends — answers a narrower question than the one being
+# asked, and widening it by a name per bug report never converges on the question.
+# Docs/offline.md § What this does not prove says what is still outside it.
+NETWORK_PATTERN='URLSession|URLRequest|URLProtocol|URLCredential|URLCache|NSURLConnection'
+NETWORK_PATTERN+='|NWConnection|NWListener|NWBrowser|NWEndpoint|NWPathMonitor'
+NETWORK_PATTERN+='|import Network$|import NetworkExtension|nw_[a-z_]+\('
+NETWORK_PATTERN+='|import CFNetwork|CFSocket|CFStream|CFHTTP|NSXPCConnection'
+NETWORK_PATTERN+='|getaddrinfo|\bsocket\(|\bconnect\(|downloadAndInstall|AssetInventory'
+NETWORK_PATTERN+='|mlx_distributed|MLXDistributed'
+NETWORK_PATTERN+='|https?://[A-Za-z0-9]'
+
+printf 'Network capability in the sources\n'
+
+# A named exception that has moved is an exception nobody is checking: the file it covers
+# is audited again, which is the safe direction, but the list above stops describing this
+# tree and a reader can no longer tell which exceptions are real.
+missing=""
+[[ -d "Sources/$ALLOWED_NETWORK_MODULE" ]] || missing+="Sources/$ALLOWED_NETWORK_MODULE "
+for file in "${ALLOWED_NETWORK_FILES[@]}" "${HUB_CLIENT_FILES[@]}" \
+    ${KNOWN_GAP_FILES[@]+"${KNOWN_GAP_FILES[@]}"}; do
+    [[ -f "$file" ]] || missing+="$file "
 done
+if [[ -n "${missing// /}" ]]; then
+    fail "an allowed network path no longer exists: ${missing% }" \
+        "Every exception this audit grants is written down with a reason, and one that" \
+        "names a file that has gone describes a tree that no longer exists. Update the" \
+        "list in the change that moved the file."
+fi
+
+# Assembled as separate grep arguments rather than one alternation because a path may
+# hold a regex metacharacter — `NetworkReachability+System.swift` does.
+allowed_filter=(-v -e "^Sources/$ALLOWED_NETWORK_MODULE/")
+for file in "${ALLOWED_NETWORK_FILES[@]}"; do allowed_filter+=(-e "^$file:"); done
+
+modules=0
+while IFS= read -r _; do modules=$((modules + 1)); done < <(find Sources -mindepth 1 -maxdepth 1 -type d)
+
+offenders="$(grep -rEn "$NETWORK_PATTERN" Sources --include='*.swift' \
+    | grep "${allowed_filter[@]}" || true)"
 
 if [[ -n "${offenders//[[:space:]]/}" ]]; then
-    fail "a network call site appeared on the dictation path" \
-        "Everything below runs between the user pressing the key and the text being" \
-        "inserted, so any of it can stall or fail when there is no connection." \
-        "Move it behind an explicit, user-initiated action, or behind UTTRFLOW_CLOUD." \
+    fail "a network call site appeared outside the files allowed one" \
+        "Dictation must not be able to reach the network, and the clipboard, history," \
+        "dictionary and snippets must not be able to leave the Mac. Every module under" \
+        "Sources/ is covered by that unless it is named above. Move the call into" \
+        "$ALLOWED_NETWORK_MODULE, behind an explicit user-initiated action, or behind" \
+        "UTTRFLOW_CLOUD — or add the file above with the reason it is safe." \
         "" $'\n'"$offenders"
 else
-    pass "no network call site in ${#DICTATION_MODULES[@]} dictation-path modules"
+    pass "no network call site in $modules modules outside $ALLOWED_NETWORK_MODULE and ${#ALLOWED_NETWORK_FILES[@]} named files"
+fi
+
+# Printed every run rather than recorded once: an exception that stops being mentioned is
+# an exception that has quietly become the design.
+# Expanded the long way round because emptying this array is what fixing the gap looks
+# like, and bash 3.2 calls an empty array unbound under `set -u`.
+for file in ${KNOWN_GAP_FILES[@]+"${KNOWN_GAP_FILES[@]}"}; do
+    note "KNOWN GAP: $file reaches the network on a path this promise covers."
+done
+if [[ "${#KNOWN_GAP_FILES[@]}" -gt 0 ]]; then
+    note "  It is allowed above only so the rest of the tree can be checked."
+    note "  See Docs/offline.md § What this does not prove."
+fi
+
+# ---------------------------------------------------------------------------
+# 1b. Reading a URL, which looks the same whether the URL is local or remote.
+# ---------------------------------------------------------------------------
+#
+# `Data(contentsOf:)` fetches a remote URL synchronously, and nothing above can see it:
+# the transfer happens inside Foundation, so the calling module names no networking type
+# in its source and carries no networking symbol in its object file either. Whether one
+# of these is local is decided by where its URL came from, which grep cannot follow — so
+# the question this check asks is not "is it local" but "has a new one appeared". Each
+# call below was read: five take a path under Application Support or inside an installed
+# model, and the rest belong to the evaluation harness and the bakeoff, which ship in
+# nothing.
+URL_READ_PATTERN='\b(Data|String|NSData|NSString|NSArray|NSDictionary|NSImage|XMLDocument)\(contentsOf:'
+URL_READERS=(
+    'Sources/UttrflowCore/Support/StoredList.swift'
+    'Sources/UttrflowDictionary/PersonalDictionaryStore.swift'
+    'Sources/UttrflowLocalModel/PromptTokens.swift'
+    'Sources/UttrflowLocalModel/QuantizedLoad.swift'
+    'Sources/UttrflowPredict/EnvironmentReading+System.swift'
+    'Sources/UttrflowEval/AccuracyBaseline.swift'
+    'Sources/UttrflowEval/CorpusCache.swift'
+    'Sources/UttrflowEval/CorpusUploadOutbox.swift'
+    'Sources/UttrflowEval/JSONRecordStore.swift'
+    'Sources/uttrflow-bakeoff/Bakeoff.swift'
+    'Sources/uttrflow-bakeoff/SpokenPassages.swift'
+)
+
+reader_filter=(-v)
+for file in "${URL_READERS[@]}"; do reader_filter+=(-e "^$file:"); done
+
+new_reads="$(grep -rEn "$URL_READ_PATTERN" Sources --include='*.swift' \
+    | grep "${reader_filter[@]}" || true)"
+
+if [[ -n "${new_reads//[[:space:]]/}" ]]; then
+    fail "a new URL read appeared, and grep cannot tell whether the URL is local" \
+        "Foundation fetches a remote URL through these initialisers with no symbol this" \
+        "audit could see, in the source or in the object file. Say where the URL comes" \
+        "from and add the file above, or read the file through LocalStore." \
+        "" $'\n'"$new_reads"
+else
+    pass "no URL read outside the ${#URL_READERS[@]} files known to read local paths"
 fi
 
 # ---------------------------------------------------------------------------
@@ -145,17 +292,19 @@ else
         "646 MB transfer that hangs rather than an error the user can act on."
 fi
 
-# Model downloads are explicit Uttrflow fetches from pinned resolve URLs. WhisperKit and
-# swift-transformers may load what is already on disk, but they must not fetch anything
-# from the dictation modules themselves.
-hub_hits="$(grep -rEn 'HubApi|WhisperKit\.download|AutoTokenizer' \
-    "${DICTATION_MODULES[@]/#/Sources/}" --include='*.swift' 2>/dev/null || true)"
+# The Hugging Face hub is the one legitimate network user in the speech package. It may
+# be named in the file that defines the downloader and the file that fetches the tokenizer
+# beside it, and nowhere else in the tree — not only nowhere else on the dictation path,
+# because a module absent from a list of places to look is a module nobody looked at.
+hub_hits="$(grep -rEn 'HubApi|WhisperKit\.download|AutoTokenizer' Sources --include='*.swift' \
+    | grep -v "^$BACKEND:" | grep -v "^$DOWNLOAD_ISLAND:" || true)"
 if [[ -n "${hub_hits//[[:space:]]/}" ]]; then
     fail "the model hub is reached from somewhere new" \
-        "Speech installs must use Uttrflow's pinned anonymous downloader, not hub defaults." \
+        "Only $BACKEND and $DOWNLOAD_ISLAND may name it, and only to define the" \
+        "downloader the store calls at install time." \
         "" $'\n'"$hub_hits"
 else
-    pass "the speech model hub is not reached through dependency download APIs"
+    pass "the model hub is named only where the install runs"
 fi
 
 # ---------------------------------------------------------------------------
@@ -199,8 +348,7 @@ fi
 # downloader, and nowhere else; and no load may take the downloader directly again.
 printf '\nSuggestion model\n'
 
-SNAPSHOT_FILE='Sources/UttrflowLocalModel/CachedSnapshot.swift'
-HUB_ALLOWED="$SNAPSHOT_FILE Sources/UttrflowLocalModel/MLXCandidateScorer.swift Sources/UttrflowLocalModel/MLXCleanupModel.swift Sources/UttrflowLocalModel/AnonymousHub.swift"
+HUB_ALLOWED="${HUB_CLIENT_FILES[*]}"
 if [[ ! -f "$SNAPSHOT_FILE" ]] || ! grep -q 'CachedSnapshot.complete' "$SNAPSHOT_FILE"; then
     fail "$SNAPSHOT_FILE no longer checks the cache before asking the hub" \
         "Without it every load of the suggestion model contacts the model host," \
@@ -278,12 +426,83 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6. The built app: which linked modules can actually open a connection.
+# 6. The updater is in the app shell and callable from nowhere else.
 # ---------------------------------------------------------------------------
 #
-# The source checks above can only see Uttrflow's own code. This one reads the binary,
-# so it also catches a dependency that started networking between releases.
+# Sparkle fetches an appcast and an archive over the network: that is the feature, so
+# inspecting the framework itself would only establish that an updater updates. The claim
+# worth checking is where it can be called from — one file in the app shell, with no
+# library target taking the dependency — because that is what keeps it off every path a
+# dictation, a clip or a history entry runs through.
+printf '\nThe updater\n'
+
+UPDATER_FILE='Sources/Uttrflow/Updates/UpdateController.swift'
+if [[ ! -f "$UPDATER_FILE" ]]; then
+    fail "$UPDATER_FILE is missing" \
+        "The audit cannot tell where the updater is driven from, so it cannot say that" \
+        "the one network client in the app shell is out of reach of the dictation path."
+else
+    updater_imports="$(grep -rln 'import Sparkle' Sources --include='*.swift' \
+        | grep -v "^$UPDATER_FILE\$" || true)"
+    if [[ -n "${updater_imports//[[:space:]]/}" ]]; then
+        fail "the updater is imported outside the app shell" \
+            "Sparkle checks a feed and downloads an archive. Every file that can drive" \
+            "it is a file that can reach the network, so it stays in one place in the" \
+            "app shell where the audit can point at it." \
+            "" $'\n'"$updater_imports"
+    else
+        pass "the updater is imported in one file, in the app shell"
+    fi
+fi
+
+# A library target taking the dependency would make the check above unenforceable: the
+# import could then move into a module the dictation path links.
+sparkle_targets="$(grep -c 'package: "Sparkle"' Package.swift || true)"
+if [[ "$sparkle_targets" -ne 1 ]]; then
+    fail "$sparkle_targets targets depend on the updater, not one" \
+        "Only the app target may. A library that links Sparkle can be linked in turn by" \
+        "something on the dictation path, and the import check above stops meaning much."
+else
+    pass "one target depends on the updater"
+fi
+
+# ---------------------------------------------------------------------------
+# 7. The built app: which linked objects can actually open a connection.
+# ---------------------------------------------------------------------------
+#
+# The source checks above see Uttrflow's own code. This one reads the object files, so it
+# also catches a dependency that started networking between releases, and a call that
+# reached the network through a name the grep does not know.
 printf '\nLinked binary\n'
+
+# Every way a compiled object can reach the network, as the linker sees it: Foundation's
+# stack, Network.framework (whose Swift API is these C entry points underneath), CFNetwork,
+# the BSD calls, XPC, and the system speech asset installer. Counting undefined
+# `urlsession` symbols alone — which is what this did — left NWConnection, a raw socket
+# and the asset downloader invisible to it (#665).
+BINARY_SYMBOLS='urlsession|nsurlconnection|urlrequest|urldownload'
+BINARY_SYMBOLS+='|nw_connection|nw_listener|nw_browser|nw_endpoint|nw_path|nw_parameters'
+BINARY_SYMBOLS+='|cfsocket|cfstream|cfnetwork|cfhttp|cfhost|cfurldownload'
+BINARY_SYMBOLS+='|nsxpcconnection|assetinventory|assetinstallation'
+BINARY_SYMBOLS+='| _socket$| _connect$| _getaddrinfo$| _getnameinfo$'
+
+# Dependencies that are network clients by design. A module here is judged whole, because
+# it is somebody else's source tree and this audit has no file-level claim to make about
+# it; what it asserts is that the set has not grown.
+#
+#   Hub, ArgmaxCore  — swift-transformers' model downloader, and WhisperKit's vendored
+#                      copy of the same thing. Both run from `models install`; checks 3
+#                      and 4 are what prove loading cannot reach them.
+#   HuggingFace,     — swift-huggingface and its server-events helper, the same machinery
+#   EventSource        for the suggestion model's weights. Check 5 covers the load.
+#   Cmlx             — MLX's C++ core, which links `socket`, `connect` and `getaddrinfo`
+#                      for its multi-host distributed backend. Widening the symbol set is
+#                      what surfaced this (#665): it was invisible while only `urlsession`
+#                      was counted. Nothing here can remove it — mlx-swift exposes no
+#                      build flag to drop the backend — so what is checkable is that it
+#                      stays unreachable: it runs only from `mlx_distributed_init`, and
+#                      check 1 fails on any Uttrflow source that names it.
+ALLOWED_NETWORK_DEPENDENCIES="Hub ArgmaxCore HuggingFace EventSource Cmlx"
 
 if ! command -v xcrun >/dev/null 2>&1; then
     fail "xcrun is not on PATH" \
@@ -313,7 +532,22 @@ else
     fi
 
     if [[ -z "${APP_BINARY:-}" || ! -f "$APP_BINARY" ]]; then
-        note "no built app to inspect; source checks only"
+        # In the gate the binary is always there, because `make verify` runs `build`
+        # before this. So a missing one there does not mean "not built yet", it means the
+        # build moved — and a note would leave the whole binary half silently unrun, which
+        # is how a dependency that started networking would ship (#665). Locally a bare
+        # run still notes it, because a contributor mid-change wants the source checks in
+        # two seconds rather than a build.
+        if [[ "$REQUIRE_BINARY" -eq 1 ]]; then
+            fail "no built app at ${APP_BINARY:-the expected path}" \
+                "The binary checks are the only ones that can see a dependency's network" \
+                "call, and skipping them silently is how one ships. 'make verify' builds" \
+                "before it runs this, so a missing binary here means the build moved or" \
+                "did not run — not that there is nothing to look at yet."
+        else
+            note "no built app to inspect; source checks only"
+            note "  Pass --require-binary, or set CI, to make this a failure."
+        fi
     else
         # Every Swift module linked into the app, from the linker's own file list.
         LINK_LIST="$BIN_PATH/Uttrflow.product/Objects.LinkFileList"
@@ -322,90 +556,86 @@ else
                 "The audit cannot tell which dependencies are in the app, so a new" \
                 "networking one would not be noticed."
         else
-            # Hub — swift-transformers — is the legitimate model downloader that
-            # WhisperKit pulls in. Anything else with a URLSession in it is new, and
-            # is in the app for a reason nobody has written down yet.
-            #   Hub           — swift-transformers, still linked by WhisperKit. Uttrflow
-            #                     does not call it to install speech models.
-            #   UttrflowSpeech — TokenizerDownload.swift, which fetches the tokenizer
-            #                     beside the weights at install time so that loading
-            #                     never has to. Check 3 is what proves loading cannot
-            #                     reach it; this line only records that the reference
-            #                     is expected.
+            # Per object file, not per module. SwiftPM emits one `.o` per source file, so
+            # the binary check can use the same allow list as the source check above —
+            # which is what stops the app target being allowed a networking symbol
+            # wholesale (#665). Only its onboarding objects are, and only while the
+            # source list says so.
             #
-            # Anything else with a URLSession in it is new, and is in the app for a
-            # reason nobody has written down yet.
-            #   UttrflowAccount   — the account layer, added after this list was written.
-            #                       It talks to api.uttrflow.com and nothing else: sign in,
-            #                       read the profile, refresh a token, report telemetry.
-            #                       It is on no dictation path — the audit's subject is
-            #                       whether *speaking* can reach the network, and signing
-            #                       in is the one thing the product says needs it. The
-            #                       privacy tests in UttrflowAccountTests are what police
-            #                       what it may send.
-            #   UttrflowLocalModel — the on-device model that validates and generates
-            #                       suggestions. Like Hub for speech, it fetches its weights
-            #                       from Hugging Face once; every inference then runs on the
-            #                       GPU with nothing sent out. It is on no dictation path, so
-            #                       the guarantee this audit exists for — that speaking cannot
-            #                       reach the network — is untouched (check 1 still proves it).
-            #   HuggingFace,       — swift-huggingface and its SSE helper, the download
-            #   EventSource          machinery UttrflowLocalModel pulls in, the way Hub is
-            #                       WhisperKit's. They fetch model files and nothing else.
-            #   ArgmaxCore        — WhisperKit 1.1.0's own core, which vendors a copy of
-            #                       swift-transformers' Hub under External/Hub. It remains
-            #                       linked by WhisperKit, but Uttrflow installs speech
-            #                       weights itself from pinned anonymous resolve URLs.
-            #   Uttrflow          — the app target links the above, so it inherits the
-            #                       symbol. Nothing in it opens a connection of its own.
-            ALLOWED_NETWORK_MODULES="Hub UttrflowSpeech UttrflowAccount UttrflowLocalModel HuggingFace EventSource ArgmaxCore Uttrflow"
-            networking=""
+            # The cloud island is deliberately absent: it compiles out, so its object
+            # must hold no networking symbol at all, and this is what proves the `#if`
+            # rather than reading it.
+            # Keyed by module as well as by object, because a basename on its own would
+            # let a `TelemetryService.swift` in the clipboard inherit the account's
+            # allowance. SwiftPM names each module's object directory after the directory
+            # under Sources/, so the two line up.
+            allowed_objects=""
+            while IFS= read -r file; do
+                [[ "$file" == "$CLOUD_ISLAND" ]] && continue
+                relative="${file#Sources/}"
+                allowed_objects+="${relative%%/*}/$(basename "$file").o "
+            done < <(
+                find "Sources/$ALLOWED_NETWORK_MODULE" -name '*.swift'
+                printf '%s\n' "${ALLOWED_NETWORK_FILES[@]}" "${HUB_CLIENT_FILES[@]}"
+            )
+
+            # One `nm -uA` over every linked object rather than one per file: the
+            # audit is a step in `make verify`, and forty-odd processes per module cost
+            # more than the whole rest of the script.
+            object_roots=()
             while IFS= read -r module_dir; do
-                found="$(find "$BIN_PATH/$module_dir" -name '*.o' -print0 2>/dev/null \
-                    | xargs -0 nm -u 2>/dev/null | grep -ci 'urlsession' || true)"
-                [[ "$found" -gt 0 ]] && networking+="${module_dir%.build} "
+                [[ -d "$BIN_PATH/$module_dir" ]] && object_roots+=("$BIN_PATH/$module_dir")
             done < <(grep -oE '/[A-Za-z0-9._-]+\.build/' "$LINK_LIST" | tr -d '/' | sort -u)
-            # Accumulated with trailing spaces; re-split so messages read cleanly.
-            networking="$(echo $networking)"
 
-            unexpected=""
-            for module in $networking; do
-                case " $ALLOWED_NETWORK_MODULES " in
-                *" $module "*) ;;
-                *) unexpected+="$module " ;;
-                esac
-            done
-
-            if [[ -n "${unexpected// /}" ]]; then
-                fail "a new network-capable module is linked into the app: ${unexpected% }" \
-                    "Something in the app can now open a connection that could not" \
-                    "before. Find out when it runs before shipping it — the only one" \
-                    "that was ever meant to be there is: $ALLOWED_NETWORK_MODULES."
-            else
-                # The list is accumulated with trailing spaces; read it back through
-                # word splitting so the message does not end in one.
-                pass "network-capable modules in the app, all expected: ${networking:-none}"
+            if [[ "${#object_roots[@]}" -eq 0 ]]; then
+                fail "the link file list names no module object directory" \
+                    "The audit cannot tell which objects are in the app, so a" \
+                    "dependency that started networking would not be noticed."
             fi
+            reachable="$(find ${object_roots[@]+"${object_roots[@]}"} -name '*.o' -print0 2>/dev/null \
+                | xargs -0 nm -uA 2>/dev/null | grep -Ei "$BINARY_SYMBOLS" \
+                | sed -E 's|^.*/([A-Za-z0-9._-]+)\.build/([^:]+):.*$|\1 \2|' | sort -u || true)"
 
-            # Uttrflow's own modules, narrowed to the ones the app actually links. The one
-            # exception, UttrflowLocalModel, is allowed above because it is the model's own
-            # downloader; every other Uttrflow-named module opening a connection is new.
+            new_dependencies=""
             own_offenders=""
-            for module in $networking; do
-                case " $ALLOWED_NETWORK_MODULES " in
+            while read -r module object; do
+                [[ -n "$module" ]] || continue
+                case " $ALLOWED_NETWORK_DEPENDENCIES " in
                 *" $module "*) continue ;;
                 esac
                 case "$module" in
-                Uttrflow*) own_offenders+="$module " ;;
+                Uttrflow | Uttrflow?* | uttrflow-*)
+                    case " $allowed_objects " in
+                    *" $module/$object "*) ;;
+                    *) own_offenders+="$module/${object%.o} " ;;
+                    esac
+                    ;;
+                *)
+                    case " $new_dependencies " in
+                    *" $module "*) ;;
+                    *) new_dependencies+="$module " ;;
+                    esac
+                    ;;
                 esac
-            done
-            if [[ -n "${own_offenders// /}" ]]; then
-                fail "Uttrflow's own modules now reference URLSession: ${own_offenders% }" \
-                    "The product's own code is not supposed to contain a single one, so" \
-                    "this is a network call somebody added to the app itself." \
-                    "Run: nm -u \$(find $BIN_PATH/<module>.build -name '*.o') | grep -i urlsession"
+            done <<< "$reachable"
+
+            if [[ -n "${new_dependencies// /}" ]]; then
+                fail "a new network-capable dependency is linked into the app: ${new_dependencies% }" \
+                    "Something in the app can now open a connection that could not" \
+                    "before. Find out when it runs before shipping it — the ones that" \
+                    "were meant to be there are: $ALLOWED_NETWORK_DEPENDENCIES."
             else
-                pass "no Uttrflow module in the app references URLSession"
+                pass "the only network-capable dependencies are $ALLOWED_NETWORK_DEPENDENCIES"
+            fi
+
+            if [[ -n "${own_offenders// /}" ]]; then
+                fail "Uttrflow's own objects can reach the network: ${own_offenders% }" \
+                    "Each is a file the source list above does not allow a network call," \
+                    "so either the call arrived through a name that grep does not know or" \
+                    "a dependency it uses networks on its behalf." \
+                    "Run: nm -u $BIN_PATH/<module>.build/<file>.swift.o | grep -Ei '$BINARY_SYMBOLS'"
+            else
+                pass "no Uttrflow object outside the allowed files can reach the network"
             fi
         fi
 

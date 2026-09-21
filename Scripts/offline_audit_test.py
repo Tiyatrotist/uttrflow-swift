@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+"""Proves the offline audit's source checks fail on each way of reaching the network."""
+
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+
+# The audit's own headline for each source check, matched against its output.
+NETWORK_FAILURE = "a network call site appeared outside the files allowed one"
+URL_READ_FAILURE = "a new URL read appeared"
+MISSING_ALLOWANCE = "an allowed network path no longer exists"
+UPDATER_FAILURE = "the updater is imported outside the app shell"
+
+# One line of Swift per way in, and the module to put it in. The modules are the ones the
+# audit did not cover before #665, so a narrowing of its coverage fails here.
+WAYS_IN = {
+    "URLSession": ("UttrflowClipboard", "let session = URLSession.shared\n"),
+    "Network.framework": ("UttrflowHistory", "import Network\n"),
+    "a raw socket": ("UttrflowPredict", "let fd = socket(AF_INET, SOCK_STREAM, 0)\n"),
+    "a name lookup": ("UttrflowPredictStore", "let e = getaddrinfo(h, nil, nil, nil)\n"),
+    "a system asset install": ("UttrflowDictionary", "try await request.downloadAndInstall()\n"),
+    "an endpoint literal": ("UttrflowSettings", 'let host = "https://example.com/v1"\n'),
+    "XPC to a helper": ("UttrflowUX", 'let c = NSXPCConnection(serviceName: "x")\n'),
+    "MLX's distributed backend": ("UttrflowLocalModel", "mlx_distributed_init(false, b)\n"),
+}
+
+
+class Workspace:
+    """A copy of Sources and the audit, with an xcrun that fails so no build is attempted."""
+
+    def __init__(self):
+        self.root = tempfile.mkdtemp(prefix="uttrflow-offline-")
+        os.makedirs(os.path.join(self.root, "Scripts"))
+        os.makedirs(os.path.join(self.root, "bin"))
+        shutil.copy(os.path.join(HERE, "offline_audit.sh"), os.path.join(self.root, "Scripts"))
+        shutil.copy(os.path.join(ROOT, "Package.swift"), self.root)
+        shutil.copytree(os.path.join(ROOT, "Sources"), os.path.join(self.root, "Sources"))
+        # The binary half needs a built app, which a copied tree has not got. A stub that
+        # fails stops it reaching for the network to resolve a package graph; every
+        # assertion below is on a source check's own message, not on the exit status.
+        stub = os.path.join(self.root, "bin", "xcrun")
+        with open(stub, "w") as handle:
+            handle.write("#!/bin/sh\nexit 1\n")
+        os.chmod(stub, 0o755)
+
+    def write(self, module, text):
+        path = os.path.join(self.root, "Sources", module, "AuditProbe.swift")
+        with open(path, "w") as handle:
+            handle.write(text)
+        return path
+
+    def output(self):
+        environment = dict(os.environ, PATH=os.path.join(self.root, "bin") + os.pathsep + os.environ["PATH"])
+        finished = subprocess.run(
+            ["bash", os.path.join("Scripts", "offline_audit.sh"), "--no-build"],
+            cwd=self.root, capture_output=True, text=True, env=environment,
+        )
+        return finished.stdout + finished.stderr
+
+    def close(self):
+        shutil.rmtree(self.root, ignore_errors=True)
+
+
+class OfflineAuditTests(unittest.TestCase):
+    """One workspace for the class: the audit reads the tree and never writes to it."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.workspace = Workspace()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.workspace.close()
+
+    def tearDown(self):
+        for module in {module for module, _ in WAYS_IN.values()} | {"UttrflowAccount"}:
+            probe = os.path.join(self.workspace.root, "Sources", module, "AuditProbe.swift")
+            if os.path.exists(probe):
+                os.remove(probe)
+
+    def test_a_clean_tree_passes_the_source_checks(self):
+        output = self.workspace.output()
+        self.assertNotIn(NETWORK_FAILURE, output)
+        self.assertNotIn(URL_READ_FAILURE, output)
+        self.assertNotIn(MISSING_ALLOWANCE, output)
+        self.assertNotIn(UPDATER_FAILURE, output)
+
+    def test_every_way_in_is_refused(self):
+        for way, (module, line) in WAYS_IN.items():
+            with self.subTest(way=way):
+                self.workspace.write(module, line)
+                output = self.workspace.output()
+                self.assertIn(NETWORK_FAILURE, output, f"{way} in {module} went unnoticed")
+                self.assertIn(f"Sources/{module}/AuditProbe.swift", output)
+                self.tearDown()
+
+    def test_reading_a_url_is_refused(self):
+        self.workspace.write("UttrflowClipboard", "let d = try Data(contentsOf: url)\n")
+        output = self.workspace.output()
+        self.assertIn(URL_READ_FAILURE, output)
+        self.assertIn("Sources/UttrflowClipboard/AuditProbe.swift", output)
+
+    def test_the_account_module_is_still_allowed_one(self):
+        self.workspace.write("UttrflowAccount", "let session = URLSession.shared\n")
+        self.assertNotIn(NETWORK_FAILURE, self.workspace.output())
+
+    def test_an_allowance_that_names_a_missing_file_is_refused(self):
+        island = os.path.join(self.workspace.root, "Sources", "UttrflowAI", "HTTPCleanupModel.swift")
+        moved = island + ".moved"
+        os.rename(island, moved)
+        try:
+            self.assertIn(MISSING_ALLOWANCE, self.workspace.output())
+        finally:
+            os.rename(moved, island)
+
+    def test_the_updater_outside_the_app_shell_is_refused(self):
+        self.workspace.write("UttrflowUX", "import Sparkle\n")
+        self.assertIn(UPDATER_FAILURE, self.workspace.output())
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=0 if "-q" in sys.argv else 1)
