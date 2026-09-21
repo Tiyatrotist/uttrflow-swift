@@ -90,6 +90,74 @@ struct WordBreaksTests {
         #expect(failures.isEmpty, "\(failures)")
     }
 
+    /// Every ASCII character, because the fast path decides a window of them from the rules instead of from the pattern.
+    static let ascii: [String] = (0..<128).map { String(UnicodeScalar(UInt8($0))) }
+
+    /// Two members of every ASCII word class where the class has two, so a string over these meets every pair of classes.
+    static let classes: [String] = [
+        "a", "Z", "0", "9", "_", ":", ".", "'", ",", ";", " ", "-", "\n",
+    ]
+
+    /// One member of every ASCII word class, to stand either side of a character under test.
+    static let representatives: [String] = ["a", "0", "_", ":", ".", ",", " ", "-"]
+
+    /// The string at `position` in the ordering of every `length`-character string over `alphabet`.
+    private static func string(at position: Int, length: Int, over alphabet: [String]) -> String {
+        var remaining = position
+        var built = ""
+        for _ in 0..<length {
+            built += alphabet[remaining % alphabet.count]
+            remaining /= alphabet.count
+        }
+        return built
+    }
+
+    /// How many of the strings to read: all of them in the sweep, every twenty-fifth by default.
+    private static var step: Int { OracleSweep.isFull ? 1 : OracleSweep.sampleDivisor }
+
+    /// The first twenty places one of these strings is read differently from `\b`, asked with each floor in turn.
+    private static func firstDisagreements(_ count: Int, _ text: (Int) -> String) -> [String] {
+        var failures: [String] = []
+        for position in Swift.stride(from: 0, to: count, by: step) where failures.count < 20 {
+            let built = text(position)
+            failures.append(contentsOf: disagreements(built, floorFollows: position.isMultiple(of: 2)))
+        }
+        return failures
+    }
+
+    @Test("Every ASCII string of up to three characters reads as `\\b` does", arguments: 1...3)
+    func everyShortASCIIString(_ length: Int) async {
+        let count = Int(pow(128.0, Double(length)))
+        let failures = await offTheTestPool {
+            Self.firstDisagreements(count) { Self.string(at: $0, length: length, over: Self.ascii) }
+        }
+        #expect(failures.isEmpty, "\(failures)")
+    }
+
+    @Test("Every five-character string over two members of each word class reads as `\\b` does")
+    func everyStringOverTheClasses() async {
+        let count = Int(pow(Double(Self.classes.count), 5.0))
+        let failures = await offTheTestPool {
+            Self.firstDisagreements(count) { Self.string(at: $0, length: 5, over: Self.classes) }
+        }
+        #expect(failures.isEmpty, "\(failures)")
+    }
+
+    @Test(
+        "Every ASCII character reads as `\\b` does in every four-character context",
+        arguments: 0..<128)
+    func everyASCIICharacterInContext(_ code: Int) async {
+        let middle = String(UnicodeScalar(UInt8(code)))
+        let contexts = Self.representatives.count * Self.representatives.count
+        let failures = await offTheTestPool {
+            Self.firstDisagreements(contexts * contexts) {
+                Self.string(at: $0 / contexts, length: 2, over: Self.representatives) + middle
+                    + Self.string(at: $0 % contexts, length: 2, over: Self.representatives)
+            }
+        }
+        #expect(failures.isEmpty, "\(failures)")
+    }
+
     @Test("A boundary already passed is answered again while the floor still allows it")
     func repeatedQuestions() {
         let text = "api_key=abc123"
