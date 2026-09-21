@@ -52,6 +52,19 @@ struct TokenChoiceTests {
         #expect(choice.isFree)
     }
 
+    @Test(
+        "A token that writes a whole choice keeps to it, and one that runs past it is judged on the byte it added."
+    )
+    func aWholeChoiceIsKeptToWithoutReadingPastIt() {
+        let sources = Array(" Sources".utf8)
+        #expect(TokenChoice.keeps(sources, toOneOf: [sources]))
+        #expect(TokenChoice.keeps(Array(" Sources ".utf8), toOneOf: [sources]))
+        #expect(!TokenChoice.keeps(Array(" Sourcesx".utf8), toOneOf: [sources]))
+        // The whole-choice token is allowed through the mask itself, not only through `keeps`.
+        let choice = TokenChoice(vocabulary: vocabulary, choices: [" Sources"])
+        #expect(choice.mask(width: vocabulary.bytes.count)?[4] == 0)
+    }
+
     @Test("Choices no token can keep to leave the logits untouched, and an empty choice is no choice.")
     func unmatchableChoicesLeaveTheModelFree() {
         let choice = TokenChoice(vocabulary: vocabulary, choices: ["zzz"])
