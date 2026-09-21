@@ -2,6 +2,8 @@ import CoreGraphics
 import Foundation
 import Testing
 
+import UttrflowPredict
+
 @testable import UttrflowContext
 
 /// One reading, named only by what each test is about.
@@ -15,13 +17,16 @@ private func snapshot(
     selection: NSRange? = NSRange(location: 5, length: 0),
     caret: CGRect? = CGRect(x: 10, y: 20, width: 1, height: 16),
     pointSize: CGFloat? = 13,
+    fontFamily: String? = nil,
+    textColor: TextColor? = nil,
     isSecure: Bool = false
 ) -> FocusedFieldSnapshot {
     FocusedFieldSnapshot(
         bundleIdentifier: bundleIdentifier, applicationName: "Terminal", role: role,
         identifier: identifier, placeholder: placeholder,
         accessibilityDescription: accessibilityDescription, value: value, selection: selection,
-        caret: caret, pointSize: pointSize, isSecure: isSecure, readMicroseconds: 400)
+        caret: caret, pointSize: pointSize, fontFamily: fontFamily, textColor: textColor,
+        isSecure: isSecure, readMicroseconds: 400)
 }
 
 @Suite("What one reading of the focused field says")
@@ -57,6 +62,15 @@ struct FocusedFieldSnapshotTests {
         #expect(capability.application == "Terminal")
         #expect(capability.locator == "search")
         #expect(capability.readMicroseconds == 400)
+    }
+
+    @Test("A field that gives only a family, or only a colour, is still reported as answering its type.")
+    func anyOneTypeAnswerCountsAsStyle() {
+        #expect(snapshot(pointSize: nil, fontFamily: "Menlo").capability.reportsTextStyle)
+        #expect(
+            snapshot(pointSize: nil, textColor: .init(red: 0, green: 0, blue: 0))
+                .capability.reportsTextStyle)
+        #expect(!snapshot(pointSize: nil).capability.reportsTextStyle)
     }
 
     @Test("The locator takes the first name the field publishes.")
