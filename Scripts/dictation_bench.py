@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Builds the synthetic dictation corpus, writes jobs for `uttrflow-dev bench`, and scores a run. See Docs/performance.md.
 import argparse, array, hashlib, json, math, os, random, re, statistics, subprocess, sys, unicodedata, wave
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_OUT = os.path.join(ROOT, ".build", "bench")
@@ -363,6 +363,21 @@ def score(args):
                 print(f"| {k} | " + " | ".join(str(x) for x in cells) + " |")
     failed = [(s["r"]["id"], s["r"]["failed"]) for s in scored if s["r"].get("failed")]
     print(f"\nfailed: {failed or 'none'}")
+    unstable(scored)
+
+
+def unstable(scored):
+    """Clips run more than once that did not give the same text every run. See Docs/speech-engines.md."""
+    outputs = defaultdict(Counter)
+    for s in scored:
+        r = s["r"]
+        outputs[(r["id"], r["cleaner"], r["mode"])][r.get("text", f"failed: {r.get('failed')}")] += 1
+    varied = {k: v for k, v in outputs.items() if len(v) > 1}
+    print(f"\nrepeated clips that answered differently on the same audio: {len(varied) or 'none'}")
+    for (cid, cleaner, mode), counted in sorted(varied.items()):
+        print(f"\n  {cid}, cleaner {cleaner}, mode {mode}, {sum(counted.values())} runs")
+        for text, n in counted.most_common():
+            print(f"    {n:>4} \u00d7 {text!r}")
 
 
 def main():
