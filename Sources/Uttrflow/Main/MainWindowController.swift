@@ -6,6 +6,8 @@ import SwiftUI
 
 /// Every page of the window as one value, so the sidebar never shows two different moments at once.
 struct MainContent: Sendable, Equatable {
+    /// Why the last change asked for on a page did not happen; drawn above whichever page is showing.
+    var notice: MainNotice?
     var home: HomePresentation
     var sidebar: SidebarPresentation
     var dictation: DictationPresentation

@@ -53,6 +53,11 @@ struct MainWindowView: View {
                     chrome: chrome, query: $model.searchQuery, onIntent: onIntent,
                     onSearch: onSearch, onScope: onScope)
             }
+            if let notice = model.content.notice {
+                MainNoticeBar(notice: notice)
+                    .padding(.horizontal, MainMetrics.contentPadding)
+                    .padding(.top, 12)
+            }
             page
                 // Home draws its stage edge to edge; every other page is a document and wants a margin.
                 .padding(.horizontal, model.page == .home ? 0 : MainMetrics.contentPadding)

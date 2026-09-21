@@ -1437,10 +1437,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Speaks a state change through VoiceOver, since focus stays in the app being typed into.
     private func announce(_ announcement: DictationAnnouncement?) {
         guard let announcement else { return }
-        let priority: NSAccessibilityPriorityLevel = announcement.isUrgent ? .high : .medium
+        announce(announcement.text, urgently: announcement.isUrgent)
+    }
+
+    /// Speaks one line through VoiceOver; an urgent one interrupts what it is reading.
+    private func announce(_ text: String, urgently: Bool) {
+        let priority: NSAccessibilityPriorityLevel = urgently ? .high : .medium
         NSAccessibility.post(
             element: NSApplication.shared, notification: .announcementRequested,
-            userInfo: [.announcement: announcement.text, .priority: priority.rawValue])
+            userInfo: [.announcement: text, .priority: priority.rawValue])
     }
 
     /// Keeps one dictation, echoed on screen at once because the menu cannot await the store.
@@ -1676,6 +1681,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let corrections = changed.corrections
 
         return MainContent(
+            notice: actionNotice,
             home: HomePresenter.page(
                 for: HomeSnapshot(
                     permissions: knownPermissions, entries: entries,
@@ -1770,6 +1776,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Why the last Save was refused, per editor, until the next keystroke clears it.
     private var wordRefusal: String?
     private var snippetRefusal: String?
+    /// Why the last delete, flag, restore or undo did not happen, until one of them works or the page changes.
+    private(set) var actionNotice: MainNotice?
 
     /// Counts editor requests, so a slow one cannot open over a faster one that followed it.
     private var editorGeneration = 0
@@ -1843,6 +1851,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .copy(let text): putOnClipboard(text, used: nil)
         case .insert(let text): insert(text, used: nil)
         case .show(let page):
+            // A notice describes the button that was pressed on the page being left, so it goes with it.
+            actionNotice = nil
             mainWindow?.show(page)
             // Redrawn from what was last read: nothing on disk changed by moving tabs.
             redrawMainWindow()
@@ -1911,14 +1921,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             refreshMainWindow()
 
         case .undoCorrection(let id):
-            // In order: the history decides there was something to undo before the dictionary hears of it.
             let retention = Retention(days: settings.transcriptRetentionDays, now: Date())
-            intentWork = Task { [weak self] in
-                guard let self,
-                    let entryID = try? await history.undoCorrection(id, keeping: retention)
-                else { return }
-                _ = try? await dictionary.recordRevert(of: entryID)
-                refreshMainWindow()
+            act { [weak self] in
+                guard let self else { return }
+                // In order: the history decides there was something to undo before the dictionary hears of it.
+                guard let entryID = try await history.undoCorrection(id, keeping: retention) else {
+                    return
+                }
+                _ = try await dictionary.recordRevert(of: entryID)
             }
 
         case .flagDictation(let id):
@@ -1956,11 +1966,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         intentWork = Task { [weak self] in
             do {
                 try await change()
+                // Cleared only on success, so the last refusal stays up until something works.
+                self?.actionNotice = nil
             } catch {
-                Self.log.error("store change failed: \(SuggestionLog.failure(error), privacy: .public)")
+                self?.report(error)
             }
             self?.refreshMainWindow()
         }
+    }
+
+    /// Puts a refused change on the page and through VoiceOver as well as in the log, so it is never silent.
+    private func report(_ error: any Error) {
+        let notice = MainNotice(refusing: error)
+        Self.log.error(
+            "store change refused: \(notice.message, privacy: .public) \(SuggestionLog.failure(error), privacy: .public)"
+        )
+        actionNotice = notice
+        announce(notice.message, urgently: true)
     }
 
     /// Opens or closes the inline word editor, in both places that track it.
