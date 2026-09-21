@@ -114,7 +114,17 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         prompt = nil
         vocabulary = nil
         kept = nil
+        judgementCache.forgetEverything()
     }
+
+    /// Per-candidate log-softmax rows the model has already produced, so a keystroke only re-averages from the new `start`.
+    private var judgementCache = JudgementCache()
+
+    /// Times `judgedTokens` read a previously-cached line instead of running the forward pass, for the tests about a cache that holds.
+    public private(set) var judgementCacheHits = 0
+
+    /// Times `judgedTokens` had to run the forward pass because nothing for this candidate was cached, for the tests about a cache that holds.
+    public private(set) var judgementCacheMisses = 0
 
     /// Marks a pass as using the model.
     private func beginPass() { passesRunning += 1 }
@@ -424,49 +434,67 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
     public func judgedTokens(of candidate: String, following context: String) async -> [JudgedToken] {
         bufferCache.hold()
         defer { bufferCache.clear() }
-        guard let container, !Task.isCancelled else { return [] }
+        // The forward pass runs on the whole candidate, so the result is the same for every typed prefix.
+        if let line = judgementCache.recall(candidate: candidate) {
+            judgementCacheHits += 1
+            guard let container else { return [] }
+            let bytes = vocabulary?.bytes ?? []
+            return await container.perform { loaded in
+                Self.judgedFromCache(
+                    line, candidate: candidate, context: context, bytes: bytes, tokenizer: loaded.tokenizer)
+            }
+        }
+        judgementCacheMisses += 1
+        guard let container, !Task.isCancelled else {
+            judgementCache.remember(JudgedLine(tokens: [], rows: [], texts: []), for: candidate)
+            return []
+        }
         beginPass()
         defer { endPass() }
         let bytes = vocabulary?.bytes ?? []
-        return await container.perform { loaded in
-            Self.judge(candidate, following: context, bytes: bytes, with: loaded)
+        let result = await container.perform { loaded -> (JudgedLine, [JudgedToken]) in
+            let line = Self.judge(candidate, with: loaded)
+            let judged = Self.judgedFromCache(
+                line, candidate: candidate, context: context, bytes: bytes, tokenizer: loaded.tokenizer)
+            return (line, judged)
         }
+        judgementCache.remember(result.0, for: candidate)
+        return result.1
     }
 
     /// Two neutral tokens before the line, since `uttrflow-bakeoff score` shows Gemma 3 predicting nonsense from the first two positions.
     static let leadIn = "...\n"
 
-    /// The log-probability of each of the candidate's tokens past what was typed, nothing generated; a word cut inside a token is judged given its typed remainder.
-    private static func judge(
-        _ candidate: String, following context: String, bytes: [[UInt8]], with loaded: ModelContext
-    ) -> [JudgedToken] {
+    /// The whole candidate as the model reads it, with its tokens, the log-softmax row at each, and each token's text.
+    private static func judge(_ candidate: String, with loaded: ModelContext) -> JudgedLine {
         let whole = loaded.tokenizer.encode(text: leadIn + candidate)
-        let typed = CompletionText.typedPart(of: candidate, following: context)
-        // The line's own tokens say where its typed opening ends, so only a vocabulary they cannot be read back through costs a second tokenising.
-        let divergence =
-            ScoredSpan.divergence(
-                whole: whole, continuation: Array(candidate.dropFirst(typed.count).utf8), bytes: bytes)
-            ?? ScoredSpan.divergence(
-                whole: whole, typed: loaded.tokenizer.encode(text: leadIn + typed), bytes: bytes)
-        guard let span = ScoredSpan(whole: whole, past: divergence, bytes: bytes) else { return [] }
-        let start = span.start
-
+        guard !whole.isEmpty else { return JudgedLine(tokens: [], rows: [], texts: []) }
         let tokens = MLXArray(whole.map(Int32.init)).expandedDimensions(axis: 0)
         let output = loaded.model(LMInput.Text(tokens: tokens), cache: nil, state: nil)
         // Softmax in Float32, since the bf16 logits would round every log-probability to a coarse grid.
         let probabilities = logSoftmax(output.logits.asType(.float32), axis: -1)[0]
-        let targets = MLXArray(whole[start...].map(Int32.init)).expandedDimensions(axis: 1)
-        let taken = takeAlong(probabilities[(start - 1)..<(whole.count - 1)], targets, axis: 1)
-        let continuing = ScoredSpan.continuing(span.owed, in: bytes)
-        let rivals =
-            continuing.isEmpty ? nil : probabilities[start - 1].take(MLXArray(continuing.map(Int32.init)))
-        eval(taken)
-        // Read the values as Float, since Metal has no double precision and casting to Float64 errors.
-        let mass = rivals.flatMap { ScoredSpan.logSumExp($0.asArray(Float.self)) }
-        let scores = ScoredSpan.conditioned(taken.asArray(Float.self), onMass: mass)
-        return zip(whole[start...], scores).map { token, logProbability in
-            JudgedToken(text: loaded.tokenizer.decode(tokenIds: [token]), logProbability: logProbability)
+        eval(probabilities)
+        let flat = probabilities.asArray(Float.self)
+        let seqLen = whole.count
+        let vocab = seqLen > 0 ? flat.count / seqLen : 0
+        var rows: [[Float]] = []
+        rows.reserveCapacity(seqLen)
+        for i in 0..<seqLen {
+            rows.append(Array(flat[i * vocab..<(i + 1) * vocab]))
         }
+        let texts = whole.map { loaded.tokenizer.decode(tokenIds: [$0]) }
+        return JudgedLine(tokens: whole, rows: rows, texts: texts)
+    }
+
+    /// The judged tokens for a typed prefix, cut from the cached line so a re-typed keystroke skips the forward pass.
+    private static func judgedFromCache(
+        _ line: JudgedLine, candidate: String, context: String, bytes: [[UInt8]],
+        tokenizer: any MLXLMCommon.Tokenizer
+    ) -> [JudgedToken] {
+        guard !line.isEmpty else { return [] }
+        let typed = tokenizer.encode(
+            text: leadIn + CompletionText.typedPart(of: candidate, following: context))
+        return JudgedLine.judged(from: line, typedTokens: typed, bytes: bytes)
     }
 }
 

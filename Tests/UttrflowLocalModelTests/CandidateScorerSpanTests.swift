@@ -52,3 +52,47 @@ struct CandidateScorerSpanTests {
         #expect(ScoredSpan(whole: [], typed: [], bytes: [])?.start == nil)
     }
 }
+
+/// The per-candidate judgements `MLXCandidateScorer` answers from a cache, so a keystroke that re-types the same line skips the forward pass.
+@Suite("MLX candidate scorer judgement cache")
+struct MLXCandidateScorerJudgementCacheTests {
+    @Test("Scoring the same candidate after five successive prefixes computes once and is read four times")
+    func sameCandidateFivePrefixesRunsOnce() async {
+        let scorer = MLXCandidateScorer(
+            model: .gemma3, maximumTokens: 16, bufferCache: Self.noOpCache)
+        _ = await scorer.judgedTokens(of: "please send the report", following: "pl")
+        #expect(await scorer.judgementCacheMisses == 1)
+        _ = await scorer.judgedTokens(of: "please send the report", following: "ple")
+        _ = await scorer.judgedTokens(of: "please send the report", following: "plea")
+        _ = await scorer.judgedTokens(of: "please send the report", following: "pleas")
+        _ = await scorer.judgedTokens(of: "please send the report", following: "please")
+        #expect(await scorer.judgementCacheMisses == 1)
+        #expect(await scorer.judgementCacheHits == 4)
+    }
+
+    @Test("Different candidates each compute once")
+    func differentCandidatesEachCompute() async {
+        let scorer = MLXCandidateScorer(
+            model: .gemma3, maximumTokens: 16, bufferCache: Self.noOpCache)
+        _ = await scorer.judgedTokens(of: "please send the report", following: "p")
+        _ = await scorer.judgedTokens(of: "please send the memo", following: "p")
+        _ = await scorer.judgedTokens(of: "please send the memo", following: "pl")
+        #expect(await scorer.judgementCacheMisses == 2)
+        #expect(await scorer.judgementCacheHits == 1)
+    }
+
+    @Test("A release empties the cache, so a re-loaded scorer starts cold")
+    func releaseEmptiesTheCache() async {
+        let scorer = MLXCandidateScorer(
+            model: .gemma3, maximumTokens: 16, bufferCache: Self.noOpCache)
+        _ = await scorer.judgedTokens(of: "please send the report", following: "p")
+        #expect(await scorer.judgementCacheMisses == 1)
+        await scorer.release()
+        _ = await scorer.judgedTokens(of: "please send the report", following: "p")
+        #expect(await scorer.judgementCacheMisses == 2)
+        #expect(await scorer.judgementCacheHits == 0)
+    }
+
+    /// A buffer cache that does nothing, since the test does not load a model.
+    private static let noOpCache = BufferCacheControl(hold: {}, clear: {})
+}
