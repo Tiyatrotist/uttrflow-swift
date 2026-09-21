@@ -470,6 +470,9 @@ struct NamedSecretScan {
 
 /// Unicode word boundaries, which `\b` means, found forward once and asked about in increasing order.
 struct WordBreaks {
+    /// From one boundary to the next: a character, then every further one the boundary rules keep in the same word.
+    nonisolated(unsafe) private static let toNextBoundary = #/(?s).(?:\B.)*/#
+
     private let text: String
     /// Boundaries at or after the earliest place still asked about, in order.
     private var found: [String.Index]
@@ -483,11 +486,16 @@ struct WordBreaks {
     mutating func isBoundary(_ index: String.Index, from floor: String.Index) -> Bool {
         while let last = found.last, last < index {
             if last < floor { found.removeAll(keepingCapacity: true) }
-            found.append(text._wordIndex(after: last))
+            found.append(Self.boundary(in: text, after: last))
         }
         if let kept = found.firstIndex(where: { $0 >= floor }), kept > 0 {
             found.removeFirst(kept)
         }
         return found.contains(index)
+    }
+
+    /// The next boundary after one, read from there because the rules never look back past a boundary. See Docs/clipboard-secrets.md.
+    private static func boundary(in text: String, after start: String.Index) -> String.Index {
+        text[start...].prefixMatch(of: toNextBoundary)?.range.upperBound ?? text.endIndex
     }
 }
