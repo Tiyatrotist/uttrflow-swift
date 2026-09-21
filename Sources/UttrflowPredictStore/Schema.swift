@@ -7,6 +7,8 @@ enum Schema {
     static let statements = [
         "PRAGMA journal_mode = WAL",
         "PRAGMA synchronous = NORMAL",
+        // Zeroes the cell a deleted row held, instead of leaving it until something overwrites it.
+        "PRAGMA secure_delete = ON",
         "PRAGMA foreign_keys = ON",
         """
         CREATE TABLE IF NOT EXISTS schema_version (
