@@ -12,6 +12,12 @@ Each released version is a git tag and a build at
 ## [Unreleased]
 
 ### Fixed
+- **Uttrflow no longer sends your Hugging Face token when it downloads the AI suggestion model.**
+  If you had ever signed in to Hugging Face on this Mac, the app attached your personal token to
+  its own downloads. It now asks for public files as nobody, and ignores `HF_ENDPOINT` (#666).
+- **The AI suggestion models and the speech tokenizer are pinned to exact versions.** A new install
+  gets the version this release was tested against rather than whatever was published since, and
+  the tokenizer is checked against a recorded hash before it is used (#666).
 - **Forgetting what AI suggestions learned now removes it from disk straight away.** The lines
   were deleted from the store but stayed readable in a file beside it until you quit Uttrflow, so
   a backup taken in between still held them. If that file cannot be emptied, forgetting now says

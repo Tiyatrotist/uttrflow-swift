@@ -194,7 +194,7 @@ fi
 printf '\nSuggestion model\n'
 
 SNAPSHOT_FILE='Sources/UttrflowLocalModel/CachedSnapshot.swift'
-HUB_ALLOWED="$SNAPSHOT_FILE Sources/UttrflowLocalModel/MLXCandidateScorer.swift Sources/UttrflowLocalModel/MLXCleanupModel.swift"
+HUB_ALLOWED="$SNAPSHOT_FILE Sources/UttrflowLocalModel/MLXCandidateScorer.swift Sources/UttrflowLocalModel/MLXCleanupModel.swift Sources/UttrflowLocalModel/AnonymousHub.swift"
 if [[ ! -f "$SNAPSHOT_FILE" ]] || ! grep -q 'CachedSnapshot.complete' "$SNAPSHOT_FILE"; then
     fail "$SNAPSHOT_FILE no longer checks the cache before asking the hub" \
         "Without it every load of the suggestion model contacts the model host," \
@@ -227,6 +227,48 @@ if [[ -n "${unexpected_hub// /}" ]]; then
         "Only $HUB_ALLOWED may name it."
 else
     pass "the model hub client is named only where the cache is checked first"
+fi
+
+# A bare `HubClient()` resolves a token from HF_TOKEN, from $HF_HOME/token and from the hub
+# CLI's own files under the real home — Uttrflow is not sandboxed, so those are the user's —
+# and follows HF_ENDPOINT for the host. Both are defaults, so neither shows up in a diff.
+# Every client this app builds says whose token it uses and which host it talks to (#666).
+bare_clients="$(grep -rEn 'HubClient\(\s*\)' Sources --include='*.swift' | grep -vE '^[^:]*:[0-9]+:[[:space:]]*//' || true)"
+if [[ -n "${bare_clients//[[:space:]]/}" ]]; then
+    fail "a hub client is built with its defaults" \
+        "Those defaults attach the person's own Hugging Face token to this app's downloads" \
+        "and follow HF_ENDPOINT. Use AnonymousHub.client(). See Docs/predict-llm.md." \
+        "" $'\n'"$bare_clients"
+else
+    pass "no hub client is built with its defaults"
+fi
+
+token_providers="$(grep -rEn 'tokenProvider: *\.(environment|fixed|oauth|composite)' Sources --include='*.swift' | grep -vE '^[^:]*:[0-9]+:[[:space:]]*//' || true)"
+if [[ -n "${token_providers//[[:space:]]/}" ]]; then
+    fail "a model download would send a token" \
+        "Uttrflow fetches public weights and has no account on the model host." \
+        "" $'\n'"$token_providers"
+else
+    pass "no model download sends a token"
+fi
+
+endpoints="$(grep -rEn 'HF_ENDPOINT|detectHost' Sources --include='*.swift' | grep -vE '^[^:]*:[0-9]+:[[:space:]]*//' || true)"
+if [[ -n "${endpoints//[[:space:]]/}" ]]; then
+    fail "a model download would follow an endpoint from the environment" \
+        "The host is huggingface.co, named in the source, not chosen by whoever set a variable." \
+        "" $'\n'"$endpoints"
+else
+    pass "no model download follows an endpoint from the environment"
+fi
+
+# A branch moves; a commit does not. A model fetched from a branch is whatever was pushed to it.
+unpinned="$(grep -rEn 'resolve/main/|revision: *"main"' Sources --include='*.swift' | grep -vE '^[^:]*:[0-9]+:[[:space:]]*//' || true)"
+if [[ -n "${unpinned//[[:space:]]/}" ]]; then
+    fail "a model is fetched from a branch rather than a commit" \
+        "A push to that branch reaches every new install without a release of this app." \
+        "" $'\n'"$unpinned"
+else
+    pass "no model is fetched from a branch"
 fi
 
 # ---------------------------------------------------------------------------

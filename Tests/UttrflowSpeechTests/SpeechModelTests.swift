@@ -41,9 +41,35 @@ struct SpeechModelTests {
     func englishOnlySupport() {
         let englishOnly = SpeechModel(
             variant: "x", downloadBytes: 1, isMultilingual: false,
-            tokenizerRepository: "openai/whisper-tiny.en")
+            tokenizerRepository: "openai/whisper-tiny.en",
+            tokenizerRevision: String(repeating: "0", count: 40),
+            tokenizerDigests: [:])
         #expect(englishOnly.supports(.english))
         #expect(!englishOnly.supports(.hindi))
+    }
+
+    /// A branch name would let a push to the model repository change what a new install runs (#666).
+    @Test("every model pins its tokenizer to a commit, not to a branch")
+    func everyTokenizerIsPinnedToACommit() {
+        for model in SpeechModel.catalogue {
+            let revision = model.tokenizerRevision
+            #expect(revision.count == 40, "\(model.variant) pins \(revision), which is not a commit")
+            #expect(
+                revision.allSatisfy { $0.isHexDigit },
+                "\(model.variant) pins \(revision), which is not a commit")
+        }
+    }
+
+    /// A pinned commit says which file to fetch; only the digest says the file is the one that was pinned.
+    @Test("every model records a digest for every tokenizer file it fetches")
+    func everyTokenizerFileHasADigest() {
+        for model in SpeechModel.catalogue {
+            for name in TokenizerAssets.fileNames {
+                let digest = model.tokenizerDigests[name]
+                #expect(digest != nil, "\(model.variant) records no digest for \(name)")
+                #expect(digest?.count == 64, "\(model.variant)'s \(name) digest is not a SHA-256")
+            }
+        }
     }
 
     /// A model naming the wrong tokenizer repository would decode its output into nonsense.

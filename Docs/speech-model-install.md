@@ -88,3 +88,30 @@ anything moves; afterwards there is nothing left to identify it by.
 `FileManager` is not `Sendable`, and the shared instance is documented as safe for the file
 operations used here. Tests run against real temporary directories, which is more faithful
 than a substitute would be.
+
+## The tokenizer is pinned, and the weights are not
+
+The tokenizer is fetched from `huggingface.co/<repository>/resolve/<commit>/<file>`, at a commit
+recorded in `SpeechModel.tokenizerRevision`, and each file is checked against the SHA-256 in
+`tokenizerDigests` before it is written. A pinned commit says which file to fetch; only the digest
+says it is the file that was pinned.
+
+**To bump a tokenizer revision**, take the repository's current commit and the files' digests:
+
+```bash
+curl -s https://huggingface.co/openai/whisper-base | head -0   # see the repository
+curl -s https://huggingface.co/api/models/openai/whisper-base | python3 -c 'import sys,json;print(json.load(sys.stdin)["sha"])'
+curl -sL https://huggingface.co/openai/whisper-base/resolve/<commit>/tokenizer.json | shasum -a 256
+```
+
+Put both in `SpeechModel`, and say in the pull request what changed in the tokenizer and why the
+app should follow it. `Scripts/offline_audit.sh` fails on `resolve/main/`, so a revision cannot
+quietly become a branch again.
+
+**The weights are still fetched from a branch.** `WhisperKit.download(variant:downloadBase:…)` has
+no revision parameter, so a push to `argmaxinc/whisperkit-coreml` reaches every new install without
+a release of this app. That download also resolves a token: it passes `token: nil` to `HubApi`,
+which falls back to `TokenProvider.environment`, which reads `HF_TOKEN`, `$HF_HOME/token` and the
+hub CLI's own files under the real home. Uttrflow is not sandboxed, so those are the person's own.
+Closing that means fetching the weights here rather than through WhisperKit — see the issue linked
+from `Docs/offline.md`.
