@@ -55,7 +55,7 @@ struct TokenChoiceTests {
     @Test(
         "A token that writes a whole choice keeps to it, and one that runs past it is judged on the byte it added."
     )
-    func aWholeChoiceIsKeptToWithoutReadingPastIt() {
+    func aWholeChoiceMatchesAndARunOnIsJudgedOnItsNextByte() {
         let sources = Array(" Sources".utf8)
         #expect(TokenChoice.keeps(sources, toOneOf: [sources]))
         #expect(TokenChoice.keeps(Array(" Sources ".utf8), toOneOf: [sources]))

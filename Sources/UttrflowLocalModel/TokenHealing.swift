@@ -125,7 +125,6 @@ struct TokenChoice {
     /// Whether a token keeps to a choice: it writes part of one, or all of one and then a space.
     static func keeps(_ written: [UInt8], toOneOf choices: [[UInt8]]) -> Bool {
         guard !written.isEmpty else { return false }
-        // The length test keeps the byte after a whole choice in range, whatever order the cases are read in.
         return choices.contains { choice in
             choice.starts(with: written)
                 || (written.count > choice.count && written.starts(with: choice)
