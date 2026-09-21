@@ -50,7 +50,8 @@ struct MainWindowView: View {
                 onIntent: onIntent)
             if model.page != .home {
                 OrbitPageHeader(
-                    chrome: chrome, query: $model.searchQuery, onIntent: onIntent,
+                    chrome: model.chrome, query: $model.searchQuery,
+                    searchFocusRequest: model.searchFocusRequest, onIntent: onIntent,
                     onSearch: onSearch, onScope: onScope)
             }
             page
@@ -62,35 +63,7 @@ struct MainWindowView: View {
         }
         // The field holds what is being typed, so it is only put back in step when the page changes.
         .onChange(of: model.page) { _, _ in
-            model.searchQuery = chrome.search?.query ?? ""
-        }
-    }
-
-    /// The chrome of whichever page is showing; a `switch`, so a tenth page fails to compile until handled.
-    private var chrome: MainPageChrome {
-        let content = model.content
-        return switch model.page {
-        // Home draws its own greeting, so the toolbar above it stays empty.
-        case .home: MainPageChrome(title: "")
-        case .dictation: content.dictation.chrome
-        case .history:
-            MainPageChrome(
-                title: SidebarPresenter.title(for: .history),
-                caption: HistoryPresenter.caption,
-                search: content.history.showsSearch
-                    ? MainSearchField(
-                        placeholder: HistoryPresenter.searchPlaceholder, query: model.searchQuery)
-                    : nil)
-        case .dictionary: content.dictionary.chrome
-        case .corrections: content.corrections.chrome
-        case .insights: content.insights.chrome
-        case .snippets: content.snippets.chrome
-        case .style: content.style.chrome
-        case .diagnostics:
-            MainPageChrome(
-                title: SidebarPresenter.title(for: .diagnostics),
-                caption: DiagnosticsPresenter.caption)
-        case .account: content.account.chrome
+            model.searchQuery = model.chrome.search?.query ?? ""
         }
     }
 
@@ -175,6 +148,8 @@ struct MainWindowStrip: View {
 struct OrbitPageHeader: View {
     let chrome: MainPageChrome
     @Binding var query: String
+    /// Rises when Find is chosen; handed on to the search field, which is what takes the focus.
+    var searchFocusRequest = 0
     var onIntent: (MainIntent) -> Void
     var onSearch: (String) -> Void
     var onScope: (String) -> Void
@@ -203,7 +178,9 @@ struct OrbitPageHeader: View {
                 MainScopeControl(scope: scope, onScope: onScope)
             }
             if let search = chrome.search {
-                MainSearchControl(field: search, query: $query, onSearch: onSearch)
+                MainSearchControl(
+                    field: search, query: $query, focusRequest: searchFocusRequest,
+                    onSearch: onSearch)
             }
             if let add = chrome.addAction {
                 MainActionButton(action: add, onIntent: onIntent)
@@ -221,21 +198,41 @@ struct OrbitPageHeader: View {
 struct MainSearchControl: View {
     let field: MainSearchField
     @Binding var query: String
+    /// Rises when Find is chosen, which is the one thing that moves the caret here without a click.
+    var focusRequest = 0
     var onSearch: (String) -> Void
+
+    /// Whether the caret is in the field; SwiftUI owns it, so Find asks through ``focusRequest``.
+    @FocusState private var isFocused: Bool
+    /// What is selected in the field, held so Find can select the whole query rather than only reach it.
+    @State private var selection: TextSelection?
 
     var body: some View {
         HStack(spacing: 7) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
-            TextField(field.placeholder, text: $query)
+            TextField(field.placeholder, text: $query, selection: $selection)
                 .textFieldStyle(.plain)
                 .font(.system(size: MainMetrics.calloutSize))
+                .focused($isFocused)
                 .onChange(of: query) { _, new in onSearch(new) }
         }
         .padding(.horizontal, 9)
         .frame(width: 200, height: 24)
         .background(.primary.opacity(0.05), in: .rect(cornerRadius: 7))
+        // Selected as well as focused, so the next keystroke replaces the old query rather than extending it.
+        .onChange(of: focusRequest) { _, _ in
+            isFocused = true
+            selection = TextSelection(range: query.startIndex..<query.endIndex)
+        }
+        // Escape empties a field with something in it, and is left alone when there is nothing to clear.
+        .onKeyPress(.escape) {
+            guard !query.isEmpty else { return .ignored }
+            query = ""
+            onSearch("")
+            return .handled
+        }
     }
 }
 
