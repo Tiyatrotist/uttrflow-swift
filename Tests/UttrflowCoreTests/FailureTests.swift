@@ -85,7 +85,7 @@ struct FailurePresentationTests {
         #expect(SpeechEngineError.modelDownloadFailed(description: "x").recovery == .downloadSpeechModel)
         #expect(SpeechEngineError.notEnoughSpace(neededBytes: 1).recovery == .downloadSpeechModel)
         #expect(SpeechEngineError.modelLoadFailed(description: "x").recovery == .retry)
-        #expect(SpeechEngineError.audioTooShort.recovery == .retry)
+        #expect(SpeechEngineError.audioTooShort.recovery == nil)
         #expect(SpeechEngineError.transcriptionFailed(description: "x").recovery == .retry)
 
         #expect(TextInsertionError.noFocusedTextField.recovery == .retry)
@@ -154,7 +154,7 @@ struct FailurePresentationTests {
         let failures: [TransformationError] = [
             .noCapableTransformer,
             .transformFailed(kind: .localModel, description: "x"),
-            .outputRejected(reason: "x"),
+            .outputRejected(reason: "x", kind: .lostWord),
         ]
         for failure in failures {
             #expect(failure.recovery == .pasteManually)
@@ -168,7 +168,7 @@ struct FailurePresentationTests {
             TextInsertionError.insertionRejected(description: "x"),
             TransformationError.noCapableTransformer,
             TransformationError.transformFailed(kind: .localModel, description: "x"),
-            TransformationError.outputRejected(reason: "x"),
+            TransformationError.outputRejected(reason: "x", kind: .lostWord),
         ]
         for failure in failures {
             #expect(failure.recovery == .pasteManually)

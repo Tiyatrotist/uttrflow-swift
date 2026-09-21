@@ -533,4 +533,57 @@ struct MenuBarPrintedShortcutTests {
         #expect(MenuBarShortcut.forBinding(control) == nil)
         #expect(MenuBarShortcut.forBinding(.shiftCommandV)?.key == "v")
     }
+
+    @Test(
+        "the AI suggestions switch says what its model is waiting on, in the words Settings uses",
+        arguments: [
+            (SuggestionModelReadiness.loading, "AI Suggestions — Getting ready"),
+            (.downloading(fractionCompleted: nil), "AI Suggestions — Getting ready"),
+            (.downloading(fractionCompleted: 0.42), "AI Suggestions — Getting ready — 42%"),
+            (.downloading(fractionCompleted: 1.7), "AI Suggestions — Getting ready — 100%"),
+            (.releasedForMemory, "AI Suggestions — Paused to free memory"),
+            (.failed, "AI Suggestions — The model could not be fetched"),
+            (.ready, "AI Suggestions"),
+            (.notAsked, "AI Suggestions"),
+        ])
+    func suggestionsSwitchShowsTheModel(model: SuggestionModelReadiness, title: String) {
+        let shown = MenuBarPresenter.present(
+            MenuBarState(features: MenuBarFeatures(suggestions: true), suggestionModel: model))
+        let item = shown.commands.first { $0.intent == .setFeature(.suggestions, isOn: false) }
+        #expect(item?.title == title)
+        #expect(item?.isChecked == true)
+    }
+
+    @Test("a switched-off AI suggestions item says nothing about a model it is not using")
+    func offSuggestionsSwitchIsPlain() {
+        let shown = MenuBarPresenter.present(
+            MenuBarState(features: MenuBarFeatures(suggestions: false), suggestionModel: .failed))
+        let item = shown.commands.first { $0.intent == .setFeature(.suggestions, isOn: true) }
+        #expect(item?.title == "AI Suggestions")
+    }
+}
+
+@Suite("A shortcut that cannot be heard")
+struct MenuBarUnheardShortcutTests {
+    private let reason = "Another app has turned on secure keyboard entry, so the shortcut can't be heard."
+
+    @Test("is said under the status line, and Start Dictation still works")
+    func saysWhyAndKeepsTheMenuPath() {
+        let shown = MenuBarPresenter.present(MenuBarState(shortcutUnheard: reason))
+
+        #expect(shown.items.prefix(2).last == .status(text: reason, emphasis: .attention))
+        #expect(shown.command(.startDictation)?.isEnabled == true)
+    }
+
+    @Test("says nothing when the shortcut can be heard")
+    func silentWhenHeard() {
+        let shown = MenuBarPresenter.present(MenuBarState())
+        #expect(shown.items.filter { if case .status = $0 { true } else { false } }.count == 1)
+    }
+
+    @Test("says nothing while dictation is switched off, since there is no shortcut to miss")
+    func silentWhenDictationIsOff() {
+        let state = MenuBarState(features: MenuBarFeatures(dictation: false), shortcutUnheard: reason)
+        #expect(!MenuBarPresenter.present(state).items.contains(.status(text: reason, emphasis: .attention)))
+    }
 }

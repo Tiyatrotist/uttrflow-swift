@@ -26,6 +26,22 @@ struct Scratch: ~Copyable {
 
 @Suite("Keeping the answers between launches")
 struct CapturePreferencesFileTests {
+    /// A file written before the two stores agreed on a spelling holds both, and the refusal is the one to keep.
+    @Test("A file holding one application under two spellings reads back as one refusal.")
+    func bothSpellingsFoldOnLoad() throws {
+        let scratch = Scratch()
+        try scratch.write(
+            """
+            {"consent": {"com.example.terminal": "declined", "com.Example.Terminal": "allowed"},
+             "hasImportedShellHistory": false}
+            """, to: "capture.json")
+
+        let preferences = CapturePreferencesFile(path: scratch.path("capture.json")).load()
+
+        #expect(preferences.consent == ["com.example.terminal": .declined])
+        #expect(preferences.state(of: "com.Example.Terminal") == .declined)
+    }
+
     @Test("A file that was never written reads back as nothing having been decided.")
     func missingFileIsEmpty() {
         let scratch = Scratch()
@@ -72,5 +88,18 @@ struct CapturePreferencesLocationTests {
         let file = CapturePreferencesFile.defaultFile(in: URL(filePath: "/tmp/support"))
         #expect(
             file.path(percentEncoded: false) == "/tmp/support/Uttrflow/predict-consent.v1.json")
+    }
+}
+
+@Suite("Removing the answers")
+struct CapturePreferencesFileRemovalTests {
+    @Test("Removing deletes the file, and removing a file that is not there is not an error.")
+    func removeDeletesTheFile() throws {
+        let scratch = Scratch()
+        let file = CapturePreferencesFile(path: scratch.preferencesPath)
+        try file.save(CapturePreferences(consent: ["com.example.terminal": .allowed]))
+        try file.remove()
+        #expect(!FileManager.default.fileExists(atPath: scratch.preferencesPath))
+        try file.remove()
     }
 }

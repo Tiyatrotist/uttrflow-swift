@@ -11,6 +11,25 @@ Each released version is a git tag and a build at
 
 ## [Unreleased]
 
+### Fixed
+- **Copy Diagnostics no longer puts dictated words on the clipboard.** When the AI clean-up refused
+  an answer, the copied report quoted the words it refused over — a name, a number, whatever was
+  said — though the report promises it counts and never quotes. It now names the kind of refusal
+  and not the words. The Diagnostics page on your Mac still shows the full reason (#645).
+- **Forgetting what AI suggestions learned now removes it from disk straight away.** The lines
+  were deleted from the store but stayed readable in a file beside it until you quit Uttrflow, so
+  a backup taken in between still held them. If that file cannot be emptied, forgetting now says
+  so rather than reporting success (#642).
+- **Turning AI suggestions off for an app now also stops it being learned from.** The switch filed
+  its answer under one spelling of the app's identifier and the capture side looked it up under
+  another, so for any app whose identifier has a capital letter the second of the two checks
+  answered "carry on". A file holding both spellings is read as the refusal (#668).
+- **What Uttrflow keeps about you is now readable only by you.** The clipboard list, copied
+  pictures, the dictation history, the personal dictionary, your snippets, what AI suggestions
+  learned and the folder they all sit in were created readable by anything else running on the
+  Mac, and are now the owner's alone. Existing files are tightened the next time they are
+  written (#656).
+
 ### Changed
 - **Suggestions is now called AI suggestions.** The Settings tab and its heading, the menu
   bar switch, the notes on that screen and what VoiceOver reads for a suggestion all use the

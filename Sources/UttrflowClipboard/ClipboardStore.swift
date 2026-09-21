@@ -182,6 +182,8 @@ public actor ClipboardStore {
         let saved = loaded().filter(\.isKept)
         // Reaches the disk here rather than at the next write: clearing and then quitting must stick.
         try save(saved)
+        // A copy set aside from the history file is history too; the saved file's copies are saved clips.
+        do { try LocalStore.removeSetAside(file) } catch { throw .couldNotWrite }
         return retained(saved, keeping: retention)
     }
 
@@ -201,6 +203,12 @@ public actor ClipboardStore {
     /// Removes every clip, pinned ones included, which is what resetting personalisation promises.
     public func forgetEverything() throws(ClipboardStoreError) {
         try save([])
+        do {
+            try LocalStore.removeSetAside(file)
+            try LocalStore.removeSetAside(savedFile)
+        } catch {
+            throw .couldNotWrite
+        }
     }
 
     /// Pins a clip or unpins it, which is also how it stops ageing out; the panel decides the order.
@@ -277,9 +285,8 @@ public actor ClipboardStore {
     /// Writes a picture's bytes back under the file name its clip already records.
     private func restore(_ data: Data, as name: String) throws(ClipboardStoreError) {
         do {
-            try FileManager.default.createDirectory(
-                at: imagesFolder, withIntermediateDirectories: true)
-            try data.write(to: imagesFolder.appending(path: name, directoryHint: .notDirectory))
+            try PrivateFile.write(
+                data, to: imagesFolder.appending(path: name, directoryHint: .notDirectory))
         } catch {
             throw .couldNotWrite
         }
@@ -291,9 +298,8 @@ public actor ClipboardStore {
     ) throws(ClipboardStoreError) -> ClipImage {
         let name = "\(id.uuidString).png"
         do {
-            try FileManager.default.createDirectory(
-                at: imagesFolder, withIntermediateDirectories: true)
-            try data.write(to: imagesFolder.appending(path: name, directoryHint: .notDirectory))
+            try PrivateFile.write(
+                data, to: imagesFolder.appending(path: name, directoryHint: .notDirectory))
         } catch {
             throw .couldNotWrite
         }
@@ -634,9 +640,7 @@ public actor ClipboardStore {
                 try removeFile(url)
                 return
             }
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try JSONEncoder().encode(clips).write(to: url, options: .atomic)
+            try PrivateFile.write(JSONEncoder().encode(clips), to: url)
         } catch {
             throw .couldNotWrite
         }

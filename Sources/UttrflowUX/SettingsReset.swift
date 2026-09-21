@@ -1,4 +1,5 @@
 // Forgetting: the levels the Settings screen offers, what each removes, and who removes it.
+import UttrflowCore
 public import UttrflowDictionary
 public import UttrflowHistory
 public import UttrflowClipboard
@@ -31,6 +32,12 @@ public enum SettingsResetTarget: Sendable, Equatable {
     case suggestions(inApplication: String)
     /// Every completion there is, which a fresh install has none of.
     case everySuggestion
+    /// Every recording kept for a retry, each one the user's voice.
+    case recordings
+    /// Every snippet the user wrote.
+    case snippets
+    /// Every answer about which applications completions may learn from.
+    case suggestionConsent
 }
 
 extension SettingsReset {
@@ -38,7 +45,11 @@ extension SettingsReset {
     public var targets: [SettingsResetTarget] {
         switch self {
         case .learnedWords: [.learnedWords]
-        case .everything: [.everyWord, .history, .clipboard, .everySuggestion, .preferences]
+        case .everything:
+            [
+                .everyWord, .history, .clipboard, .everySuggestion, .recordings, .snippets,
+                .suggestionConsent, .preferences,
+            ]
         case .suggestions(let application): [.suggestions(inApplication: application)]
         }
     }
@@ -86,13 +97,13 @@ public struct SettingsPersonalisation: Sendable, Equatable {
         self.addedWords = addedWords
         self.transcripts = transcripts
         self.lastDictationApp = lastDictationApp
-        self.suggestions = suggestions.reduce(into: [:]) { $0[$1.key.lowercased()] = $1.value }
+        self.suggestions = suggestions.reduce(into: [:]) { $0[ApplicationKey.of($1.key)] = $1.value }
         self.met = Set(met.map { $0.lowercased() })
     }
 
     /// How much one application has taught, which is what the button beside it will take.
     public func suggestions(from bundleIdentifier: String) -> Int {
-        suggestions[bundleIdentifier.lowercased()] ?? 0
+        suggestions[ApplicationKey.of(bundleIdentifier)] ?? 0
     }
 
     /// Every application the Suggestions list should name: one that has taught something, or that the loop has met.
@@ -152,6 +163,24 @@ public protocol SettingsPersonalisationStore: Sendable {
     func carryOut(_ reset: SettingsReset) async throws(SettingsResetFailure)
 }
 
+/// Files other modules own that a fresh install has none of, each forgotten by the closure its owner hands in.
+public struct KeptElsewhere: Sendable {
+    let recordings: @Sendable () async throws -> Void
+    let snippets: @Sendable () async throws -> Void
+    let suggestionConsent: @Sendable () async throws -> Void
+
+    /// Each closure defaults to doing nothing, for a build or a test that keeps none of these.
+    public init(
+        recordings: @escaping @Sendable () async throws -> Void = {},
+        snippets: @escaping @Sendable () async throws -> Void = {},
+        suggestionConsent: @escaping @Sendable () async throws -> Void = {}
+    ) {
+        self.recordings = recordings
+        self.snippets = snippets
+        self.suggestionConsent = suggestionConsent
+    }
+}
+
 /// The real store: this Mac's files, holding no opinion the stores themselves do not.
 public struct FilePersonalisationStore: SettingsPersonalisationStore {
     private let dictionary: PersonalDictionaryStore
@@ -160,6 +189,7 @@ public struct FilePersonalisationStore: SettingsPersonalisationStore {
     private let suggestions: (any SuggestionCorpus)?
     /// Applications the completion loop has met, asked for as a closure so this module needs no capture store.
     private let met: @Sendable () -> Set<String>
+    private let elsewhere: KeptElsewhere
 
     /// The corpus is optional: a build with tab-to-complete unwired has none to reach.
     public init(
@@ -167,13 +197,15 @@ public struct FilePersonalisationStore: SettingsPersonalisationStore {
         history: DictationHistoryStore,
         clipboard: ClipboardStore,
         suggestions: (any SuggestionCorpus)? = nil,
-        met: @escaping @Sendable () -> Set<String> = { [] }
+        met: @escaping @Sendable () -> Set<String> = { [] },
+        elsewhere: KeptElsewhere = KeptElsewhere()
     ) {
         self.dictionary = dictionary
         self.history = history
         self.clipboard = clipboard
         self.suggestions = suggestions
         self.met = met
+        self.elsewhere = elsewhere
     }
 
     /// Counts the dictionary, the transcripts still inside the promise, and the completions.
@@ -199,12 +231,12 @@ public struct FilePersonalisationStore: SettingsPersonalisationStore {
 
     /// Hands each of the level's targets to the store that owns it.
     public func carryOut(_ reset: SettingsReset) async throws(SettingsResetFailure) {
-        do {
-            for target in reset.targets { try await remove(target) }
-        } catch {
-            // Every store fails for the same reason, and the user's next move is the same.
-            throw SettingsResetFailure()
+        // Every target is tried even after one refuses, so one stuck store cannot keep the others' data.
+        var refused = false
+        for target in reset.targets {
+            do { try await remove(target) } catch { refused = true }
         }
+        if refused { throw SettingsResetFailure() }
     }
 
     /// One target, handed to whichever store owns it; ``SettingsSession`` owns the preferences.
@@ -218,6 +250,9 @@ public struct FilePersonalisationStore: SettingsPersonalisationStore {
         case .suggestions(let application):
             try await suggestions?.forgetSuggestions(from: application)
         case .everySuggestion: try await suggestions?.forgetEverySuggestion()
+        case .recordings: try await elsewhere.recordings()
+        case .snippets: try await elsewhere.snippets()
+        case .suggestionConsent: try await elsewhere.suggestionConsent()
         case .preferences: break
         }
     }

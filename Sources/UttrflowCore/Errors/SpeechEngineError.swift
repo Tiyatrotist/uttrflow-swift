@@ -27,7 +27,7 @@ public enum SpeechEngineError: UttrflowFailure {
         case .modelLoadFailed:
             "Speech recognition couldn't start. Try again, or reinstall it from Settings."
         case .audioTooShort:
-            "That was too short to transcribe. Hold the shortcut a moment longer."
+            "Too short. Hold the shortcut a moment longer."
         case .nothingHeard:
             "Didn't catch that."
         case .transcriptionFailed:
@@ -35,13 +35,13 @@ public enum SpeechEngineError: UttrflowFailure {
         }
     }
 
-    /// The model download where the model is missing, a retry where it is not, and nothing for silence.
+    /// The model download where the model is missing, a retry where it is not, and nothing for silence or a brief tap.
     public var recovery: RecoveryAction? {
         switch self {
         case .modelNotInstalled, .modelDownloadFailed, .notEnoughSpace: .downloadSpeechModel
-        case .modelLoadFailed, .audioTooShort, .transcriptionFailed: .retry
-        // Nothing to press: the remedy is to speak again, which the shortcut already is.
-        case .nothingHeard: nil
+        case .modelLoadFailed, .transcriptionFailed: .retry
+        // Nothing to press: the remedy is to speak again, or hold longer, which the shortcut already is.
+        case .audioTooShort, .nothingHeard: nil
         }
     }
 
