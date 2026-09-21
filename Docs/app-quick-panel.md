@@ -86,12 +86,15 @@ instead, so there is never a question of which row it means.
 
 | Colour | Hex | Contrast on `panelSurface` |
 | --- | --- | --- |
-| `panelLabel` | `F4F4F6` | |
-| `panelLabelSoft` | `8B90A0` | 7.4:1 |
-| `panelLabelDim` | `565B68` | the dimmest grey in the design |
-| `panelGhost` | `3A3F4A` | below the design's floor; never the only signal on a row |
+| `panelLabel` | `F4F4F6` | 17.8:1 |
+| `panelLabelSoft` | `8B90A0` | 6.1:1 |
+| `panelLabelDim` | `7A7F8E` | 4.9:1, and 4.6:1 on `panelCardHigh`, the panel's tightest ground |
+| `panelGhost` | `656E80` | 3.8:1, a mark's floor rather than a word's; never the only signal on a row |
 | `panelAccentBright` | `5FE0D3` | 12.2:1 as a foreground |
 | `panelAccentText` | `04332F` | ink on a teal fill, where white measures 2.1:1 |
+
+Every ratio here is computed by `TextToneContrastTests`, against the panel's three grounds,
+so a palette edit that drops a label below 4.5:1 — or the ⋯ glyph below 3:1 — fails the build.
 
 The selection ring is `panelAccent` at 0.38 over a 0.08 wash; at 1.5 points and full strength
 the ring was brighter than the clip it pointed at. The active chip is a 0.16 wash with a 0.35
