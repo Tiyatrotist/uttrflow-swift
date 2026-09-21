@@ -38,6 +38,79 @@ struct CarbonHotkeyLifecycleTests {
         try expectHeld(bound)
     }
 
+    /// The AppDelegate's `startWatchingForClaimedShortcuts` stops every claimed monitor and registers a
+    /// fresh set; a missing unregister would leave the key held by nobody and the keypress on the
+    /// frontmost app. #142.
+    @Test("the stop-all-then-start-all cycle leaves every claimed binding held by exactly one registration")
+    func stopAllThenStartAllLeavesEveryClaimedBindingHeld() throws {
+        let quiet: Set<HotkeyModifier> = [.control, .option, .shift]
+        let first = HotkeyBinding(keyCode: 105, modifiers: quiet)
+        let second = HotkeyBinding(keyCode: 107, modifiers: quiet)
+        let third = HotkeyBinding(keyCode: 109, modifiers: quiet)
+
+        let current: [CarbonHotkeyMonitor] = [
+            CarbonHotkeyMonitor(),
+            CarbonHotkeyMonitor(),
+            CarbonHotkeyMonitor(),
+        ]
+        defer { for monitor in current { monitor.stop() } }
+        try current[0].start(binding: first)
+        try current[1].start(binding: second)
+        try current[2].start(binding: third)
+
+        for monitor in current { monitor.stop() }
+
+        let next: [CarbonHotkeyMonitor] = [
+            CarbonHotkeyMonitor(),
+            CarbonHotkeyMonitor(),
+            CarbonHotkeyMonitor(),
+        ]
+        defer { for monitor in next { monitor.stop() } }
+        try next[0].start(binding: first)
+        try next[1].start(binding: second)
+        try next[2].start(binding: third)
+
+        try expectHeld(first)
+        try expectHeld(second)
+        try expectHeld(third)
+    }
+
+    /// A settings change reassigns a binding; the cycle must end with the new binding held and the old one free.
+    @Test("a binding changed during the stop-all-then-start-all cycle ends with the new binding held")
+    func stopAllThenStartAllWithAChangedBinding() throws {
+        let quiet: Set<HotkeyModifier> = [.control, .option, .shift]
+        let original = HotkeyBinding(keyCode: 105, modifiers: quiet)
+        let other = HotkeyBinding(keyCode: 107, modifiers: quiet)
+        let changed = HotkeyBinding(keyCode: 113, modifiers: quiet)
+        let changedOther = HotkeyBinding(keyCode: 111, modifiers: quiet)
+
+        let current: [CarbonHotkeyMonitor] = [
+            CarbonHotkeyMonitor(),
+            CarbonHotkeyMonitor(),
+        ]
+        defer { for monitor in current { monitor.stop() } }
+        try current[0].start(binding: original)
+        try current[1].start(binding: other)
+
+        for monitor in current { monitor.stop() }
+
+        let next: [CarbonHotkeyMonitor] = [
+            CarbonHotkeyMonitor(),
+            CarbonHotkeyMonitor(),
+        ]
+        defer { for monitor in next { monitor.stop() } }
+        try next[0].start(binding: changed)
+        try next[1].start(binding: changedOther)
+
+        // The original binding must be free; an intruder takes it without refusal.
+        let released = CarbonHotkeyMonitor()
+        defer { released.stop() }
+        try released.start(binding: original)
+
+        // The new binding must be held.
+        try expectHeld(changed)
+    }
+
     /// Stops on another thread while the main thread waits, so a deferred unregister has not run yet.
     private func stopOffMainThenStart(
         _ previous: CarbonHotkeyMonitor, _ next: CarbonHotkeyMonitor
