@@ -503,7 +503,11 @@ target never exercises the broken path. `Docs/` and the comments in
 
 - 95% line coverage per module, enforced by `Scripts/coverage.sh`. Exclusions live in
   `Scripts/coverage_report.py` **with a stated reason each, printed on every run** — an
-  exclusion is never silent.
+  exclusion is never silent. An excluded file has to be small enough that reading it is a
+  sufficient review: `make exclusion-audit` prints every exclusion's line count and fails
+  over 400 lines, unless the file is listed in `OVERSIZED_EXCLUSIONS` with what reviews it
+  instead. Adding tests until the exclusion can go is the way out; a shallow test that
+  executes lines without asserting behaviour is worse than the exclusion it hides.
 - Swift 6 language mode, strict concurrency, warnings as errors.
 - No force unwraps, no force try, no implicitly unwrapped optionals (lint-enforced).
 - Nothing about the evaluation corpus may reach a shipped app; `Scripts/bundle.sh` checks
