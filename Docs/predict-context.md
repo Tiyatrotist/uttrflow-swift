@@ -11,7 +11,7 @@ the two constraints every decision below is measured against.
 |---|---|---|---|
 | Field reading | `Sources/UttrflowContext/FocusedFieldReader+System.swift` | One AX read per turn: bundle id, app name, role, subrole, identifier, placeholder, description, document (URL or cwd), whole value, selection, caret rect, window rect, font size + family, secure, composing. Not read: the window title, any text outside the field. | The same read, plus a second, separately budgeted read of the focused window's title and the visible text around the field (`surroundings`), made only once a model pass is certain. |
 | What the model is told | `Sources/UttrflowPredict/CandidateGeneration.swift` → `GenerationSituation` | `application`, `field`, `document`, `preceding` (≤400 chars of the field's own text before the caret's line). | Those four, plus `windowTitle`, `surroundings`, `recentLines` (the person's own lines here, newest first) and `isMultiline`. |
-| The prompt | `Sources/UttrflowLocalModel/MLXCandidateScorer.swift`, `Sources/UttrflowLocalModel/PromptBuilder.swift` | One fixed instruction + one user message; a new `ChatSession` per call prefilled the ~120-token instruction every time; `maxTokens` fixed at 128, temperature 0. | The instruction prefix is prefilled once at load into a KV cache and a pass feeds only the tokens past it (against a copy); `maxTokens` is `min(128, register.maxTokens × share)`, share 1 for the one line and 3 for the alternatives; temperature 0. |
+| The prompt | `Sources/UttrflowLocalModel/MLXCandidateScorer.swift`, `Sources/UttrflowLocalModel/PromptBuilder.swift` | One fixed instruction + one user message; a new `ChatSession` per call prefilled the ~120-token instruction every time; `maxTokens` fixed at 128, temperature 0. | The instruction prefix is prefilled once at load into a KV cache, and the last pass's whole prompt is kept in one too, so a pass reads only the tokens past the longest run it shares with the prompt before it; `maxTokens` is `min(128, register.maxTokens × share)`, share 1 for the one line and 3 for the alternatives; temperature 0. |
 | Memory | `Sources/UttrflowPredictStore/PredictStore.swift`, SQLite `surface`/`entry` | Per surface (bundle + role + locator + scope): every line the user typed there (with consent), counts, accepted/rejected, last used. Queried only by prefix and successor; no "the last N lines this person wrote here". | `recent(in:limit:)` exists: newest first, each text once, across every document of the field, self-sourced-only and superseded lines left out, over the `entry_recent` index. |
 | Gates | `Sources/UttrflowPredict/Verifier.swift`, `Sources/UttrflowPredict/Verification.swift` | Remembered lines pass attestation (environment index), nearest-neighbour correction, then the 4B plausibility floor (−6.0, ~100 ms per line). Generated lines are not scored. | Unchanged. |
 | Timing | `Sources/Uttrflow/Suggestion/SuggestionCoordinator.swift` | 120 ms debounce, in-flight pass cancelled by the next key, last answer reused while the line still begins one of its lines, prose answered 400 ms after the last key. Generation of 3–4 lines ≈ 500–1 000 ms on the 4B; corpus path ≈ 1–150 ms. | The same debounce, cancellation and reuse; one line generated first and the alternatives fetched behind it; an empty answer remembered per line. Measured in the table below. |
@@ -103,6 +103,12 @@ milliseconds, not hundreds.
    two different prompts share, chat template included — is prefilled into a `[KVCache]`;
    each pass checks the real prompt opens with those tokens and feeds only the remainder
    against a copy of the cache. It saved ~60 ms per pass.
+7. **Keep the last prompt too — done.** Consecutive keystrokes on one line share all but the
+   last few tokens of the prompt, so the pass keeps its tokens and its cache and the next
+   pass trims that cache back to the longest run the two share and reads only the rest.
+   It saved 20–25 ms per pass over one typed reply and costs 91 MB held between passes; both
+   numbers, and what it does to a near tie, are under "a suggestion pass's prefill" in
+   `Docs/performance.md`.
 
 ## Latency targets (from a pause to a drawn ghost)
 
