@@ -417,10 +417,33 @@ Per 100 keystroke-turns that is about 150–190 processor-seconds before and 31 
 completed passes of every run returned the same lines with the cache on and off, and the same
 as a build of `main` before the change.
 
-What is left is the score: `judgedTokens` tokenises the candidate twice, about 100 ms a pass
-through the same regex, and that is now the largest tokenizer cost. The regex is the dependency's;
-upstream it is huggingface/swift-transformers#383, with a fix open as #386, and nothing here
-patches or bumps it.
+### The score's second tokenising
+
+`judgedTokens` tokenised the candidate twice (#478) — the whole line, and its typed opening again —
+only to find where the two token streams diverge, about 100 ms a pass through the same regex and the
+largest tokenizer cost left after #427. The line's own tokens already say where its opening ends:
+`ScoredSpan.divergence(whole:continuation:bytes:)` walks the last of them back until their bytes have
+written what the line adds past what was typed, which gives the same first judged index and the same
+typed remainder from one encoding. A vocabulary those bytes cannot spell the continuation back
+through still tokenises the opening, which is what a pass arriving before the byte table has been
+read finds.
+
+Measured 21 September 2026 on the M5 Pro. One Release binary each, `gpu-memory --typing --passes
+100`, every fourth pass cancelled, one score a pass, rounds interleaved between the two builds so a
+busy minute falls on both:
+
+| harness | processor a pass, before → after | pass p50 / p95 |
+|---|---|---|
+| `gpu-memory --typing`: one reply typed a character a pass under one screen | 136, 140, 140, 152, 194 ms → 107, 108, 110 ms | 245 / 290 ms → 201 / 251 ms |
+
+One score alone, over the 30 candidates `uttrflow-bakeoff score` judges for the floor and the
+mid-word cut in `Docs/predict.md`: 103 ms median before, 69 ms after. All 30 scored identically, per judged token as
+well as per line, and `ScoredSpanTests` holds the two readings of the divergence to each other over
+Gemma 3's own tokenizer.
+
+The regex is still the dependency's, and every remaining pass through it is the one encoding a score
+cannot avoid; upstream it is huggingface/swift-transformers#383, tracked here as #489, and nothing
+here patches or bumps it.
 
 ### The processor time that is not the app's
 

@@ -377,7 +377,8 @@ this gate and is left to the nearest-neighbour tier, which is where a typo belon
 **`MLXCandidateScorer` scores the candidate as the whole line it is.** `Verifier` hands it
 the stored line (`ls -l`) and what is typed (`ls`); the scorer tokenises the line itself,
 takes the typed opening from the line's own spelling, and judges only the tokens past
-where the two token streams diverge. It used to tokenise `context + candidate` — `lsls -l`
+where that opening ends — read back from the line's own tokens, so the opening is not
+tokenised a second time (#478). It used to tokenise `context + candidate` — `lsls -l`
 — which is why every remembered line scored below the floor, was recorded as rejected
 (`superseded_by = text`) and never appeared again. Two measured traps remain:
 
@@ -402,7 +403,8 @@ where the two token streams diverge. It used to tokenise `context + candidate` �
   Attested candidates (executables, subcommands) never reach the model, which is why `lsof`
   and `lsbom` were unaffected in practice.
 
-Per-call cost is 80–115 ms warm and ~250–340 ms cold on the 4B model, so the four
+Per-call cost is 55–90 ms warm and ~250–340 ms cold on the 4B model — the score's own tokenising
+was halved by #478, measured in `Docs/performance.md` — so the four
 sequential passes `verifiedDepth` allows — `PredictionEngine.maximumChoices`, every
 candidate that could be drawn — fit in well under a second of the 7 000 ms budget.
 
