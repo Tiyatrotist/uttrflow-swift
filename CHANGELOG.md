@@ -12,6 +12,10 @@ Each released version is a git tag and a build at
 ## [Unreleased]
 
 ### Fixed
+- **Copy Diagnostics no longer puts dictated words on the clipboard.** When the AI clean-up refused
+  an answer, the copied report quoted the words it refused over — a name, a number, whatever was
+  said — though the report promises it counts and never quotes. It now names the kind of refusal
+  and not the words. The Diagnostics page on your Mac still shows the full reason (#645).
 - **Uttrflow no longer sends your Hugging Face token when it downloads the AI suggestion model.**
   If you had ever signed in to Hugging Face on this Mac, the app attached your personal token to
   its own downloads. It now asks for public files as nobody, and ignores `HF_ENDPOINT` (#666).
