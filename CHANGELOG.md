@@ -16,6 +16,11 @@ Each released version is a git tag and a build at
   its answer under one spelling of the app's identifier and the capture side looked it up under
   another, so for any app whose identifier has a capital letter the second of the two checks
   answered "carry on". A file holding both spellings is read as the refusal (#668).
+- **What Uttrflow keeps about you is now readable only by you.** The clipboard list, copied
+  pictures, the dictation history, the personal dictionary, your snippets, what AI suggestions
+  learned and the folder they all sit in were created readable by anything else running on the
+  Mac, and are now the owner's alone. Existing files are tightened the next time they are
+  written (#656).
 
 ### Changed
 - **Suggestions is now called AI suggestions.** The Settings tab and its heading, the menu
