@@ -179,9 +179,26 @@ struct PerformanceProfilerTests {
 
     @Test("what the loaded model added is the difference between the first two moments")
     func reportsWhatTheModelAdded() async {
-        // Nothing reads memory between the two moments, so the difference is exactly one step.
-        let report = await profile(memory: FakeMemory(step: 690))
-        #expect(report.modelLoad.addedBytes == 690)
+        // The watch around the load reads memory twice more; a poll nothing reaches keeps that fixed.
+        let report = await profile(
+            configuration: .init(repetitions: 2, leakRepetitions: 3, pollInterval: .seconds(60)),
+            memory: FakeMemory(step: 690))
+        let threeSteps: Int64 = 3 * 690
+        #expect(report.modelLoad.addedBytes == threeSteps)
+    }
+
+    /// A cold load compiles the model and the spike is gone by the time it returns, so only a watch sees it.
+    @Test("the first load's peak comes from readings taken while it ran, not from either side of it")
+    func recordsTheLoadPeak() async {
+        let report = await profile(
+            configuration: .init(repetitions: 2, leakRepetitions: 3, pollInterval: .seconds(60)),
+            memory: FakeMemory(base: 100_000_000, step: 690))
+        // Reading a step at a time: idle is the first, the watch's two are the next, loaded is the last.
+        let highestDuringTheLoad: Int64 = 100_000_000 + 2 * 690
+        let loaded = report.timeline.samples.first { $0.label == "speech model loaded" }
+        #expect(report.modelLoad.peak?.footprintBytes == highestDuringTheLoad)
+        #expect(report.modelLoad.peak?.residentBytes == highestDuringTheLoad * 2)
+        #expect((report.modelLoad.peak?.footprintBytes ?? 0) < (loaded?.reading.footprintBytes ?? 0))
     }
 
     @Test("progress is announced for every phase")
@@ -230,6 +247,7 @@ struct PerformanceProfilerTests {
         #expect(report.leak.footprints.isEmpty)
         #expect(report.leak.verdict == .undetermined)
         #expect(report.modelLoad.addedBytes == nil)
+        #expect(report.modelLoad.peak == nil)
     }
 }
 

@@ -31,6 +31,10 @@ struct Profile: AsyncParsableCommand {
     @Flag(name: .long, help: "Time transcription alone, without the clean-up pass.")
     var transcribeOnly = false
 
+    /// Prewarming exists to hold the cold compile's peak down, so reading that peak needs it off.
+    @Flag(name: .long, help: "Load the speech model with WhisperKit's prewarm off.")
+    var noPrewarm = false
+
     func validate() throws {
         guard repetitions >= 1 else { throw ValidationError("--repetitions must be 1 or more.") }
         guard dictations >= 1 else { throw ValidationError("--dictations must be 1 or more.") }
@@ -71,7 +75,8 @@ struct Profile: AsyncParsableCommand {
             onPhase: { announce($0) },
             loadSpeechModel: {
                 let engine = SpeechEngineFactory.make(
-                    kind: .whisperKit, model: model, modelFolder: store.location(of: model))
+                    kind: .whisperKit, model: model, modelFolder: store.location(of: model),
+                    prewarm: !noPrewarm)
                 do {
                     try await engine.prepare()
                 } catch {
@@ -98,7 +103,9 @@ struct Profile: AsyncParsableCommand {
         )
 
         clearProgress()
-        ProfilePrinter(report: report, model: model, includesCleanup: !transcribeOnly).emit()
+        ProfilePrinter(
+            report: report, model: model, includesCleanup: !transcribeOnly, prewarm: !noPrewarm
+        ).emit()
         try BudgetVerdict.enforce(ResourceBudget.readings(of: report.timeline))
     }
 

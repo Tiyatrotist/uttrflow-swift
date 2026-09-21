@@ -8,6 +8,8 @@ struct ProfilePrinter {
     let report: PerformanceReport
     let model: SpeechModel
     let includesCleanup: Bool
+    /// Printed because the load rows below mean different things with WhisperKit's prewarm on and off.
+    let prewarm: Bool
 
     private static let labelWidth = 30
 
@@ -29,6 +31,7 @@ struct ProfilePrinter {
             "\(machine.chip) · \(gibibytes(machine.memoryBytes)) · \(machine.operatingSystem)")
         row("speech model", model.variant)
         row("measures", includesCleanup ? "transcription and clean-up" : "transcription only")
+        row("prewarm", prewarm ? "on" : "off")
     }
 
     private func memory() {
@@ -68,6 +71,12 @@ struct ProfilePrinter {
         }
         if let added = load.addedBytes {
             row("added to the footprint", megabytes(added))
+        }
+        if let peak = load.peak {
+            row(
+                "peak during the first load",
+                megabytes(peak.footprintBytes) + " footprint, " + megabytes(peak.residentBytes)
+                    + " resident")
         }
         if let cpu = load.cpu {
             row("processor time to load", seconds(cpu.cpuSeconds) + " s" + cores(cpu))
