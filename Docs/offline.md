@@ -43,11 +43,18 @@ curl EXIT=137        # 128 + SIGKILL
 
 ## Every network call site
 
-### Uttrflow's own sources: one, and it is compiled out
+### Uttrflow's own sources: nine files, and none of them on the dictation path
 
-`URLSession`, `URLRequest`, `NWConnection`, `Network.framework`, raw sockets and
-`https://` literals, across all of `Sources/`, produce exactly three hits, all in
-`Sources/UttrflowAI/HTTPCleanupModel.swift`, all inside `#if UTTRFLOW_CLOUD`.
+The full pattern — Foundation's stack, Network.framework in both spellings, CFNetwork, the
+BSD calls, XPC, the speech asset installer and endpoint literals — across all of
+`Sources/` names nine files: the four in `UttrflowAccount`, the three onboarding files in
+the app shell, the tokenizer install, and `Sources/UttrflowAI/HTTPCleanupModel.swift`,
+which is inside `#if UTTRFLOW_CLOUD` from its first line to its last. Two developer CLIs
+name it too and ship in nothing. Every other module under `Sources/` has none, and that is
+what the audit's first check asserts.
+
+The clean-up engine is the only one of those the dictation path runs through, and it is
+compiled out.
 
 That the flag is genuinely off in the shipped build is confirmed from the artefact, not
 from reading the `#if`:
