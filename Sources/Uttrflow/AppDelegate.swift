@@ -197,7 +197,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private lazy var settingsWindow = SettingsWindowController(
         store: settingsStore,
         personalisation: Self.personalisation(
-            in: container, dictionary: dictionary, history: history, clipboard: clipboard),
+            in: container, dictionary: dictionary, history: history, clipboard: clipboard,
+            elsewhere: keptElsewhere()),
         onChange: { [weak self] settings in self?.settingsChanged(to: settings) },
         // Through the same switch the main window uses, so one choice is never applied two ways.
         onRequest: { [weak self] change in self?.apply(change) },
@@ -265,12 +266,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Everything Settings can count and forget, over the stores this app opens in this container.
     nonisolated static func personalisation(
         in container: URL, dictionary: PersonalDictionaryStore, history: DictationHistoryStore,
-        clipboard: ClipboardStore
+        clipboard: ClipboardStore, elsewhere: KeptElsewhere = KeptElsewhere()
     ) -> FilePersonalisationStore {
         FilePersonalisationStore(
             dictionary: dictionary, history: history, clipboard: clipboard,
             suggestions: PredictCorpus(container: container),
-            met: { AppDelegate.applicationsTheLoopHasMet(in: container) })
+            met: { AppDelegate.applicationsTheLoopHasMet(in: container) },
+            elsewhere: elsewhere)
     }
 
     /// Applications the completion loop has met, so the Suggestions list can offer a switch for each.
@@ -278,6 +280,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let file = CapturePreferencesFile(
             path: CapturePreferencesFile.defaultFile(in: container).path(percentEncoded: false))
         return Set(file.load().consent.keys)
+    }
+
+    /// The files a full reset reaches that the settings module has no store for.
+    private func keptElsewhere() -> KeptElsewhere {
+        KeptElsewhere(
+            recordings: { [recordings] in try await recordings.discardEverything() },
+            snippets: { [snippets] in try await snippets.deleteEverything() },
+            suggestionConsent: { [weak self] in try await self?.forgetEveryConsentAnswer() })
+    }
+
+    /// Forgets which applications completions may learn from, through the running loop when there is one.
+    private func forgetEveryConsentAnswer() async throws {
+        if let completions {
+            try await completions.forgetEveryAnswer()
+            return
+        }
+        try CapturePreferencesFile(
+            path: CapturePreferencesFile.defaultFile(in: container).path(percentEncoded: false)
+        ).remove()
     }
 
     /// Deletes a model that is on disk but will not load, and opens setup to download it again.
