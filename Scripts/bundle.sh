@@ -213,6 +213,15 @@ fi
 #                certificate, because the expensive half of "does the hardened runtime
 #                break anything" needs no Developer ID to answer.
 #   distribution Developer ID + hardened runtime + secure timestamp. Notarisable.
+#
+# `--self-test` is not a mode: it builds nothing and proves check 4 below still bites,
+# which is why `make verify` can afford to run it. See `run_self_test`.
+SELF_TEST=no
+if [[ "${1:-}" == "--self-test" ]]; then
+    SELF_TEST=yes
+    shift
+fi
+
 MODE="${1:-local}"
 case "$MODE" in
     local | development | rehearsal | distribution) ;;
@@ -258,6 +267,78 @@ ICON="Design/uttrflow.icns"
 plist_value() {
     plutil -extract "$1" raw -o - "$2" 2>/dev/null
 }
+
+# Every resource bundle the binary asks for, one name per line. Check 4 reads this.
+#
+# A whole `strings` line and nothing less. A `Bundle.module` accessor asks for its own
+# bundle by name — `<Package>_<Target>.bundle`, a string literal with nothing else in it —
+# so a line carrying anything besides that name is not one of them. Matching a substring
+# instead read `surface.bundle` out of `WHERE surface.bundle_id = ?`, which is a column,
+# and failed the build over a bundle no accessor has ever asked for.
+#
+# The `|| true` is load-bearing under `set -o pipefail`: grep exits 1 when it matches
+# nothing, and "this binary needs no resource bundles" is a legitimate answer, not a
+# build failure.
+required_bundle_names() {
+    strings -a "$1" | { grep -xE '[A-Za-z0-9_+-]+\.bundle' || true; } | LC_ALL=C sort -u
+}
+
+# Of those names, the ones the given Resources directory does not hold.
+missing_resource_bundles() {
+    local binary="$1" resources="$2" name
+    while IFS= read -r name; do
+        [[ -n "$name" ]] || continue
+        [[ -d "$resources/$name" ]] || printf '%s\n' "$name"
+    done < <(required_bundle_names "$binary")
+}
+
+# Proves check 4 still bites, without a build: `strings -a` reads any file, so the
+# fixture is simply the lines a binary carries — the two accessor names this app really
+# links, the SQL that was once mistaken for a third, and a path that names a bundle it
+# does not ask for.
+run_self_test() {
+    local root binary resources expected found
+    root="$(mktemp -d -t uttrflow-bundle-self-test)"
+    trap 'rm -rf "$root"' RETURN
+    binary="$root/Uttrflow"
+    resources="$root/Resources"
+    mkdir -p "$resources/Uttrflow_Uttrflow.bundle" "$resources/swift-transformers_Hub.bundle"
+    cat > "$binary" <<'FIXTURE'
+Uttrflow_Uttrflow.bundle
+swift-transformers_Hub.bundle
+%@.bundle
+.bundle
+WHERE surface.bundle_id = ? AND surface.role = ? AND surface.locator = ? AND entry.text = ?
+SELECT entry.id FROM entry JOIN surface ON surface.bundle = ?
+/Users/whoever/.build/release/some-package_SomeTarget.bundle/Contents/Resources
+FIXTURE
+
+    expected=$'Uttrflow_Uttrflow.bundle\nswift-transformers_Hub.bundle'
+    found="$(required_bundle_names "$binary")"
+    [[ "$found" == "$expected" ]] || fail "$(
+        printf 'the self-test read the wrong names out of its fixture.\n'
+        printf '  expected: %s\n' "${expected//$'\n'/ }"
+        printf '  found:    %s' "${found//$'\n'/ }"
+    )"
+
+    [[ -z "$(missing_resource_bundles "$binary" "$resources")" ]] \
+        || fail "the fixture holds both bundles the check asks for and the check objected anyway"
+
+    rm -rf "$resources/swift-transformers_Hub.bundle"
+    [[ "$(missing_resource_bundles "$binary" "$resources")" == "swift-transformers_Hub.bundle" ]] \
+        || fail "$(
+        printf 'a required bundle was taken out of Resources and the check still passed.\n'
+        printf '  That is the one failure it exists to catch, so it is now worth nothing.'
+    )"
+
+    printf 'bundle.sh: the resource-bundle check reads accessor names rather than any text\n'
+    printf '           ending in .bundle, and still fails on a bundle that was not copied.\n'
+}
+
+if [[ "$SELF_TEST" == "yes" ]]; then
+    run_self_test
+    exit 0
+fi
 
 for required in "$SOURCE_PLIST" "$ENTITLEMENTS" "$ICON"; do
     [[ -f "$required" ]] || fail "missing $required"
@@ -640,26 +721,16 @@ STRAY_ROOT_ENTRIES="$(find "$APP" -maxdepth 1 -mindepth 1 ! -name Contents)"
 #    name is a string literal compiled into the executable, so this asks the same
 #    question the accessor will ask at runtime, and an app that ships no bundles at
 #    all cannot pass it by having nothing to check.
-#    The `|| true` is load-bearing under `set -o pipefail`: grep exits 1 when it
-#    matches nothing, and "this binary needs no resource bundles" is a legitimate
-#    answer, not a build failure.
-#    `.bundle` has to end the name: `surface.bundle_id` is a column, not a bundle.
-REQUIRED_BUNDLES="$(
-    strings -a "$APP/Contents/MacOS/$EXECUTABLE" \
-        | { grep -oE '[A-Za-z0-9_+.-]+\.bundle([^A-Za-z0-9_]|$)' || true; } \
-        | sed -E 's/^(.*\.bundle).*$/\1/' \
-        | LC_ALL=C sort -u
+#    `required_bundle_names` says what counts as one, and `./Scripts/bundle.sh
+#    --self-test` proves this still fails when a bundle is missing.
+MISSING_BUNDLES="$(missing_resource_bundles "$APP/Contents/MacOS/$EXECUTABLE" "$APP/Contents/Resources")"
+[[ -z "$MISSING_BUNDLES" ]] || fail "$(
+    printf 'the binary looks for %s and it is not in Contents/Resources.\n' "${MISSING_BUNDLES//$'\n'/, }"
+    printf '  Its Bundle.module accessor would reach fatalError the first time that\n'
+    printf '  dependency is used — on the dictation path, not at launch, so nothing\n'
+    printf '  short of dictating would have found it.\n'
+    printf '  Built bundles were: %s' "${RESOURCE_BUNDLES[*]:-<none>}"
 )"
-while IFS= read -r required_bundle; do
-    [[ -n "$required_bundle" ]] || continue
-    [[ -d "$APP/Contents/Resources/$required_bundle" ]] || fail "$(
-        printf 'the binary looks for %s and it is not in Contents/Resources.\n' "$required_bundle"
-        printf '  Its Bundle.module accessor would reach fatalError the first time that\n'
-        printf '  dependency is used — on the dictation path, not at launch, so nothing\n'
-        printf '  short of dictating would have found it.\n'
-        printf '  Built bundles were: %s' "${RESOURCE_BUNDLES[*]:-<none>}"
-    )"
-done <<< "$REQUIRED_BUNDLES"
 
 # 4a. The updater is configured, or it is honestly absent.
 #

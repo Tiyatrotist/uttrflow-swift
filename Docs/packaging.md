@@ -77,6 +77,15 @@ Beyond the Info.plist and entitlement checks it has always made:
   because the accessor's bundle name is a string literal compiled into the executable:
   this asks exactly the question the accessor will ask at runtime, and an app that
   ships nothing cannot pass it by having nothing to check.
+
+  A name counts only when it is a whole `strings` line — `<Package>_<Target>.bundle`
+  and nothing else on the line — because that is the shape of the literal an accessor
+  is compiled with. Looking for that text anywhere in a line instead read
+  `surface.bundle` out of `WHERE surface.bundle_id = ?`, which is a column in the
+  prediction store, and failed builds over a bundle nothing had ever asked for.
+  `./Scripts/bundle.sh --self-test` — `make bundle-test`, and part of `make verify` —
+  proves both halves against a fixture and needs no build: that the SQL is not read as
+  a bundle, and that a required bundle taken out of `Contents/Resources` still fails.
 - No path into this machine's build tree survives in the shipped binary.
 
 ## Verified
