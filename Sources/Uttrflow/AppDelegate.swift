@@ -113,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         didSet {
             guard suggestionModel != oldValue else { return }
             settingsWindow.setSuggestionModel(suggestionModel)
+            refreshMenuBar()
         }
     }
 
@@ -387,6 +388,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
+    /// What the menu bar shows now, internal so a test can read what the app drew.
+    var menuBarPresentation: MenuBarPresentation { menuBar.presentation }
+
     /// Redraws the menu bar from whatever the app currently knows.
     private func refreshMenuBar() {
         menuBar.update(with: MenuBarPresenter.present(menuBarState(for: lastDictationState)))
@@ -593,6 +597,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 memoryPressure.reloaded(at: .now)
                 prepareTheModelIfNeeded()
             }
+        }
+    }
+
+    /// Shows the model as getting ready while an idle reload runs, then as ready or failed by how it ends.
+    func suggestionModelReloaded(_ event: IdleReload) {
+        guard isModelPreparing else { return }
+        switch event {
+        case .started where suggestionModel == .ready:
+            suggestionModel = .loading
+        case .finished where suggestionModel == .loading:
+            suggestionModel = .ready
+        case .failed where suggestionModel == .loading:
+            // Cleared so that turning the feature off and on loads the model again.
+            isModelPreparing = false
+            suggestionModel = .failed
+        case .started, .finished, .failed:
+            break
         }
     }
 
@@ -1492,7 +1513,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             updateProgress: updates.progress,
             features: MenuBarFeatures(settings),
             shortcuts: settings.shortcuts,
-            shortcutUnheard: shortcutUnheard
+            shortcutUnheard: shortcutUnheard,
+            suggestionModel: suggestionModel
         )
     }
 
