@@ -28,7 +28,7 @@ Packing is word by word rather than a truncation mid-sequence: half of `PaymentS
 prompt biases the decoder towards something the user has never said. A word too long for what
 is left is skipped rather than ending the packing, so one forty-token monster cannot cost the
 fifty ordinary words ranked behind it. The separator belongs to the word rather than sitting
-between words, because dropping a word that will not fit must not leave its comma behind.
+between words, because dropping a word that will not fit must not leave its separator behind.
 
 Special tokens are filtered out of every piece. WhisperKit discards them itself, so filtering
 here as well is what keeps the count being budgeted equal to the count that survives.
@@ -47,6 +47,30 @@ The sentence worked with three words in the list and again with fourteen. Whispe
 trained as the *transcript that came before*, so text shaped like a transcript is what it
 knows how to condition on; a glossary is not. It is closed with a full stop for the same
 reason it is opened like a sentence.
+
+## The words are spaced, not punctuated
+
+The words are separated by a space alone. A comma between them is copied into the transcript:
+Whisper's prompt is read as the transcript that came before, so the mark between two listed
+words is the style the decoder continues when the audio says those two words next to each
+other — which a first and last name does.
+
+Measured on the bench's `nouns-vocabulary` clips, `nouns0` and `nouns1` in all three English
+voices, 21 September 2026 at `7deb139a`, against the shipping turbo model:
+
+| Separator | Clips with an adjacent pair that gained a comma | `nouns-vocabulary` raw WER |
+|---|---|---|
+| `", "`    | 6 of 6 — "Zorvane, Kelthmar", "Ask Mirvella, Ostrander," | 0.0% |
+| `" "`     | 0 of 6 | 0.0% |
+
+Every dictionary word is still heard: the sentence around the words is what conditions the
+decoder, not the punctuation inside it. The word error rate cannot show this either way, since
+it drops punctuation — which is why the comma went unnoticed for so long.
+
+The budget is unchanged at 111, and a space costs no more than the comma it replaces: no token
+in the model's vocabulary begins with a comma followed by a space or a letter, so `", " + word`
+encoded the comma on its own and every word past the first now costs one token less. More of
+the dictionary fits, never less.
 
 ## The forced prefill, and why a prompt otherwise returns nothing
 
