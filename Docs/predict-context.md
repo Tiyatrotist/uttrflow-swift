@@ -107,7 +107,7 @@ milliseconds, not hundreds.
    last few tokens of the prompt, so the pass keeps its tokens and its cache and the next
    pass trims that cache back to the longest run the two share and reads only the rest.
    It saved 20–25 ms per pass over one typed reply and costs 91 MB held between passes; both
-   numbers, and what it does to a near tie, are under "a suggestion pass's prefill" in
+   numbers, and what it does to a near tie, are under "what a suggestion pass prefills" in
    `Docs/performance.md`.
 
 ## Latency targets (from a pause to a drawn ghost)

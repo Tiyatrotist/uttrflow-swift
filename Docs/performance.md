@@ -217,7 +217,7 @@ Measured on Release builds with `/usr/bin/time -l` and MLX's own counters, 48 GB
 | speech model, Whisper large-v3 turbo on CoreML | launch, `loadSpeechModel()` | quit | +114 MB footprint loaded, 267 MB peak footprint and 340 MB peak resident mid-dictation; the weights are file-mapped, so macOS can drop them itself |
 | suggestion model, Gemma 3 4B QAT on MLX | launch or the moment AI suggestions is turned on, only for somebody who turned it on | AI suggestions turned off; no query for 3 minutes on a Mac under 16 GB, 10 minutes otherwise; or quit | 2,485 MB of GPU memory, 3,036 MB at a pass's peak, 3,464 MB peak process footprint; anonymous, so nothing but a release frees it |
 | MLX's buffer cache | during a pass | the end of every pass | capped at 256 MB, 0 MB between passes |
-| the last pass's prompt in a KV cache | the end of a suggestion pass | the next pass trims it, or the weights are dropped | 91 MB of GPU memory measured over one typed reply, see [a suggestion pass's prefill](#a-suggestion-passs-prefill) |
+| the last pass's prompt in a KV cache | the end of a suggestion pass | the next pass trims it, or the weights are dropped | 91 MB of GPU memory measured over one typed reply, see [what a suggestion pass prefills](#what-a-suggestion-pass-prefills) |
 | the recording | the shortcut | the end of the dictation | at most 15 MB: 240 s at 16 kHz in 4-byte samples |
 | clipboard thumbnails | the panel is drawn | least recently used first | at most 32 MB, see `Docs/clipboard-budget.md` |
 | clipboard, history, dictionary and suggestion stores | launch | quit | under a megabyte of text each at measured sizes; the prediction corpus is SQLite on disk |
@@ -423,7 +423,7 @@ through the same regex, and that is now the largest tokenizer cost. The regex is
 upstream it is huggingface/swift-transformers#383, with a fix open as #386, and nothing here
 patches or bumps it.
 
-### A suggestion pass's prefill
+### What a suggestion pass prefills
 
 Consecutive keystrokes on one line ask almost the same question. `PromptBuilder.message` puts
 the stable parts first — where the caret is, the screen around it, this person's earlier lines,
