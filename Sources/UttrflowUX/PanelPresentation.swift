@@ -350,6 +350,8 @@ public enum PanelPresenter {
         let rows = results.rows.enumerated().map { position, result in
             row(for: result, in: snapshot, isSelected: position == results.selectedIndex)
         }
+        // An unread list is an unknown, not a nothing, so neither sentence below is said yet.
+        let saysNothing = rows.isEmpty && !snapshot.isAwaitingList
 
         return PanelPresentation(
             rows: rows,
@@ -363,12 +365,12 @@ public enum PanelPresenter {
             categories: categories(for: snapshot),
             query: snapshot.query,
             searchPlaceholder: searchPlaceholder,
-            emptyState: rows.isEmpty ? emptyState(for: snapshot) : nil,
+            emptyState: saysNothing ? emptyState(for: snapshot) : nil,
             // A sheet has its own keys, so the list's line would be teaching the wrong ones.
             hint: hint(for: snapshot, isEmpty: rows.isEmpty),
             sheet: sheet(for: snapshot),
             groups: groups(for: rows, omitted: results.omitted, isSearching: snapshot.isSearching),
-            emptyAction: rows.isEmpty ? emptyAction(for: snapshot) : nil,
+            emptyAction: saysNothing ? emptyAction(for: snapshot) : nil,
             notice: snapshot.notice,
             microphone: microphone(for: snapshot.dictation),
             scope: scope(for: snapshot),

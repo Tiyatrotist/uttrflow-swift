@@ -174,6 +174,9 @@ final class QuickPanelController: NSObject, NSWindowDelegate {
 
     var isVisible: Bool { panel.isVisible }
 
+    /// How many times the panel has been shown, so the app can tell one open's answers from the next.
+    var opens: Int { openCount }
+
     // MARK: - Drawing
 
     private func draw() {

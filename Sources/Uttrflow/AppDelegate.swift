@@ -171,6 +171,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// The panel's state while it is open, held here because a window has no memory.
     private var panel: PanelSnapshot?
+    /// Counts the store reads the panel has asked for, so an older list never replaces a newer one.
+    private var panelReads = 0
     private var clipboardWatchTask: Task<Void, Never>?
 
     /// F7, F9 — the clip a delete removed, held by the app because the undo outlives the panel.
@@ -922,6 +924,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             closeQuickPanel()
             return
         }
+        // Fresh, and shown before anything is awaited, so the keys after the shortcut reach the search (#860).
+        let opening = PanelSnapshot.opening(now: Date(), resuming: resume)
+        panel = opening
+        quickPanel.show(PanelPresenter.present(opening))
+        let opened = quickPanel.opens
         // A copy since the last poll is taken now, started not awaited, so no read holds the panel shut (#895).
         if settings.clipboardEnabled {
             let arrived: @Sendable (NoticedClip) async -> Void = { [weak self] noticed in
@@ -929,23 +936,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             Task { [clipboardWatcher] in await clipboardWatcher.catchUp(handing: arrived) }
         }
-        let clips = await clipboard.clips(keeping: retention)
         let placement = await placement()
-        // Built fresh, so a revealed secret cannot outlive the panel that revealed it.
-        var snapshot = PanelSnapshot.opening(
-            clips: clips, now: Date(), insertion: placement, resuming: resume)
-        snapshot.dictation = await voice()
+        let dictation = await voice()
         // K4, B8 — asked once on the way in, so the presenter stays a function of its input.
-        snapshot.imagesFolder = await clipboard.imagesFolder
-        let facts = await facts(about: clips)
-        snapshot.install(
-            clips, missingImages: facts.missing, formattableLanguages: facts.formattable)
+        let folder = await clipboard.imagesFolder
+        // Nothing is written into a panel this open no longer owns; a later one asks these again itself.
+        guard quickPanel.opens == opened, panel != nil else { return }
+        panel?.insertion = placement
+        panel?.dictation = dictation
+        panel?.imagesFolder = folder
         // A4 — said on the way in, not after Return, when there is nowhere left to say it.
         if case .clipboardOnly(let obstacle) = placement, obstacle == .accessibilityNotGranted {
-            snapshot.notice = obstacle.notice
+            panel?.notice = obstacle.notice
         }
-        panel = snapshot
-        quickPanel.show(PanelPresenter.present(snapshot))
+        if let snapshot = panel { quickPanel.update(PanelPresenter.present(snapshot)) }
+        // The list comes by the one path a copy arriving also takes, so neither can undo the other.
+        await refreshPanelIfOpen()
     }
 
     /// B3–B5 — whether Return will place a clip or only copy it, asked while there is still somewhere to say so.
@@ -1320,8 +1326,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Adds a copy made while the panel is open, without moving a selection held by identity.
     private func refreshPanelIfOpen() async {
         guard panel != nil, quickPanel.isVisible else { return }
+        panelReads += 1
+        let read = panelReads
         let clips = await clipboard.clips(keeping: retention)
         let facts = await facts(about: clips)
+        // A read that started earlier never replaces a newer list, or a copy shown while opening would go.
+        guard read == panelReads else { return }
         panel?.install(
             clips, missingImages: facts.missing, formattableLanguages: facts.formattable)
         guard let snapshot = panel else { return }
