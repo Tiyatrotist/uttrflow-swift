@@ -928,8 +928,15 @@ struct QuickPanelView: View {
     // MARK: - Keys
 
     private func send(_ key: PanelKey) -> KeyPress.Result {
+        // SwiftUI runs these before the field editor, so a composing input method would never see the key.
+        guard PanelComposition.panelMayTake(key, whileComposing: isComposing) else { return .ignored }
         relayKey(key)
         return .handled
+    }
+
+    /// Whether the field editor holds marked text, which is the one thing a key handler cannot read from the key.
+    @MainActor private var isComposing: Bool {
+        (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() ?? false
     }
 
     /// Every ⌘-chord in one handler; two `onKeyPress(phases:)` on one view do not compose.
@@ -941,8 +948,7 @@ struct QuickPanelView: View {
         }
         // ⌘⏎ pastes the words without the formatting: a modifier, not a mode.
         if press.key == .return {
-            relayKey(.returnPlain)
-            return .handled
+            return send(.returnPlain)
         }
         return commandDigit(press)
     }
