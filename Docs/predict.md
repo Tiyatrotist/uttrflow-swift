@@ -152,6 +152,14 @@ the AI suggestions screen. The answer is kept in
 `~/Library/Application Support/Uttrflow/predict-consent.v1.json`, written the first time the
 loop meets an application the screen already allows, and rewritten when a switch there moves.
 
+Both sides file an application under `ApplicationKey`, which is its bundle identifier lowercased,
+because macOS is not consistent about the case and the two sides do not see it from the same
+place: the switch has the identifier the Applications list holds, and capture has whatever the
+field reading reported. They disagreed once — the switch wrote `com.apple.terminal` and capture
+read `com.apple.Terminal` — and the second of the two checks answered "carry on" for an
+application the user had switched off. A file written before that holds both spellings, and is
+read as the refusal, because consent fails closed.
+
 **Uttrflow used to ask in a modal instead**, the first time a value was committed in each
 application, bringing itself to the front over whatever the user was writing — and asking a
 question the AI suggestions screen had already answered, since the turn cannot reach that point
@@ -178,8 +186,24 @@ suggestion loop is running.
   so switching it back on picks up where it left off. Forgetting is the row beside it, a
   separate choice. Turning the feature off everywhere keeps the corpus the same way.
 
-Forgetting is a `DELETE`, so while the loop keeps its own connection open the deleted pages
-can stay in `predict.v1.sqlite-wal` until the next checkpoint (#642).
+Forgetting is a `DELETE` followed by `PRAGMA wal_checkpoint(TRUNCATE)`, because the loop keeps
+its connection open for the life of the process and a `DELETE` alone leaves the rows readable in
+`predict.v1.sqlite-wal` until the app quits. Measured before the checkpoint was added: 50 lines
+recorded and then deleted left the marker in 927 KB of bytes beside a database that answered
+`count(*) = 0`.
+
+A checkpoint SQLite refuses is reported in the pragma's result row rather than as an error code,
+so the store reads that row: forgetting fails loudly when the log could not be emptied, instead of
+saying the words are gone while they are still in the file. The rows themselves are deleted either
+way — what the failure says is that the copy beside them outlived the request.
+
+The checkpoint is on the three ways a person asks to forget, and not on eviction, which trims the
+corpus on the typing path and would pay for an fsync per keystroke. Eviction drops the weakest
+line to make room rather than answering a request, so what it leaves behind is what the corpus
+already held; a person who wants it gone asks, and that asking truncates the log.
+
+`PRAGMA secure_delete = ON` is set with the other pragmas, so the cells a forgotten row held are
+zeroed whatever the system library's default happens to be.
 
 ## The loop, once per keystroke
 
@@ -260,9 +284,10 @@ When the corpus and the machine both have nothing for the line and the generator
   begins one of its lines — typing on, or backspacing — that answer is drawn again and no
   pass runs. An empty answer is remembered against the exact line it was given for, so a
   tick does not ask the same question again; the next keystroke asks afresh.
-- **120 ms debounce.** A pass sleeps `generationDebounceInMilliseconds` first and the next
-  keystroke cancels it, so a burst costs one pass for its last prefix rather than one per
-  key.
+- **120 ms debounce.** A pass sleeps what is left of `generationDebounceInMilliseconds`
+  since the key was pressed, which is nothing when the pause was already that long; the
+  next keystroke still cancels the pass, so a burst still costs one pass for its last
+  prefix rather than one per key.
 - **Context is read once a pass is certain.** Only after the debounce does the turn read the
   situation — window title and surrounding text under a 200 ms `Deadline`, the person's six
   most recent lines in this field, the 400 characters before the caret's line — so a
@@ -385,12 +410,21 @@ where the two token streams diverge. It used to tokenise `context + candidate` �
   two-token lead-in (`"...\n"`) before every line. `"\n\n\n"` is one token and does not
   help; a chat-template frame puts the instruction-tuned model into peaked answer mode
   (`" commit"` -0.00, `" checkout"` -19.5) and is worse.
-- When the typed text ends inside a token (`gi` → `git status`), the divergence rule judges
-  `"git"` without knowing `gi` was typed — the cold prior for a line's first word, about
-  -10 — so such a line scores around -8 and is rejected. The correct score is
-  P(token | typed prefix) = P(token) / Σ P(tokens starting with the typed remainder), which
-  needs the vocabulary table; not built yet. Attested candidates (executables, subcommands)
-  never reach the model, which is why `lsof` and `lsbom` are unaffected in practice.
+- When the typed text ends inside a token (`gi` → `git status`), judging the line's next token
+  as it stands reads the cold prior for a line's first word, about -10, so such a line
+  scored around -8 and was rejected. `ScoredSpan` now finds the typed bytes that token still
+  owes and the first judged token is read as P(token | typed remainder) = P(token) / Σ P(every
+  token that writes the remainder first), from the vocabulary token healing already reads;
+  a line token that writes only typed bytes is passed over. Measured with `uttrflow-bakeoff
+  score`: `gi` → `git status` -8.01 → -2.85, `gi` → `git checkout main` -6.54 → -3.10,
+  `l` → `ls -la` -6.63 → -4.01, `git sta` → `git stash pop` -6.61 → -3.89, all now allowed.
+  The cost is the nonsense margin: `gi` → `gizmo --frobnicate` rose -7.29 → -5.80 and is
+  allowed, 0.2 above the floor, and `SELE` → `SELECT * FROM uzqx WHERE` rose to -6.09, 0.09
+  below it, so the margins quoted for the floor above were measured before this rule and no
+  longer hold for a prefix cut mid-word; nonsense past more of the line stays far below
+  (`git cxq` -13.60 → -13.24, `ls --zzqx-bogus` -9.15 unchanged).
+  Attested candidates (executables, subcommands) never reach the model, which is why `lsof`
+  and `lsbom` were unaffected in practice.
 
 Per-call cost is 80–115 ms warm and ~250–340 ms cold on the 4B model, so the four
 sequential passes `verifiedDepth` allows — `PredictionEngine.maximumChoices`, every
