@@ -186,8 +186,24 @@ suggestion loop is running.
   so switching it back on picks up where it left off. Forgetting is the row beside it, a
   separate choice. Turning the feature off everywhere keeps the corpus the same way.
 
-Forgetting is a `DELETE`, so while the loop keeps its own connection open the deleted pages
-can stay in `predict.v1.sqlite-wal` until the next checkpoint (#642).
+Forgetting is a `DELETE` followed by `PRAGMA wal_checkpoint(TRUNCATE)`, because the loop keeps
+its connection open for the life of the process and a `DELETE` alone leaves the rows readable in
+`predict.v1.sqlite-wal` until the app quits. Measured before the checkpoint was added: 50 lines
+recorded and then deleted left the marker in 927 KB of bytes beside a database that answered
+`count(*) = 0`.
+
+A checkpoint SQLite refuses is reported in the pragma's result row rather than as an error code,
+so the store reads that row: forgetting fails loudly when the log could not be emptied, instead of
+saying the words are gone while they are still in the file. The rows themselves are deleted either
+way — what the failure says is that the copy beside them outlived the request.
+
+The checkpoint is on the three ways a person asks to forget, and not on eviction, which trims the
+corpus on the typing path and would pay for an fsync per keystroke. Eviction drops the weakest
+line to make room rather than answering a request, so what it leaves behind is what the corpus
+already held; a person who wants it gone asks, and that asking truncates the log.
+
+`PRAGMA secure_delete = ON` is set with the other pragmas, so the cells a forgotten row held are
+zeroed whatever the system library's default happens to be.
 
 ## The loop, once per keystroke
 
