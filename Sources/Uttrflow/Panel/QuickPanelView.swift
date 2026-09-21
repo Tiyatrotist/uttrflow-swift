@@ -154,7 +154,7 @@ struct QuickPanelView: View {
                 .onKeyPress(.downArrow) { send(.down) }
                 .onKeyPress(.return) { send(.return) }
                 .onKeyPress(.escape) { send(.escape) }
-                .onKeyPress(phases: .down) { commandKey($0) }
+                .onKeyPress(phases: .down) { keyPress($0) }
         }
     }
 
@@ -658,6 +658,12 @@ struct QuickPanelView: View {
                         isDestructive && hoveredItem == action.id
                             ? Color.dockWarning : Color.panelLabel)
                 Spacer(minLength: 0)
+                // The chord is how the action is found without the pointer, so it is drawn beside it.
+                if let shortcut = action.shortcut {
+                    Text(shortcut.label)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.panelLabelDim)
+                }
             }
             .padding(.horizontal, 12)
             .frame(height: 30)
@@ -932,7 +938,13 @@ struct QuickPanelView: View {
         return .handled
     }
 
-    /// Every ⌘-chord in one handler; two `onKeyPress(phases:)` on one view do not compose.
+    /// One handler for the chords and the long moves; two `onKeyPress(phases:)` on one view do not compose.
+    private func keyPress(_ press: KeyPress) -> KeyPress.Result {
+        let jumped = jumpKey(press)
+        return jumped == .handled ? jumped : commandKey(press)
+    }
+
+    /// Every ⌘-chord, in the order the panel claims them.
     private func commandKey(_ press: KeyPress) -> KeyPress.Result {
         guard press.modifiers.contains(.command) else { return .ignored }
         if press.characters == "z" {
@@ -944,7 +956,30 @@ struct QuickPanelView: View {
             relayKey(.returnPlain)
             return .handled
         }
+        if let intent = rowIntent(for: press) {
+            perform(intent)
+            return .handled
+        }
         return commandDigit(press)
+    }
+
+    /// What a ⌘ chord does to the highlighted row, which the presenter answers from that row's own actions.
+    private func rowIntent(for press: KeyPress) -> PanelIntent? {
+        guard let character = press.characters.lowercased().first else { return nil }
+        let chord = PanelChord(character, shifted: press.modifiers.contains(.shift))
+        return presentation.intent(for: chord)
+    }
+
+    /// The long moves through the list, which ↑↓ would take a thousand presses to make.
+    private func jumpKey(_ press: KeyPress) -> KeyPress.Result {
+        guard !press.modifiers.contains(.command) else { return .ignored }
+        switch press.key {
+        case .pageUp: return send(.jump(.pageUp))
+        case .pageDown: return send(.jump(.pageDown))
+        case .home: return send(.jump(.top))
+        case .end: return send(.jump(.bottom))
+        default: return .ignored
+        }
     }
 
     /// ⌘1–⌘9 pick a collection; anything else still reaches the field.
