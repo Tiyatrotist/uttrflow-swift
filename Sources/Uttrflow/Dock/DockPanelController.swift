@@ -42,6 +42,8 @@ final class DockPanelController {
     var onPressBegan: (() -> Void)?
     /// The mouse came back up, wherever it happens to be by then.
     var onPressEnded: (() -> Void)?
+    /// The button was activated in one go, by a caller that cannot press and hold it.
+    var onToggle: (() -> Void)?
     /// The button offered alongside a failure was clicked.
     var onRecoveryAction: ((RecoveryAction) -> Void)?
 
@@ -80,6 +82,7 @@ final class DockPanelController {
             model: model,
             onPressBegan: { [weak self] in self?.onPressBegan?() },
             onPressEnded: { [weak self] in self?.onPressEnded?() },
+            onToggle: { [weak self] in self?.onToggle?() },
             onRecovery: { [weak self] action in self?.onRecoveryAction?(action) },
             onDesiredSize: { [weak self] size in self?.resize(to: size) })
         hostingView.onHoverChange = { [weak self] isHovering in

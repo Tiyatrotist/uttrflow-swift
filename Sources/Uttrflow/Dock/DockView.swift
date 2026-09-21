@@ -68,6 +68,8 @@ struct DockView: View {
     let model: DockViewModel
     var onPressBegan: () -> Void = {}
     var onPressEnded: () -> Void = {}
+    /// Starts or finishes a dictation in one go, for a caller that cannot hold the button down.
+    var onToggle: () -> Void = {}
     var onRecovery: (RecoveryAction) -> Void = { _ in }
     /// The size the current form wants; the panel is resized to match, so a grip claims no more screen.
     var onDesiredSize: (CGSize) -> Void = { _ in }
@@ -86,8 +88,34 @@ struct DockView: View {
                 onDesiredSize($0)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .accessibilityElement(children: .combine)
+            // Ignored rather than combined: the label below replaces whatever the children would say anyway.
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(model.presentation.accessibilityLabel)
+            .accessibilityValue(Self.spokenValue(for: model.presentation))
+            .accessibilityHint(Self.spokenHint(for: model.presentation))
+            .accessibilityAddTraits(.isButton)
+            // A press-and-hold is not a gesture VoiceOver can perform, so activating toggles instead.
+            .accessibilityAction { onToggle() }
+            .accessibilityActions {
+                // The recovery the failure draws, spoken; its own button is inside the ignored children.
+                if let action = model.presentation.action {
+                    Button(Self.title(for: action)) { onRecovery(action) }
+                }
+            }
+    }
+
+    /// What the button is doing, in the value slot where a screen reader expects state rather than a name.
+    static func spokenValue(for presentation: DockPresentation) -> String {
+        if presentation.isRecording { return "Listening" }
+        if presentation.showsProgress { return "Working" }
+        return ""
+    }
+
+    /// What activating the button does, naming the recovery a failure offers so it is not only in the rotor.
+    static func spokenHint(for presentation: DockPresentation) -> String {
+        let toggle = presentation.isRecording ? "Stops listening." : "Starts a dictation."
+        guard let action = presentation.action else { return toggle }
+        return "\(toggle) \(title(for: action)) is available as an action."
     }
 
     // MARK: - Forms
