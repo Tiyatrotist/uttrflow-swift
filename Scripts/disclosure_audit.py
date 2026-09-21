@@ -79,7 +79,7 @@
 # The settings hook finds this file through `git rev-parse --show-toplevel`, not through
 # CLAUDE_PROJECT_DIR, and the difference is not cosmetic. That variable holds the directory
 # the agent's session *started* in, which need not be this repository: a session opened
-# somewhere else and pointed at this checkout afterwards loads these settings while the
+# somewhere else and pointed at this checkout afterwards loads those settings while the
 # variable still names the other place. The interpolation then resolves to a path with no
 # Scripts/ in it, python exits on the missing file, and because a failed gate refuses the
 # command, every shell command in that session is blocked — git, gh, swift, all of it. The
@@ -100,6 +100,7 @@ import base64
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 
@@ -381,21 +382,12 @@ def update_baseline(counts, absorb=False):
     return 0
 
 
-def scan_range(revisions):
-    """Every commit message and every added line in a range of commits.
-
-    Takes the arguments `git log` takes, not one string, because the interesting range
-    cannot always be written as one. A branch being pushed for the first time has no
-    remote counterpart to subtract, so pre-push asks for what no remote has yet --
-    `<sha> --not --remotes=origin`, three arguments -- and the alternative is replaying
-    the whole history of the project on every first push. Held as a single value, those
-    three arrived as one unrecognised argument, argparse exited 2, and the hook read that
-    as "something must not be published" and refused every new branch.
-    """
-    shown = " ".join(revisions)
+def scan_range(named):
+    """Every commit message and every added line in a range of commits, however git names it."""
+    revisions = shlex.split(named)
     shas = [s for s in git("log", "--format=%H", *revisions).split("\n") if s]
     if not shas:
-        print(f"  ✓ {shown} adds no commits")
+        print(f"  ✓ {named} adds no commits")
         return 0
     bad = False
     for sha in shas:
@@ -407,7 +399,7 @@ def scan_range(revisions):
         if scan_diff(patch, f"commit {sha[:8]} diff ({subject})"):
             bad = True
     if not bad:
-        print(f"  ✓ {len(shas)} commit(s) in {shown}: messages and diffs clean")
+        print(f"  ✓ {len(shas)} commit(s) in {named}: messages and diffs clean")
     return 1 if bad else 0
 
 
@@ -463,17 +455,8 @@ def scan_hook():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group()
-    # REMAINDER, not "+", and the difference is the whole bug. Both take several values,
-    # but "+" stops at the first token that looks like an option, so `--not` ends the list
-    # and then argparse rejects it as unrecognised -- which is exactly what a new-branch
-    # push sends. REMAINDER hands the rest through untouched, which is what "the arguments
-    # git log takes" means. It is last among the modes and nothing combines it with
-    # --label, so there is no later option for it to swallow.
     group.add_argument(
-        "--range",
-        nargs=argparse.REMAINDER,
-        metavar="REV",
-        help="commit messages and added lines in a range, as git log takes it",
+        "--range", help="commit messages and added lines in a revision range, as git names it"
     )
     group.add_argument("--history", action="store_true", help="every commit on every ref")
     group.add_argument("--text", action="store_true", help="scan stdin as new writing")
@@ -502,11 +485,7 @@ def main():
         return 1 if scan_text(sys.stdin.read(), options.label) else 0
     if options.history:
         return scan_history()
-    # `is not None` because REMAINDER happily yields an empty list, and an empty range must
-    # not quietly fall through to the tree scan and report a pass for something nobody asked.
-    if options.range is not None:
-        if not options.range:
-            parser.error("--range needs at least one revision")
+    if options.range:
         return scan_range(options.range)
 
     status, counts = scan_tree()

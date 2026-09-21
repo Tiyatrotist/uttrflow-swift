@@ -119,16 +119,20 @@ class RatchetTests(unittest.TestCase):
 
 
 class DisclosureRangeTests(unittest.TestCase):
-    """`--range` has to take the arguments `git log` takes, not one string.
+    """`--range` has to accept a range that carries git's own flags, not just `A..B`.
 
     A branch on its first push has no remote counterpart to subtract, so pre-push asks for
-    what no remote holds yet -- `<sha> --not --remotes=origin`, three arguments -- rather
-    than replaying the whole history of the project. Held as a single value those arrived
-    as one unrecognised argument, argparse exited 2, and the hook read a usage error as
-    "something must not be published": every first push of every branch was refused. The
-    gate was unreachable rather than strict, which is the failure worth a test, so the two
-    call shapes in this repository are both exercised here -- pre-push's and the Quality
-    workflow's -- along with the proof that a real violation is still caught.
+    what no remote holds yet -- `<sha> --not --remotes=origin` -- rather than replaying the
+    whole history of the project. That reached argparse as unrecognised arguments, it exited
+    2, and the hook read a usage error as "something must not be published": every first
+    push of every branch was refused, with a usage message under a notice about forbidden
+    text. The gate was unreachable rather than strict.
+
+    #1030 fixed it by quoting the range in the hook and splitting it here with `shlex`, and
+    landed without tests. These are those tests. Both call shapes in this repository are
+    exercised -- pre-push's flag-bearing range and the Quality workflow's `A..B` -- along
+    with the proof that a real violation is still caught through this path, so the fix
+    cannot be undone by a later tidy without something going red.
     """
 
     # Decoded at run time for the reason disclosure_audit.py gives for its own constants:
@@ -171,7 +175,7 @@ class DisclosureRangeTests(unittest.TestCase):
 
     def test_the_new_branch_form_is_accepted(self):
         head = self.git("rev-parse", "HEAD").stdout.strip()
-        done = self.audit("--range", head, "--not", "--remotes=origin")
+        done = self.audit("--range", f"{head} --not --remotes=origin")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 
     def test_the_two_dot_form_is_accepted(self):
@@ -186,12 +190,12 @@ class DisclosureRangeTests(unittest.TestCase):
     def test_a_forbidden_commit_message_is_still_refused(self):
         self.commit("Another line.\n", f"Chase {self.FORBIDDEN} this quarter")
         head = self.git("rev-parse", "HEAD").stdout.strip()
-        self.assertEqual(self.audit("--range", head, "--not", "--remotes=origin").returncode, 1)
+        self.assertEqual(self.audit("--range", f"{head} --not --remotes=origin").returncode, 1)
 
     def test_a_forbidden_added_line_is_still_refused(self):
         self.commit(f"We should talk about {self.FORBIDDEN}.\n", "Add a line")
         head = self.git("rev-parse", "HEAD").stdout.strip()
-        self.assertEqual(self.audit("--range", head, "--not", "--remotes=origin").returncode, 1)
+        self.assertEqual(self.audit("--range", f"{head} --not --remotes=origin").returncode, 1)
 
 
 if __name__ == "__main__":
