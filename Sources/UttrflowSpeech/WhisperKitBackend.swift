@@ -87,20 +87,19 @@ public actor WhisperKitBackend: TranscriptionBackend {
     ) async throws(SpeechEngineError) -> RawTranscript {
         try await load()
         guard let kit else { throw .modelLoadFailed(description: "the recogniser did not load") }
+        let backend = RetryBackend(kit: kit)
 
         do {
-            let biased = Self.rawTranscript(
-                from: try await kit.transcribe(
-                    samples, languageHint: languageHint, biasedTowards: vocabulary))
+            let biased = try await CappedDecodeRetry.transcribe(
+                samples: samples, languageHint: languageHint, vocabulary: vocabulary, using: backend)
             guard !vocabulary.isEmpty, biased.text.isEmpty else {
                 Self.report(biased.effort)
                 return biased
             }
 
             // The net: a prompt that decodes to nothing costs a second decode, never the words.
-            let retried = Self.rawTranscript(
-                from: try await kit.transcribe(
-                    samples, languageHint: languageHint, biasedTowards: []))
+            let retried = try await CappedDecodeRetry.transcribe(
+                samples: samples, languageHint: languageHint, vocabulary: [], using: backend)
             let effort = biased.effort.addingRetry(retried.effort)
             Self.report(effort)
             return RawTranscript(
@@ -113,7 +112,7 @@ public actor WhisperKitBackend: TranscriptionBackend {
     }
 
     /// Says in the log what a piece cost beyond one decode, so a slow dictation can name its cause.
-    private static func report(_ effort: DecodeEffort) {
+    fileprivate static func report(_ effort: DecodeEffort) {
         guard !effort.isPlain else { return }
         // Counted, not named: the log audit reads a name holding "prompt" as text somebody typed.
         let retried = effort.retriedWithoutPrompt ? 1 : 0
@@ -121,35 +120,65 @@ public actor WhisperKitBackend: TranscriptionBackend {
             "decoded piece: fallbacks=\(effort.fallbacks, privacy: .public) fallbackSeconds=\(effort.fallbackSeconds, format: .fixed(precision: 2), privacy: .public) encoderRuns=\(effort.encoderRuns, privacy: .public) retried=\(retried, privacy: .public)"
         )
     }
+}
 
-    /// What WhisperKit's own timings say this piece cost beyond one decode.
-    private static func effort(of results: [TranscriptionResult]) -> DecodeEffort {
-        DecodeEffort(
-            fallbacks: results.reduce(0) { $0 + Int($1.timings.totalDecodingFallbacks) },
-            fallbackSeconds: results.reduce(0) { $0 + $1.timings.decodingFallback },
-            encoderRuns: results.reduce(0) { $0 + Int($1.timings.totalEncodingRuns) })
+/// Flattens WhisperKit's per-window results into one transcript.
+fileprivate func rawTranscript(from results: [TranscriptionResult]) -> RawTranscript {
+    let flatSegments = results.flatMap(\.segments)
+    let totalTokens = flatSegments.reduce(0) { $0 + $1.tokens.count }
+    return RawTranscript(
+        text: results.map(\.text).joined(separator: " "),
+        languageIdentifier: results.first?.language,
+        // WhisperKit surfaces a verdict but not a probability from `transcribe`.
+        languageProbability: nil,
+        segments: flatSegments.map {
+            RawSegment(
+                text: $0.text, start: Double($0.start), end: Double($0.end),
+                words: $0.words.map { words in
+                    words.map {
+                        RawWord(
+                            text: $0.word, start: Double($0.start), end: Double($0.end),
+                            probability: Double($0.probability))
+                    }
+                })
+        },
+        effort: effort(of: results),
+        tokensUsed: totalTokens
+    )
+}
+
+/// What WhisperKit's own timings say this piece cost beyond one decode.
+fileprivate func effort(of results: [TranscriptionResult]) -> DecodeEffort {
+    DecodeEffort(
+        fallbacks: results.reduce(0) { $0 + Int($1.timings.totalDecodingFallbacks) },
+        fallbackSeconds: results.reduce(0) { $0 + $1.timings.decodingFallback },
+        encoderRuns: results.reduce(0) { $0 + Int($1.timings.totalEncodingRuns) })
+}
+
+/// Adapts ``LoadedKit`` to ``TranscriptionBackend`` so ``CappedDecodeRetry`` can call it without knowing about WhisperKit.
+private struct RetryBackend: TranscriptionBackend {
+    let kit: LoadedKit
+
+    var minimumDuration: Duration { .zero }
+
+    func load() async throws(SpeechEngineError) {}
+
+    func transcribe(
+        _ samples: [Float], languageHint: LanguageCode?
+    ) async throws(SpeechEngineError) -> RawTranscript {
+        try await transcribe(samples, languageHint: languageHint, biasedTowards: [])
     }
 
-    /// Flattens WhisperKit's per-window results into one transcript.
-    private static func rawTranscript(from results: [TranscriptionResult]) -> RawTranscript {
-        RawTranscript(
-            text: results.map(\.text).joined(separator: " "),
-            languageIdentifier: results.first?.language,
-            // WhisperKit surfaces a verdict but not a probability from `transcribe`.
-            languageProbability: nil,
-            segments: results.flatMap(\.segments).map {
-                RawSegment(
-                    text: $0.text, start: Double($0.start), end: Double($0.end),
-                    words: $0.words.map { words in
-                        words.map {
-                            RawWord(
-                                text: $0.word, start: Double($0.start), end: Double($0.end),
-                                probability: Double($0.probability))
-                        }
-                    })
-            },
-            effort: effort(of: results)
-        )
+    func transcribe(
+        _ samples: [Float], languageHint: LanguageCode?, biasedTowards vocabulary: [String]
+    ) async throws(SpeechEngineError) -> RawTranscript {
+        do {
+            let results = try await kit.transcribe(
+                samples, languageHint: languageHint, biasedTowards: vocabulary)
+            return rawTranscript(from: results)
+        } catch {
+            throw .transcriptionFailed(description: error.localizedDescription)
+        }
     }
 }
 

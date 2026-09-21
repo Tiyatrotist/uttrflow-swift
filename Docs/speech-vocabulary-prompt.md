@@ -70,6 +70,20 @@ sampled at the last prefill token, which is the first real prediction.
 that survives trimming brings a `<|startofprev|>` token with it; a prompt that does not is
 dropped whole and takes that token with it.
 
+## The prompt shares the 223-position decode budget with the transcript
+
+The prefill tokens occupy the left end of the decoder's context, and the transcript's words and
+timestamps occupy the rest. WhisperKit sizes the context at `Constants.maxTokenContext = 224`
+and lets the decode loop run up to `initialPromptIndex - 1 + sampleLength` steps, where the
+`sampleLength` here is also `maxTokenContext`. That is **223 positions shared between the forced
+prompt and the transcript** — not added on top of one another.
+
+A full prompt leaves about 108 positions for the words, and Hindi writes roughly 4.7 tokens per
+Devanagari word, so a Hindi piece over ~23 words on a full prompt, or ~44 words on the one-word
+shipped prompt, runs out of room mid-word. Issue #961 is the user-visible form of this budget
+collision. `CappedDecodeRetry` recovers the audio past the cap by re-decoding the tail; the
+underlying budget is unchanged.
+
 ## Two decoding options that cost something
 
 **`wordTimestamps: true`** is the only way to get a per-word probability out of WhisperKit,
