@@ -250,21 +250,16 @@ public actor DictationPipeline {
             stopwatch = nil
         } catch {
             hasTurn = false
+            // The capture writes the recording before it refuses it, so the audio is claimed here too (#604).
+            await claimRecording(mine)
             // A cancel during the drain leaves the pipeline at rest, so no failure is published over it.
             guard !wasCancelled(mine) else { return }
-            transition(to: .failed(DictationFailure(error)))
+            // Through `fail`, so a refused capture reaches the same rule as every other lost dictation.
+            await fail(DictationFailure(error))
             return
         }
 
-        // Written beside the buffer while the key was held, so it exists before anything can fail.
-        let kept = await recordings.current()
-        // Asked after the lookup, since a cancel can arrive while it is suspended as well as before it.
-        if wasCancelled(mine) {
-            // A cancel cannot see a recording not yet looked up, so it is deleted here instead.
-            if let kept { await recordings.discard(kept.id) }
-        } else {
-            openRecording = kept?.id
-        }
+        await claimRecording(mine)
         // Released with no await before `process` moves the state on, so nothing can enter between.
         hasTurn = false
         await process(audio, mine, delivery: .insert)
@@ -785,6 +780,19 @@ public actor DictationPipeline {
             }
         }
         transition(to: .failed(failure))
+    }
+
+    /// Takes the recording written while the key was held as this dictation's, or deletes a cancelled one.
+    private func claimRecording(_ mine: Int) async {
+        // Written beside the buffer while the key was held, so it exists before anything can fail.
+        let kept = await recordings.current()
+        // Asked after the lookup, since a cancel can arrive while it is suspended as well as before it.
+        guard !wasCancelled(mine) else {
+            // A cancel cannot see a recording not yet looked up, so it is deleted here instead.
+            if let kept { await recordings.discard(kept.id) }
+            return
+        }
+        openRecording = kept?.id
     }
 
     /// Deletes the kept audio of the dictation under way, if there is one.
