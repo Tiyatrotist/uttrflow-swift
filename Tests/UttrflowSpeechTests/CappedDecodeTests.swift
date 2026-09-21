@@ -64,16 +64,18 @@ private actor CappedFakeBackend: TranscriptionBackend {
         var firstDone = false
     }
 
-    init(samples: Int, cappedEnd: Double, tailWords: String) {
+    init(samples: Int, cappedEnd: Double, tailWords: String, firstTokensUsed: Int = 220) {
         state = Mutex(State())
         self.samples = samples
         self.cappedEnd = cappedEnd
         self.tailWords = tailWords
+        self.firstTokensUsed = firstTokensUsed
     }
 
     private let samples: Int
     private let cappedEnd: Double
     private let tailWords: String
+    private let firstTokensUsed: Int
 
     func load() async throws(SpeechEngineError) {}
 
@@ -103,7 +105,7 @@ private actor CappedFakeBackend: TranscriptionBackend {
                                     text: " first", start: 0, end: cappedEnd, probability: 0.9)
                             ])
                     ],
-                    tokensUsed: 220)
+                    tokensUsed: firstTokensUsed)
             } else {
                 // End just before the audio end so the retry sees a clean decode and stops.
                 let end = max(0.5, Double(samples.count) / 16_000.0 - 0.3)
@@ -129,7 +131,8 @@ private actor CappedFakeBackend: TranscriptionBackend {
 struct CappedDecodeRetryTests {
     @Test("a decode that ended at the audio end is returned untouched")
     func uncappedIsReturned() async throws {
-        let backend = CappedFakeBackend(samples: 16_000, cappedEnd: 1.0, tailWords: "unused")
+        let backend = CappedFakeBackend(
+            samples: 16_000, cappedEnd: 1.0, tailWords: "unused", firstTokensUsed: 80)
         let samples = Array(repeating: Float(0.1), count: 16_000)
 
         let raw = try await CappedDecodeRetry.transcribe(
@@ -151,8 +154,13 @@ struct CappedDecodeRetryTests {
 
         let calls = await backend.calls
         #expect(calls.count == 2)
-        // The follow-up is sized to the audio after the cap, with the recogniser's floor applied.
-        #expect(calls[1].sampleCount < totalSamples)
+        // The follow-up starts one sample past where the first decode stopped.
+        #expect(calls[1].sampleCount == totalSamples - Int((14.0 * 16_000).rounded(.down)))
+        // The tail's words are shifted by the slice so their times line up with the original audio.
+        let secondSegment = raw.segments.last
+        #expect(secondSegment?.start == 14.0)
+        let tailWord = secondSegment?.words?.first
+        #expect(tailWord?.start == 14.0)
         #expect(raw.text.contains("first batch"))
         #expect(raw.text.contains("second"))
     }
@@ -187,6 +195,8 @@ struct CappedDecodeRetryTests {
 
         let calls = await backend.calls
         #expect(calls.count == 2, "the second decode should recover the audio after the fragment")
+        // The slice sits at the previous normal word's end, not at the fragment's start, so the second decode does not re-decode already-decoded audio.
+        #expect(calls[1].sampleCount == totalSamples - Int((0.8 * 16_000).rounded(.down)))
         #expect(raw.text.contains("first batch"))
         #expect(raw.text.contains("second"))
     }

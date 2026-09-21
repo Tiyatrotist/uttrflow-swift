@@ -39,10 +39,18 @@ public enum CappedDecodeRetry {
             if !result.text.isEmpty {
                 accumulatedText += (accumulatedText.isEmpty ? "" : " ") + result.text
             }
-            let shifted = result.segments.map {
+            let shifted = result.segments.map { segment in
                 RawSegment(
-                    text: $0.text, start: $0.start + sliceStartSeconds,
-                    end: $0.end + sliceStartSeconds, words: $0.words)
+                    text: segment.text,
+                    start: segment.start + sliceStartSeconds,
+                    end: segment.end + sliceStartSeconds,
+                    words: segment.words?.map { word in
+                        RawWord(
+                            text: word.text,
+                            start: word.start + sliceStartSeconds,
+                            end: word.end + sliceStartSeconds,
+                            probability: word.probability)
+                    })
             }
             accumulatedSegments.append(contentsOf: shifted)
 
@@ -72,25 +80,19 @@ public enum CappedDecodeRetry {
         )
     }
 
-    /// Where in the audio the recogniser actually stopped, in seconds, ignoring any final fragment word it stretched past the cap.
+    /// Where in the recogniser's view the decoder actually stopped, in seconds from the start of the slice, ignoring any final fragment word it stretched past the cap.
     fileprivate static func cappedCutoffSeconds(in segments: [RawSegment]) -> Double? {
-        // Take the last word of the last segment whose words we know, then walk backwards past any fragment.
-        let allWords = segments.reversed().flatMap { $0.words ?? [] }.reversed()
+        // Walk newest-to-oldest so the first non-fragment found is the chronologically last word the recogniser finished, not the first.
+        let allWords = segments.reversed().flatMap { ($0.words ?? []).reversed() }
         guard !allWords.isEmpty else {
             return segments.last?.end
         }
         let fragmentSeconds = fragmentWordDuration.inSeconds
-        var lastNormalEnd: Double = 0
         for word in allWords {
             let duration = word.end - word.start
-            if duration > fragmentSeconds { continue }
-            lastNormalEnd = word.end
-            break
+            guard duration <= fragmentSeconds else { continue }
+            return word.end
         }
-        // All words are fragments, or we found none past the last fragment: fall back to the segment's claimed end.
-        if lastNormalEnd == 0 {
-            return segments.last?.end
-        }
-        return lastNormalEnd
+        return segments.last?.end
     }
 }

@@ -105,7 +105,7 @@ public actor WhisperKitBackend: TranscriptionBackend {
             return RawTranscript(
                 text: retried.text, languageIdentifier: retried.languageIdentifier,
                 languageProbability: retried.languageProbability, segments: retried.segments,
-                effort: effort)
+                effort: effort, tokensUsed: retried.tokensUsed)
         } catch {
             throw .transcriptionFailed(description: error.localizedDescription)
         }
