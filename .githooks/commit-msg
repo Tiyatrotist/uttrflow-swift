@@ -21,6 +21,14 @@ case "$(basename "$message_file")" in
     MERGE_MSG | SQUASH_MSG) exit 0 ;;
 esac
 
+# A redirect that fails costs the audit its input without costing the `if` its exit status,
+# so an unreadable file would otherwise be refused with the wording written for a real hit.
+if [[ ! -r "$message_file" ]]; then
+    printf '\033[31m  the commit was not made\033[0m\n'
+    printf '  Could not read the message file at %s, so nothing was checked.\n' "$message_file"
+    exit 1
+fi
+
 root="$(git rev-parse --show-toplevel)"
 [[ -f "$root/Scripts/disclosure_audit.py" ]] || exit 0
 
