@@ -26,10 +26,11 @@ extension PermissionError: CataloguedFailure {
 }
 
 extension AudioCaptureError: CataloguedFailure {
-    public static var firstCase: Self { .noInputDevice }
+    public static var firstCase: Self { .microphoneDenied }
 
     public var caseAfter: Self? {
         switch self {
+        case .microphoneDenied: .noInputDevice
         case .noInputDevice: .alreadyRecording
         case .alreadyRecording: .notRecording
         case .notRecording: .unsupportedInputFormat

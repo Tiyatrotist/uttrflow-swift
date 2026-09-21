@@ -24,6 +24,28 @@ the one-line comments. `Docs/microphone.md` covers the hardware moving under the
   but is called synchronously before `convert` returns and never escapes, which is why
   `ConversionInput` is `@unchecked Sendable`.
 
+## Microphone access is read before the engine, not after it
+
+`EngineDevice.open()` refuses with `AudioCaptureError.microphoneDenied` unless
+`AVCaptureDevice.authorizationStatus(for: .audio)` is `authorized`, and it does so before an
+`AVAudioEngine` exists. Nothing else in the capture path reads the authorisation: the only
+hardware check `open()` had was `format.sampleRate > 0`, which catches a missing device and not
+a refused one, because a refused microphone still reports the device's real format.
+
+What that cost, before the guard: the engine opened, the tap delivered, and the samples carried
+no speech — so `VoiceActivity` refused the recording and the user was told "Didn't catch that."
+with no recovery action, for a permission only System Settings can give back. Measured here on
+macOS 26.5.1: three seconds of digital silence through `uttrflow-dev transcribe` comes back
+`SpeechEngineError.nothingHeard`, which is `informational` and offers nothing.
+
+The guard covers the reopen after a hardware change as well as the first open, because
+`InputDeviceSession` reaches the device through the same `open()`.
+
+**What is not measured.** Whether a refused microphone taps zeros or never calls back at all —
+revoking access needs a Mac whose privacy settings can be changed, and it was not available.
+Either way the guard fires first, and either way the message without it was wrong: silence reads
+as `nothingHeard`, and an empty recording as `audioTooShort`.
+
 ## The level meter
 
 - A microphone tap runs on a real-time thread that must never wait on an actor, so
