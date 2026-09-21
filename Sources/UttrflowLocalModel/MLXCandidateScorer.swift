@@ -240,7 +240,9 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         let context = CompletionText.contextNeverCopied(in: situation)
         // The prefill is the line's own start, so the answer reads as the whole line it would echo.
         return CompletionText.parse(run.written + text, typed: typed).compactMap {
-            CompletionText.trimmed($0, typed: typed, echoing: context)
+            CompletionText.trimmed($0, typed: typed, echoing: context).flatMap {
+                SignOff.unsigned($0, typed: typed, screen: context, ownLines: situation.recentLines)
+            }
         }
     }
 
