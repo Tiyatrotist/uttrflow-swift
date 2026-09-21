@@ -32,10 +32,10 @@ public actor PredictStore: PredictionStore {
 
     /// Opens and migrates, and on corruption starts again rather than leaving the app broken.
     private static func opened(at path: String) throws(PredictStoreError) -> Database {
-        try? FileManager.default.createDirectory(
-            at: URL(filePath: path).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? PrivateFile.makeDirectory(at: URL(filePath: path).deletingLastPathComponent())
         do {
             let database = try Database(path: path)
+            try? PrivateFile.tighten(at: URL(filePath: path))
             try Schema.migrate(database)
             return database
         } catch {
@@ -45,6 +45,7 @@ public actor PredictStore: PredictionStore {
                 try? FileManager.default.removeItem(atPath: path + suffix)
             }
             let replacement = try Database(path: path)
+            try? PrivateFile.tighten(at: URL(filePath: path))
             try Schema.migrate(replacement)
             return replacement
         }
@@ -399,6 +400,7 @@ public actor PredictStore: PredictionStore {
     /// Forgets everything learned in one application.
     public func forget(bundleIdentifier: String) throws(PredictStoreError) {
         try database.run("DELETE FROM surface WHERE bundle_id = ?") { $0.bind(1, bundleIdentifier) }
+        try leaveNothingBehind()
     }
 
     /// Forgets one entry, wherever the user noticed it.
@@ -408,11 +410,22 @@ public actor PredictStore: PredictionStore {
             $0.bind(1, id)
             $0.bind(2, Spelling.canonical(text))
         }
+        try leaveNothingBehind()
     }
 
     /// Forgets every surface, and with it every entry and succession they hold.
     public func forgetEverything() throws(PredictStoreError) {
         try database.execute("DELETE FROM surface")
+        try leaveNothingBehind()
+    }
+
+    /// Empties the write-ahead log, which otherwise holds what was forgotten until the app quits.
+    private func leaveNothingBehind() throws(PredictStoreError) {
+        // The pragma answers in a row rather than an error code, so a checkpoint that was refused reads as success.
+        let refused = try database.rows("PRAGMA wal_checkpoint(TRUNCATE)", { _ in }) {
+            $0.integer(0)
+        }
+        guard refused.first == 0 else { throw .query("the write-ahead log could not be emptied") }
     }
 
     /// How many entries each application has taught, keyed by bundle identifier.
