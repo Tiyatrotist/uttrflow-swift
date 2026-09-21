@@ -85,6 +85,47 @@ struct ClipboardStoreTests {
         }
     }
 
+    /// The picture is written first so a clip never points at a file that is missing; this is that write failing.
+    @Test("reports a disk that refuses a copied picture, and keeps no clip pointing at it")
+    func pictureWriteFailure() async throws {
+        let folder = try TemporaryFolder()
+        // A regular file where the Images folder belongs, so creating the folder cannot succeed.
+        try Data("in the way".utf8).write(
+            to: folder.url.appending(path: "Images", directoryHint: .notDirectory))
+        let noticed = NoticedClip(
+            clip: Clip(text: "", kind: .image, copiedAt: Date()),
+            picture: (Data(repeating: 0x89, count: 4_096), 1024, 768))
+
+        await #expect(throws: ClipboardStoreError.couldNotWrite) {
+            try await folder.store.record(noticed, keeping: folder.retention)
+        }
+        #expect(await folder.store.clips(keeping: folder.retention).isEmpty)
+    }
+
+    /// A list is written atomically so a pin is never replaced by half of one; this is that write failing.
+    @Test("reports a disk that refuses a list write, and leaves the list already saved readable")
+    func listWriteFailure() async throws {
+        let folder = try TemporaryFolder()
+        #expect(try await folder.store.record(clip("the first one"), keeping: week()).count == 1)
+
+        // The folder is there and readable, so the file is `missing` rather than unreplaceable, and unwritable.
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: folder.url.path)
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o700], ofItemAtPath: folder.url.path)
+        }
+
+        let store = ClipboardStore(
+            file: folder.url.appending(path: "clipboard.json", directoryHint: .notDirectory))
+        await #expect(throws: ClipboardStoreError.couldNotWrite) {
+            try await store.record(clip("the second one"), keeping: week())
+        }
+        // Read fresh from disk: the point is that the atomic write left the saved list whole.
+        let reopened = ClipboardStore(
+            file: folder.url.appending(path: "clipboard.json", directoryHint: .notDirectory))
+        #expect(await reopened.clips(keeping: week()).map(\.text) == ["the first one"])
+    }
+
     // MARK: - Refusing nothing
 
     @Test(
