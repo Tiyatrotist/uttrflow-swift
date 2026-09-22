@@ -424,6 +424,9 @@ struct DictionaryStoreErrorTests {
         #expect(
             DictionaryStoreError.couldNotWrite.userMessage
                 == "Your dictionary could not be updated on this Mac.")
+        #expect(
+            DictionaryStoreError.couldNotReadSeedRecord.userMessage
+                == "Your dictionary's setup record could not be read on this Mac.")
     }
 
     /// A refusal is not a disk failure and must not be dressed as one.
@@ -440,12 +443,14 @@ struct DictionaryStoreErrorTests {
     @Test("offers no recovery it cannot actually perform")
     func recovery() {
         #expect(DictionaryStoreError.couldNotWrite.recovery == nil)
+        #expect(DictionaryStoreError.couldNotReadSeedRecord.recovery == nil)
     }
 
     /// Dictation still works. What was lost is a word it would have got right next time.
     @Test("costs the user something, but not the dictation")
     func severity() {
         #expect(DictionaryStoreError.couldNotWrite.severity == .degraded)
+        #expect(DictionaryStoreError.couldNotReadSeedRecord.severity == .degraded)
         // Nothing was lost, because nothing was offered.
         #expect(DictionaryStoreError.wordIsEmpty.severity == .informational)
         #expect(DictionaryStoreError.wordAlreadyKnown.severity == .informational)
@@ -455,8 +460,9 @@ struct DictionaryStoreErrorTests {
     @Test("is ready for the failure catalogue")
     func catalogued() {
         #expect(
-            DictionaryStoreError.everyCase == [.couldNotWrite, .wordIsEmpty, .wordAlreadyKnown])
-        #expect(DictionaryStoreError.firstCase.caseAfter == .wordIsEmpty)
+            DictionaryStoreError.everyCase
+                == [.couldNotWrite, .couldNotReadSeedRecord, .wordIsEmpty, .wordAlreadyKnown])
+        #expect(DictionaryStoreError.firstCase.caseAfter == .couldNotReadSeedRecord)
         #expect(DictionaryStoreError.wordAlreadyKnown.caseAfter == nil)
     }
 }

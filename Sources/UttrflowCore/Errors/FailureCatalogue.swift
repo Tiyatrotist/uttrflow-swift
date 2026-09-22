@@ -85,7 +85,8 @@ extension DictionaryStoreError: CataloguedFailure {
 
     public var caseAfter: Self? {
         switch self {
-        case .couldNotWrite: .wordIsEmpty
+        case .couldNotWrite: .couldNotReadSeedRecord
+        case .couldNotReadSeedRecord: .wordIsEmpty
         case .wordIsEmpty: .wordAlreadyKnown
         case .wordAlreadyKnown: nil
         }
