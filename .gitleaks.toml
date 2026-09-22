@@ -1,6 +1,6 @@
 # What gitleaks is allowed to find and not fail on.
 #
-# Two files in this tree contain things shaped exactly like credentials, on purpose:
+# One file in this tree contains things shaped exactly like credentials, on purpose:
 #
 #   SecretDetectionTests.swift    the fixtures for the clipboard's secret detector. Its
 #                                 whole job is to recognise an AWS key, a GitHub token, a
@@ -8,29 +8,41 @@
 #                                 and it cannot be tested without examples of each. The
 #                                 values are the vendors' own documentation examples and
 #                                 invented strings.
-#   InMemoryAuthenticationService.swift
-#                                 the development sign-in stub, which mints its own
-#                                 Ed25519 key at run time and issues a profile at
-#                                 @uttrflow.invalid. Nothing it produces exists off the
-#                                 machine that ran it.
 #
 # One value is allowed by itself: the updater's EdDSA public key, which ships in every
 # app's Info.plist and which UpdateConfigurationTests pins. It is the public half, the
 # exact string and nothing near it, so any other value in any file still fails.
 #
-# The files above are allowed by path and by path alone. Nothing else in the tree is exempt, so a
-# real key committed anywhere — including into a different test file — still fails the
-# build. If a fixture ever needs to move, move the entry with it rather than widening it.
+# One source spelling is allowed by itself: `Curve25519.Signing.PrivateKey`, which is a
+# Swift type name. It has triggered the default generic-api-key rule in account code and
+# support tests, but allowing only the exact spelling means a real key beside it still
+# fails the build.
+#
+# Historical exact values are allowed for the same reason: old commits contain public
+# tokenizer revisions and file digests from the model hub, plus one invented clipboard
+# fixture that exists only to prove secret clips are dropped when an old store is read.
+#
+# The fixture file above is allowed by path and by path alone. Nothing else in the tree is
+# path-exempt, so a real key committed anywhere — including into a different test file —
+# still fails the build. If the fixture ever needs to move, move the entry with it rather
+# than widening it.
 [extend]
 useDefault = true
 
 [allowlist]
-  description = "Files whose contents are supposed to look like secrets."
+  description = "Intentional secret-shaped fixtures, public keys and exact Swift type-name false positives."
   paths = [
     '''Tests/UttrflowClipboardTests/SecretDetectionTests\.swift''',
-    '''Sources/UttrflowAccount/InMemoryAuthenticationService\.swift''',
-    '''Tests/UttrflowAccountTests/AccountSupport\.swift''',
   ]
   regexes = [
     '''^apWgly8fYgdo1U2MUj56SuqUqZ4QHv5GRZIbuLT0PGE=$''',
+    '''^Curve25519\.Signing\.PrivateKey$''',
+    '''^06f233fe06e710322aca913c1bc4249a0d71fce1$''',
+    '''^973afd24965f72e36ca33b3055d56a652f456b4d$''',
+    '''^e37978b90ca9030d5170a5c07aadb050351a65bb$''',
+    '''^6d8cbd7cd0d8d5815e478dac67b85a26bbe77c1f5e0c6d76d1ce2abc0e5f21ca$''',
+    '''^844b642c73a91359722f47b35705f7174686df33d252695d8572cf9ac03a6389$''',
+    '''^27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566$''',
+    '''^2a4c4281cf9f51ac6ccc406fdc711a087afe6530f671fa7b80953edc498275ce$''',
+    '''^abc123def456$''',
   ]
