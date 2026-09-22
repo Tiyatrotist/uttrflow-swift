@@ -88,6 +88,10 @@ perf-budget-models: ## Fail when the model harness reads memory over the budget.
 pasteboard-audit: ## Prove only the clipboard adapters touch NSPasteboard. Needs no build.
 	./Scripts/pasteboard_audit.sh
 
+.PHONY: feed-url-test
+feed-url-test: ## Exercise every feed URL the bundle and publish gates accept or refuse. Needs no build.
+	./Scripts/feed_url_classify_test.sh
+
 .PHONY: disclosure-audit
 disclosure-audit: ## Prove nothing private to building this reached the tree. No build.
 	@python3 Scripts/disclosure_audit.py
@@ -114,7 +118,7 @@ disclosure-history: ## Scan every commit on every ref. Run before a repo goes pu
 # whose failure cannot be fixed after the fact. A competitor's name in a commit is
 # published the moment the commit is, and no later edit reaches a clone or a cache.
 .PHONY: verify
-verify: pii-audit disclosure-audit docs-audit comment-audit match-audit ratchet-test range-test log-audit store-permissions pasteboard-audit perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, docs, comments, word matches, log privacy, clipboard, energy and memory budget, lint, build, tests, coverage floor, offline audit.
+verify: pii-audit disclosure-audit docs-audit comment-audit match-audit ratchet-test range-test log-audit store-permissions pasteboard-audit feed-url-test perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, docs, comments, word matches, log privacy, clipboard, feed URL, energy and memory budget, lint, build, tests, coverage floor, offline audit.
 
 # Hooks are not cloned — .git/hooks is local to a checkout — so this points git at a
 # directory that is. One command per clone, and the gate cannot be forgotten after that.

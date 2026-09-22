@@ -92,6 +92,7 @@ if [[ "$REAL_CERTIFICATE" == "yes" && -z "$SIGNING_IDENTITY" ]]; then
 fi
 
 PACKAGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PACKAGE_ROOT"
 
 PRODUCT="Uttrflow"
@@ -521,11 +522,25 @@ PUBLIC_KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP/Contents/I
 if [[ -n "$FEED_URL" ]]; then
     # https, or http to this machine — the loopback address is what makes an update
     # rehearsable end to end on one Mac. See UpdateController.isAcceptable.
-    case "$FEED_URL" in
-        https://*) ;;
-        http://127.0.0.1*|http://localhost*) LOCAL_FEED="yes" ;;
-        *) fail "SUFeedURL is neither https nor a local address: $FEED_URL" ;;
-    esac
+    #
+    # The classifier is shared with `Scripts/publish.sh` so the two gates cannot
+    # disagree on what counts as local, and matches `UpdateController.isAcceptable`
+    # host-for-host rather than by shell prefix.
+    FEED_KIND="$(python3 "$SCRIPT_DIR/feed_url_classify.py" "$FEED_URL")" \
+        || fail "SUFeedURL is neither https nor a local address: $FEED_URL"
+    if [[ "$FEED_KIND" == "loopback" ]]; then
+        # A loopback feed is for rehearsal, not for shipping: every installed copy
+        # would strand itself from future automatic updates the moment the URL stops
+        # answering. A distribution build is the one that would be published, so it
+        # is the one that has to refuse.
+        [[ "$REAL_CERTIFICATE" == "yes" ]] && fail "$(
+            printf 'a distribution build may not point SUFeedURL at a loopback host:\n'
+            printf '  %s\n' "$FEED_URL"
+            printf '  Rebuild as local/rehearsal with an http loopback feed, or as\n'
+            printf '  distribution with an https feed. See Docs/app-updates.md.'
+        )"
+        LOCAL_FEED="yes"
+    fi
     [[ -n "$PUBLIC_KEY" && "$PUBLIC_KEY" != *" "* ]] || fail "$(
         printf 'SUFeedURL is set and SUPublicEDKey is not a key.\n'
         printf '  An update feed with nothing to verify downloads against installs\n'

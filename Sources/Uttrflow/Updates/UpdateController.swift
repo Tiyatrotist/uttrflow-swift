@@ -57,7 +57,7 @@ final class UpdateController: NSObject {
     }
 
     /// `https`, or `http` to this machine only, so an update can be rehearsed end to end on one Mac.
-    nonisolated private static func isAcceptable(_ url: URL) -> Bool {
+    nonisolated static func isAcceptable(_ url: URL) -> Bool {
         if url.scheme == "https" { return true }
         guard url.scheme == "http", let host = url.host else { return false }
         return host == "127.0.0.1" || host == "localhost" || host == "::1"
