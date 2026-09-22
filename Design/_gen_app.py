@@ -610,12 +610,13 @@ account = f"""<div class="card" style="padding: 14px 15px">
         <div class="callout" style="margin-top: 12px">
           <span style="flex:none; color: var(--green); margin-top:1px">
             {icon(LOCK, size=15, width=1.7)}</span>
-          <span>The account is an identity and nothing more. Your recordings, transcripts,
-            Dictionary, Corrections and Snippets are files on this Mac &mdash; signing out
-            leaves every one of them exactly where it is.</span>
+          <span>The account is an identity and nothing more. Your transcripts, Dictionary,
+            Corrections and Snippets are files on this Mac &mdash; signing out leaves every
+            one of them exactly where it is. Audio is discarded as it becomes text.</span>
         </div>
-        <div class="foot">Uttrflow reaches the network to sign you in, and for nothing else.
-          Turn Wi-Fi off afterwards and dictation carries on working.</div>"""
+        <div class="foot">Sign-in, profile refreshes and update checks may reach the network,
+          and model setup or repair may download speech assets. Dictation itself runs on this
+          Mac once the model is installed, so losing Wi-Fi does not stop you from speaking.</div>"""
 
 
 # =====================================================================
