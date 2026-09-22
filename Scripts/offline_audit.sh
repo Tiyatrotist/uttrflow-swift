@@ -61,7 +61,7 @@ NETWORK_PATTERN='URLSession|URLRequest|NWConnection|NWBrowser|NWListener|import 
 #
 #   the cloud island   — all of it inside `#if UTTRFLOW_CLOUD`, which no shipping build
 #                        defines. Check 4 below proves that separately.
-#   the tokenizer      — reached only from a model install, which the user asks for and
+#   the model download — reached only from a model install, which the user asks for and
 #                        which plainly needs the network. Check 3 proves that loading and
 #                        decoding cannot reach it, which is the half that matters.
 CLOUD_ISLAND='Sources/UttrflowAI/HTTPCleanupModel.swift'
@@ -145,17 +145,17 @@ else
         "646 MB transfer that hangs rather than an error the user can act on."
 fi
 
-# The Hugging Face hub is the one legitimate network user in the package. It may be
-# named in the file that defines the downloader and nowhere else on the dictation path.
+# Model downloads are explicit Uttrflow fetches from pinned resolve URLs. WhisperKit and
+# swift-transformers may load what is already on disk, but they must not fetch anything
+# from the dictation modules themselves.
 hub_hits="$(grep -rEn 'HubApi|WhisperKit\.download|AutoTokenizer' \
-    "${DICTATION_MODULES[@]/#/Sources/}" --include='*.swift' 2>/dev/null \
-    | grep -v "^$BACKEND:" || true)"
+    "${DICTATION_MODULES[@]/#/Sources/}" --include='*.swift' 2>/dev/null || true)"
 if [[ -n "${hub_hits//[[:space:]]/}" ]]; then
     fail "the model hub is reached from somewhere new" \
-        "Only $BACKEND may name it, and only to define the downloader the store calls." \
+        "Speech installs must use Uttrflow's pinned anonymous downloader, not hub defaults." \
         "" $'\n'"$hub_hits"
 else
-    pass "the model hub is named in one file only"
+    pass "the speech model hub is not reached through dependency download APIs"
 fi
 
 # ---------------------------------------------------------------------------
@@ -319,8 +319,8 @@ else
             # Hub — swift-transformers — is the legitimate model downloader that
             # WhisperKit pulls in. Anything else with a URLSession in it is new, and
             # is in the app for a reason nobody has written down yet.
-            #   Hub           — swift-transformers, the model downloader WhisperKit
-            #                     pulls in. Runs only from `models install`.
+            #   Hub           — swift-transformers, still linked by WhisperKit. Uttrflow
+            #                     does not call it to install speech models.
             #   UttrflowSpeech — TokenizerDownload.swift, which fetches the tokenizer
             #                     beside the weights at install time so that loading
             #                     never has to. Check 3 is what proves loading cannot
@@ -347,13 +347,9 @@ else
             #   EventSource          machinery UttrflowLocalModel pulls in, the way Hub is
             #                       WhisperKit's. They fetch model files and nothing else.
             #   ArgmaxCore        — WhisperKit 1.1.0's own core, which vendors a copy of
-            #                       swift-transformers' Hub under External/Hub. It is the
-            #                       same downloader as Hub, duplicated rather than new in
-            #                       kind, and it runs on the same trigger: `models install`
-            #                       calling WhisperKit.download. The dictation path cannot
-            #                       reach it — load() passes `download: false` — so the
-            #                       guarantee this audit exists for is untouched, and
-            #                       checks 1 to 3 above are what still prove it.
+            #                       swift-transformers' Hub under External/Hub. It remains
+            #                       linked by WhisperKit, but Uttrflow installs speech
+            #                       weights itself from pinned anonymous resolve URLs.
             #   Uttrflow          — the app target links the above, so it inherits the
             #                       symbol. Nothing in it opens a connection of its own.
             ALLOWED_NETWORK_MODULES="Hub UttrflowSpeech UttrflowAccount UttrflowLocalModel HuggingFace EventSource ArgmaxCore Uttrflow"

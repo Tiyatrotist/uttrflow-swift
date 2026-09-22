@@ -75,26 +75,30 @@ through and be reported as a connection problem the user cannot fix by retrying.
   directly or as an underlying error, raises the same failure. Its message names the space needed
   rather than asking the user to check their connection; every other failure keeps that wording.
 
-## Hoisting the download out of its wrapper
+## Pinned model files
 
-Model repositories nest their output — WhisperKit's lands in
-`<staging>/models/<repo>/<variant>/`. The store's contract is that a model's files sit
-directly in `location(of:)`, so the nesting is undone in `hoist(contentsOf:into:)` rather than
-leaking into every caller that needs a path. The wrapper directory is identified *before*
-anything moves; afterwards there is nothing left to identify it by.
+Both halves of the model are fetched from `huggingface.co/<repository>/resolve/<commit>/<file>`.
+The CoreML weights use `SpeechModel.weightsRevision`, `weightsRepository`, and `weightFiles`; the
+tokenizer uses `tokenizerRevision`, `tokenizerRepository`, and `tokenizerDigests`. Each weight file
+is downloaded to a temporary file, counted, hashed, tightened, and only then moved into staging.
+Each tokenizer file is likewise checked before it is written. A pinned commit says which file to
+fetch; only the size and digest say it is the file that was pinned.
 
-## `FileManager`
+The app does not call `WhisperKit.download` for installs. That downloader has no revision argument
+for these weights and can fall back to the person's own Hugging Face token. Uttrflow fetches public
+files directly instead, with `huggingface.co` and the commit named in source.
 
-`FileManager` is not `Sendable`, and the shared instance is documented as safe for the file
-operations used here. Tests run against real temporary directories, which is more faithful
-than a substitute would be.
+**To bump a weight revision**, take the CoreML repository's current commit and the LFS metadata for
+the files in `WeightsAssets.fileNames`:
 
-## The tokenizer is pinned, and the weights are not
+```bash
+curl -s https://huggingface.co/api/models/argmaxinc/whisperkit-coreml \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["sha"])'
+curl -s "https://huggingface.co/api/models/argmaxinc/whisperkit-coreml/tree/<commit>/<variant>?recursive=1" \
+  | python3 -c 'import sys,json; [print(i["path"], i["size"], i.get("lfs", {}).get("oid")) for i in json.load(sys.stdin)]'
+```
 
-The tokenizer is fetched from `huggingface.co/<repository>/resolve/<commit>/<file>`, at a commit
-recorded in `SpeechModel.tokenizerRevision`, and each file is checked against the SHA-256 in
-`tokenizerDigests` before it is written. A pinned commit says which file to fetch; only the digest
-says it is the file that was pinned.
+Put the commit in `weightsRevision`, and put each file's `size` and LFS `oid` in `weightFiles`.
 
 **To bump a tokenizer revision**, take the repository's current commit and the files' digests:
 
@@ -108,10 +112,8 @@ Put both in `SpeechModel`, and say in the pull request what changed in the token
 app should follow it. `Scripts/offline_audit.sh` fails on `resolve/main/`, so a revision cannot
 quietly become a branch again.
 
-**The weights are still fetched from a branch.** `WhisperKit.download(variant:downloadBase:…)` has
-no revision parameter, so a push to `argmaxinc/whisperkit-coreml` reaches every new install without
-a release of this app. That download also resolves a token: it passes `token: nil` to `HubApi`,
-which falls back to `TokenProvider.environment`, which reads `HF_TOKEN`, `$HF_HOME/token` and the
-hub CLI's own files under the real home. Uttrflow is not sandboxed, so those are the person's own.
-Closing that means fetching the weights here rather than through WhisperKit — see the issue linked
-from `Docs/offline.md`.
+## `FileManager`
+
+`FileManager` is not `Sendable`, and the shared instance is documented as safe for the file
+operations used here. Tests run against real temporary directories, which is more faithful
+than a substitute would be.

@@ -154,18 +154,12 @@ public actor WhisperKitBackend: TranscriptionBackend {
 }
 
 extension FileSystemSpeechModelStore {
-    /// A store that fetches from WhisperKit's model repository.
+    /// A store that fetches pinned public speech assets without sending local Hugging Face tokens.
     public static func whisperKit(root: URL = FileSystemSpeechModelStore.defaultRoot()) -> Self {
         FileSystemSpeechModelStore(root: root) { model, component, destination, onProgress in
             switch component {
             case .weights:
-                // The hub nests its output under the download base; the store wants the files at the top.
-                let downloaded = try await WhisperKit.download(
-                    variant: model.variant,
-                    downloadBase: destination,
-                    progressCallback: { onProgress($0.fractionCompleted) }
-                )
-                try FileSystemSpeechModelStore.hoist(contentsOf: downloaded, into: destination)
+                try await downloadWeights(for: model, into: destination, onProgress: onProgress)
             case .tokenizer:
                 // Reports no progress: a second scale after the weights would run the bar backwards.
                 try await downloadTokenizer(for: model, into: destination)
