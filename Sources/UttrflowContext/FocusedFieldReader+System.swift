@@ -149,7 +149,7 @@ public enum FocusedFieldReader {
             selection: range.map { NSRange(location: $0.location, length: $0.length) },
             caret: range.flatMap { caret(field, at: $0) }.map { flip($0, below: flipped) },
             window: windowFrame(of: field).map { flip($0, below: flipped) },
-            field: frame(of: field).map { flip($0, below: flipped) },
+            field: fieldFrame(of: field).map { flip($0, below: flipped) },
             pointSize: style?.size,
             fontFamily: style?.family,
             textColor: style?.color,
@@ -196,6 +196,13 @@ public enum FocusedFieldReader {
             let size: CGSize = SurfaceProbe.value(element, kAXSizeAttribute, .cgSize)
         else { return nil }
         return CGRect(origin: origin, size: size)
+    }
+
+    /// The field's own frame for the snapshot, omitted when it is actually the caret's frame the host parks at the caret for input methods.
+    private static func fieldFrame(of field: AXUIElement) -> CGRect? {
+        guard let frame = frame(of: field), !FocusedFieldSnapshot.isCaretShaped(frame)
+        else { return nil }
+        return frame
     }
 
     /// The caret's screen rectangle, read off the glyph beside it because its own zero-length bounds lies.
