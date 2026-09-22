@@ -51,6 +51,10 @@ carried into staging, and staging then replaces the directory in one `replaceIte
 killed at any point before that leaves the model's directory as it was, so nothing half-fetched is
 ever mistaken for a model.
 
+The model root, staging folders, installed model folders and tokenizer files are marked
+`isExcludedFromBackup`. They are public downloaded data and can be fetched again, so backup tools
+that honour Finder's exclusion flag should not spend space carrying them.
+
 ## Unwinding a failed fetch, in proportion
 
 | Failed component | What is removed        | Why |

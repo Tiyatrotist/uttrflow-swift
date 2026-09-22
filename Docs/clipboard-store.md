@@ -4,6 +4,12 @@
 sibling of `DictationHistoryStore` and differs from it in exactly one way that matters: this one
 keeps its list in memory as well as on disk.
 
+The two JSON files and the `Images` folder are local working memory, not backup material. The
+folder and every file written through `PrivateFile` are marked `isExcludedFromBackup`, so backup
+tools that honour Finder's exclusion flag should skip clipboard text, saved clips and copied
+pictures. They are still ordinary owner-only files on the Mac rather than an encrypted store; the
+at-rest boundary is the user's login, FileVault and any encrypted backup volume.
+
 ## Why this one caches and the history store does not
 
 The history store treats the file as the single source of truth, because a copy beside it can

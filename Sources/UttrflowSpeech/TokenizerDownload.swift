@@ -1,5 +1,6 @@
 // Fetches a model's tokenizer at install time, the module's only network call.
 internal import Foundation
+import UttrflowCore
 
 // The one file in UttrflowSpeech allowed to open a connection; Scripts/offline_audit.sh names it.
 
@@ -21,7 +22,9 @@ func downloadTokenizer(for model: SpeechModel, into destination: URL) async thro
         }
 
         // Atomic, so a dropped connection cannot leave a truncated file that passes as a tokenizer.
-        try data.write(to: destination.appending(path: name), options: .atomic)
+        let file = destination.appending(path: name)
+        try data.write(to: file, options: .atomic)
+        try? PrivateFile.excludeFromBackup(at: file)
     }
 }
 
