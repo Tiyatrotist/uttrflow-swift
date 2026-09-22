@@ -663,6 +663,9 @@ struct DictationControllerStopGestureTests {
         let spy = StopGestureSpy()
         let harness = makeHarness(gestureSpy: spy)
 
+        // The dock is told the resting gesture once the controller reaches its actor, before any key.
+        #expect(spy.recorded == [.letGo])
+
         // First double tap opens hands-free: let-go while the hold is open, then hands-free.
         await tap(harness)
         #expect(await harness.controller.currentStopGesture == .letGo)
@@ -678,8 +681,8 @@ struct DictationControllerStopGestureTests {
         await tap(harness)
         #expect(await harness.controller.currentStopGesture == .letGo)
 
-        // Every visible change was reported, and only those.
-        #expect(spy.recorded == [.pressAgainHandsFree, .letGo])
+        // Initial let-go, the hands-free opening, and the return to let-go — and nothing else.
+        #expect(spy.recorded == [.letGo, .pressAgainHandsFree, .letGo])
     }
 
     /// Press-to-toggle stays press-again from the first press of the shortcut through to the closing one.
@@ -687,6 +690,9 @@ struct DictationControllerStopGestureTests {
     func toggleStaysPressAgain() async {
         let spy = StopGestureSpy()
         let harness = makeHarness(activation: .pressToToggle, gestureSpy: spy)
+
+        // The dock is told the initial gesture once, and never told again — hands-free never changes.
+        #expect(spy.recorded == [.pressAgain])
 
         await harness.controller.handle(.pressed)
         #expect(await harness.controller.currentStopGesture == .pressAgain)
@@ -696,8 +702,8 @@ struct DictationControllerStopGestureTests {
         await harness.controller.handle(.pressed)
         #expect(await harness.controller.currentStopGesture == .pressAgain)
 
-        // Nothing changed hands-free, so the dock is never told about a gesture flip either way.
-        #expect(spy.recorded.isEmpty)
+        // Nothing further — no spurious updates from the two press/release pairs.
+        #expect(spy.recorded == [.pressAgain])
     }
 
     /// A click on a control while hands-free finishes the dictation, and the dock goes back to holding.
@@ -712,8 +718,8 @@ struct DictationControllerStopGestureTests {
         await harness.controller.toggleFromControl()
         #expect(await harness.controller.currentStopGesture == .letGo)
 
-        // The dock was told twice: on going hands-free, and on falling back to hold-to-talk.
-        #expect(spy.recorded == [.pressAgainHandsFree, .letGo])
+        // Initial let-go, then the hands-free opening, then the return to let-go.
+        #expect(spy.recorded == [.letGo, .pressAgainHandsFree, .letGo])
     }
 
     /// Helper reused by hands-free tests so the gesture spy sees the right setup path.

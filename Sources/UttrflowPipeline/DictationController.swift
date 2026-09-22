@@ -107,6 +107,8 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
         Task { [weak self] in
             for await event in events { self?.submit(event) }
         }
+        // Tells the dock the resting gesture so a press-to-toggle shortcut does not read .letGo.
+        onStopGestureChange(Self.currentStopGesture(activation: activation, isHandsFree: false))
     }
 
     deinit {
@@ -163,6 +165,11 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
 
     /// What the dock has to say to end a recording that is under way right now.
     public var currentStopGesture: StopGesture {
+        Self.currentStopGesture(activation: activation, isHandsFree: isHandsFree)
+    }
+
+    /// Pure form of ``currentStopGesture``, callable from any context.
+    static func currentStopGesture(activation: HotkeyActivation, isHandsFree: Bool) -> StopGesture {
         switch (activation, isHandsFree) {
         case (.holdToTalk, false): .letGo
         case (.holdToTalk, true): .pressAgainHandsFree
