@@ -94,6 +94,9 @@ HINGLISH = [
     "Yaar, mera laptop bahut slow chal raha hai, kya tum IT team ko ticket bhej sakte ho?",
     "Aaj office mein bahut kaam hai, lekin shaam ko main gym zaroor jaunga.",
 ]
+CODE_SWITCH_ENGLISH = "Okay team, quick update on the release today."
+CODE_SWITCH_HINDI = "कल मैं ऑफिस नहीं आऊँगा, घर से काम करूँगा, और शाम तक रिपोर्ट भेज दूँगा।"
+CODE_SWITCH_ROMANISED = "Kal main office nahi aaunga, ghar se kaam karunga, aur shaam tak report bhej dunga."
 PUNCTUATION = [
     ("Dear team comma the build is green full stop", "Dear team, the build is green."),
     ("Can you join the call at noon question mark", "Can you join the call at noon?"),
@@ -138,9 +141,13 @@ def committed_passages():
 def clips():
     out = []
 
-    def add(cid, category, language, voice, say, written, spoken=None, vocabulary=(), devanagari=None):
-        out.append(dict(id=cid, category=category, language=language, voice=voice, say=say, spoken=spoken or say,
-                        written=written, vocabulary=list(vocabulary), variant="clean", devanagari=devanagari))
+    def add(cid, category, language, voice, say, written, spoken=None, vocabulary=(), devanagari=None,
+            languages=None, parts=None):
+        clip = dict(id=cid, category=category, language=language, voice=voice, say=say, spoken=spoken or say,
+                    written=written, vocabulary=list(vocabulary), variant="clean", devanagari=devanagari)
+        if languages is not None: clip["languages"] = languages
+        if parts is not None: clip["parts"] = parts
+        out.append(clip)
 
     for i, (said, written) in enumerate(REPLIES):
         add(f"reply{i}-{ENGLISH[i % 3].lower()}", "reply", "english", ENGLISH[i % 3], said, written)
@@ -161,6 +168,12 @@ def clips():
             add(f"nouns{i}-{voice.lower()}-vocabulary", "nouns-vocabulary", "english", voice, said, said, vocabulary=words)
     for i, said in enumerate(HINGLISH):
         add(f"hinglish{i}-rishi", "hinglish-latin", "hinglish", "Rishi", said, said)
+    english_twice = f"{CODE_SWITCH_ENGLISH} {CODE_SWITCH_ENGLISH}"
+    add("code-switch-en-hi-rishi-lekha", "code-switch", "hinglish", "Rishi+Lekha",
+        f"{english_twice} {CODE_SWITCH_HINDI}", f"{english_twice} {CODE_SWITCH_ROMANISED}",
+        spoken=f"{english_twice} {CODE_SWITCH_ROMANISED}",
+        devanagari=f"{english_twice} {CODE_SWITCH_HINDI}", languages=["en", "hi"],
+        parts=[["Rishi", f"{CODE_SWITCH_ENGLISH}{PAUSE}{CODE_SWITCH_ENGLISH}"], ["Lekha", CODE_SWITCH_HINDI]])
     for case in committed_passages():
         if case["language"] == "english":
             for voice in ENGLISH:
@@ -179,6 +192,23 @@ def read_wav(path):
 def write_wav(path, samples):
     w = wave.open(path, "wb"); w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
     w.writeframes(samples.tobytes()); w.close()
+
+
+def render_clip(clip):
+    if not clip.get("parts"):
+        subprocess.run(["say", "-v", clip["voice"], "-o", clip["wav"], "--file-format=WAVE",
+                        "--data-format=LEI16@16000", clip["say"]], check=True)
+        return
+    joined = array.array("h")
+    for index, (voice, said) in enumerate(clip["parts"]):
+        base, extension = os.path.splitext(clip["wav"])
+        part = f"{base}-part{index}{extension}"
+        if not os.path.exists(part):
+            subprocess.run(["say", "-v", voice, "-o", part, "--file-format=WAVE",
+                            "--data-format=LEI16@16000", said], check=True)
+        if index: joined.extend([0] * 24000)  # The language switch follows 1.5 seconds of silence.
+        joined.extend(read_wav(part))
+    write_wav(clip["wav"], joined)
 
 
 def noisy(snr_db, seed):
@@ -208,8 +238,7 @@ def corpus(args):
         spoken = hashlib.sha256(f"{c['voice']}\n{c['say']}\nLEI16@16000".encode()).hexdigest()[:12]
         c["wav"] = os.path.join(audio, f"{c['id']}-{spoken}.wav")
         if not os.path.exists(c["wav"]):
-            subprocess.run(["say", "-v", c["voice"], "-o", c["wav"], "--file-format=WAVE",
-                            "--data-format=LEI16@16000", c["say"]], check=True)
+            render_clip(c)
     for c in [c for c in made if c["id"] in VARIANT_BASES]:
         for name, change in (("snr20", noisy(20, 1)), ("snr10", noisy(10, 2)), ("quiet", gain(-24)), ("hot", gain(12))):
             v = dict(c, id=f"{c['id']}-{name}", variant=name, wav=c["wav"].replace(".wav", f"-{name}.wav"))
@@ -234,7 +263,9 @@ def jobs(args):
     for _ in range(args.repeat):
         for c in chosen:
             for cleaner in cleaners:
-                lines.append("\t".join([c["id"], c["wav"], ",".join(c["vocabulary"]), args.mode, cleaner]))
+                fields = [c["id"], c["wav"], ",".join(c["vocabulary"]), args.mode, cleaner]
+                if c.get("languages"): fields.append(",".join(c["languages"]))
+                lines.append("\t".join(fields))
     sys.stdout.write("\n".join(lines) + "\n")
 
 

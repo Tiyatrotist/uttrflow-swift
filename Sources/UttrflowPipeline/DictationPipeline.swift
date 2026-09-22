@@ -608,8 +608,10 @@ public actor DictationPipeline {
                 } catch SpeechEngineError.audioTooShort {
                     // Alone, a hold too brief to transcribe says so, since the fix is to hold longer.
                     guard window != audio.samples.indices else { throw SpeechEngineError.audioTooShort }
+                    if let failure = Self.untranscribedSpeech(in: slice) { throw failure }
                     return Heard.nothing
                 } catch SpeechEngineError.nothingHeard {
+                    if let failure = Self.untranscribedSpeech(in: slice) { throw failure }
                     // Only when there is nothing else: alone, silence is refused below.
                     guard window != audio.samples.indices else { throw SpeechEngineError.nothingHeard }
                     return Heard.nothing
@@ -620,11 +622,23 @@ public actor DictationPipeline {
         guard let heard else {
             throw SpeechEngineError.transcriptionFailed(description: "the recogniser did not answer")
         }
-        guard case .words(let transcription) = heard, !transcription.isBlank else { return nil }
+        guard case .words(let transcription) = heard else { return nil }
+        guard !transcription.isBlank else {
+            if let failure = Self.untranscribedSpeech(in: slice) { throw failure }
+            return nil
+        }
         // Kept beside the timing, since a re-decode is most of what a long transcription time is.
         await metrics.recordDecoding(transcription.effort)
         if dictationLanguage == nil { dictationLanguage = transcription.detectedLanguage?.code }
         return transcription
+    }
+
+    /// A recogniser that produced no words for audible speech must not let a partial dictation reach the screen.
+    private static func untranscribedSpeech(in audio: AudioSamples) -> SpeechEngineError? {
+        guard VoiceActivity.speechRange(in: audio.samples, sampleRate: audio.sampleRate) != nil else {
+            return nil
+        }
+        return .transcriptionFailed(description: "speech in a recording piece produced no words")
     }
 
     /// What the recogniser made of one window.

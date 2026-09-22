@@ -1385,6 +1385,10 @@ cat .build/bench/jobs-fast.tsv .build/bench/jobs-rt.tsv > .build/bench/jobs.tsv
 python3 Scripts/dictation_bench.py score .build/bench/run.out
 ```
 
+The `code-switch` category includes an English Rishi passage followed by a Hindi Lekha passage
+after a 1.5-second pause. Its job uses the `en,hi` Languages profile so each piece can detect
+its own language; `python3 Scripts/dictation_bench.py jobs --categories code-switch` selects it.
+
 ```
 .build/release/uttrflow-dev bench .build/bench/jobs.tsv --idle-before 300 > .build/bench/run-cold.out
 ```
@@ -1396,4 +1400,3 @@ refused before the one kept (`refused`).
 
 The corpus names each clip's audio by its voice and words, so changing either speaks it again. Run one `bench` at a time: two processes compete for the Neural Engine and each other's compile.
 The run above took about half an hour, its first load included.
-
