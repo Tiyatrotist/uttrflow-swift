@@ -52,6 +52,47 @@ struct ClipboardStoreTests {
         #expect(await reopened.clips(keeping: week()).map(\.text) == ["kept"])
     }
 
+    @Test("keeps a secret copy in memory for this session but never writes it to the history file")
+    func secretCopyIsMemoryOnly() async throws {
+        let file = TemporaryFile()
+        let store = ClipboardStore(file: file.url)
+        let secret = Clip(text: "password: correct horse battery staple", kind: .secret, copiedAt: noon)
+
+        #expect(try await store.record(secret, keeping: week()).map(\.text) == [secret.text])
+        #expect(await store.clips(keeping: week()).map(\.text) == [secret.text])
+        #expect(FileManager.default.fileExists(atPath: file.url.path(percentEncoded: false)) == false)
+        #expect(await ClipboardStore(file: file.url).clips(keeping: week()).isEmpty)
+    }
+
+    @Test("writes ordinary history around a secret without putting the secret bytes on disk")
+    func secretCopyIsSkippedWhenOtherHistoryIsWritten() async throws {
+        let file = TemporaryFile()
+        let store = ClipboardStore(file: file.url)
+        let secret = Clip(text: "api_key = ff00aa11ff00aa11ff00aa11", kind: .secret, copiedAt: noon)
+
+        try await store.record(clip("before"), keeping: week())
+        try await store.record(secret, keeping: week())
+        let clips = try await store.record(clip("after"), keeping: week())
+
+        #expect(clips.map(\.text) == ["after", secret.text, "before"])
+        let bytes = try Data(contentsOf: file.url)
+        let payload = try #require(String(data: bytes, encoding: .utf8))
+        #expect(!payload.contains(secret.text))
+        #expect(
+            await ClipboardStore(file: file.url).clips(keeping: week()).map(\.text) == ["after", "before"])
+    }
+
+    @Test("drops secrets found in an older history file instead of rehydrating them")
+    func oldPersistedSecretsAreNotLoaded() async throws {
+        let file = TemporaryFile()
+        let oldSecret = Clip(text: "client_secret = abc123def456", kind: .secret, copiedAt: noon)
+        try FileManager.default.createDirectory(
+            at: file.url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode([oldSecret]).write(to: file.url)
+
+        #expect(await ClipboardStore(file: file.url).clips(keeping: week()).isEmpty)
+    }
+
     /// An unreadable file costs the user their clipboard, not their app.
     @Test("opens on nothing when the file has been mangled")
     func corruption() async throws {

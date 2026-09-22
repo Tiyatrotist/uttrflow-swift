@@ -252,6 +252,9 @@ public actor ClipboardStore {
         guard let picture = noticed.picture else {
             return try record(noticed.clip, keeping: retention)
         }
+        guard Self.isPersistable(noticed.clip) else {
+            return try record(noticed.clip, keeping: retention)
+        }
         // Hashed before it is written, so a screenshot copied twice costs a counter, not another file.
         let sha = ClipboardStore.digest(of: picture.data)
         var image = alreadyKept(sha, in: noticed.clip.origin)
@@ -477,6 +480,9 @@ public actor ClipboardStore {
         clips.reduce(0) { $0 + weight(of: $1) }
     }
 
+    /// Whether this clip may cross a launch boundary; secrets stay in this process only.
+    private static func isPersistable(_ clip: Clip) -> Bool { clip.kind != .secret }
+
     /// Drops the least recently used clips of a text pool until it fits its memory quota.
     private func withinMemory(_ clips: [Clip]) -> [Clip] {
         var dropped: Set<UUID> = []
@@ -532,11 +538,13 @@ public actor ClipboardStore {
     private func loaded() -> [Clip] {
         if let wholeList { return wholeList }
         // A clipboard written before the split keeps its saved clips in the history file.
-        let fromSavedFile = read(savedFile)
+        let fromSavedFile = read(savedFile).filter(Self.isPersistable)
         savedOnDisk = fromSavedFile
         // A move interrupted between the two writes leaves a clip in both files, and the saved copy wins.
         let savedIDs = Set(fromSavedFile.map(\.id))
-        let stored = fromSavedFile + read(file).filter { !savedIDs.contains($0.id) }
+        let stored =
+            fromSavedFile
+            + read(file).filter { Self.isPersistable($0) && !savedIDs.contains($0.id) }
         let list = Self.interleaving(
             saved: stored.filter(\.isKept), history: stored.filter { !$0.isKept })
         wholeList = list
@@ -591,8 +599,9 @@ public actor ClipboardStore {
     private func save(_ clips: [Clip]) throws(ClipboardStoreError) {
         let before = Set(loaded().compactMap(\.image?.file))
         let wasSaved = savedOnDisk ?? []
-        let nowSaved = clips.filter(\.isKept)
-        let nowHistory = clips.filter { !$0.isKept }
+        let persistable = clips.filter(Self.isPersistable)
+        let nowSaved = persistable.filter(\.isKept)
+        let nowHistory = persistable.filter { !$0.isKept }
 
         // Memory first and unconditionally, so a refusing disk does not also cost the change itself.
         wholeList = clips
