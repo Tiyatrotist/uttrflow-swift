@@ -10,9 +10,11 @@ already a published page on a public repository.
 
 So the check has to live in the form. It reads every template, looks at every textarea
 and input field's label, description and placeholder, and refuses any phrase that asks
-the contributor to name another product — "other apps", "what tools do you use", "current
-alternatives" — because the answer would be the kind of identifying detail the rule
-forbids, and the question itself is what invites it.
+the contributor for identifying detail of another product — a name ("other apps", "what
+tools do you use", "current alternatives"), a quote, a screenshot, a link, pricing, or a
+description that would pin the product. A name is one way to identify another dictation
+product; a verbatim quote, a screenshot from the product, a link to its docs, the price
+the contributor paid, or a paragraph describing its features are five more.
 
 The rule is not that the form may not mention another product; it is that the form must
 not *ask for one*. A field whose label says "What you do today" and whose description says
@@ -20,7 +22,9 @@ not *ask for one*. A field whose label says "What you do today" and whose descri
 separate text-expansion tool" or "I type it by hand", both of which are generic. A field
 whose description says "Including other apps" fails: a reasonable contributor reads it
 and writes a product name, and the form has now handed the rule a problem before a
-maintainer saw it.
+maintainer saw it. The patterns are conservative about *the contributor's own* data —
+"paste the error message" or "attach a screenshot of the problem" does not trip the
+audit, because those ask about the contributor's bug, not another product.
 
 The audit also requires a publication warning near any field whose id asks what the
 contributor does today, so the rule reaches them at the moment they are about to write.
@@ -56,6 +60,70 @@ INVITING = (
     re.compile(r"\bcurrent alternatives?\b", re.IGNORECASE),
     re.compile(r"\bwhat alternatives?\b", re.IGNORECASE),
     re.compile(r"\bcompetitors?\b", re.IGNORECASE),
+)
+
+# Phrases that ask the contributor for identifying detail of another product beyond its
+# name: a quote, a screenshot, a link, pricing, or a description that would pin the
+# product. The disclosure rule applies to anything that would let a reader identify
+# another dictation product — a name is one way, but a verbatim quote, a screenshot
+# from the product, a link to its docs, the price the contributor paid, or a paragraph
+# describing its features are five more.
+#
+# Each pattern requires an explicit reference to another product: a possessive
+# ("its", "their"), an "other"/"another" word, or "the/that" followed by a product
+# noun ("app", "tool", "product", "software", "service"). A bare "the" with no product
+# noun ("a screenshot of the bug", "a screenshot of the problem") does not match, so a
+# bug report asking for the contributor's own evidence does not trip the audit.
+IDENTIFYING = (
+    # Quotes from or about another product.
+    re.compile(r"\bquotes?\s+(?:from|of|about)\s+(?:another|other)\b", re.IGNORECASE),
+    re.compile(r"\bquotes?\s+(?:from|of|about)\s+(?:the|that)\s+(?:other|product|app|tool|software|service)\b", re.IGNORECASE),
+    re.compile(r"\bquotes?\s+(?:from|of|about)\s+(?:its|their)\b", re.IGNORECASE),
+    re.compile(r"\bverbatim\s+(?:from|of|about)\s+(?:another|other)\b", re.IGNORECASE),
+    re.compile(r"\bverbatim\s+(?:from|of|about)\s+(?:the|that)\s+(?:other|product|app|tool|software|service)\b", re.IGNORECASE),
+    re.compile(r"\bverbatim\s+(?:from|of|about)\s+(?:its|their)\b", re.IGNORECASE),
+    re.compile(r"\bexact\s+(?:text|words?|wording)\s+(?:from|of|about)\s+(?:another|other)\b", re.IGNORECASE),
+    re.compile(r"\bexact\s+(?:text|words?|wording)\s+(?:from|of|about)\s+(?:the|that)\s+(?:other|product|app|tool|software|service)\b", re.IGNORECASE),
+    re.compile(r"\bexact\s+(?:text|words?|wording)\s+(?:from|of|about)\s+(?:its|their)\b", re.IGNORECASE),
+    # Screenshots, images, or recordings from another product.
+    re.compile(r"\b(?:screenshot|screen\s+shot|screen\s+capture|screen\s+recording)s?\s+(?:of|from|about)\s+(?:another|other)\b", re.IGNORECASE),
+    re.compile(r"\b(?:screenshot|screen\s+shot|screen\s+capture|screen\s+recording)s?\s+(?:of|from|about)\s+(?:the|that)\s+(?:other|product|app|tool|software|service)\b", re.IGNORECASE),
+    re.compile(r"\b(?:screenshot|screen\s+shot|screen\s+capture|screen\s+recording)s?\s+(?:of|from|about)\s+(?:its|their)\b", re.IGNORECASE),
+    re.compile(r"\battach\s+(?:a|the|their|its)\s+(?:screenshot|screen\s+shot|image|picture|photo|recording)s?\s+(?:of|from|about)\s+(?:another|other)\b", re.IGNORECASE),
+    re.compile(r"\battach\s+(?:a|the|their|its)\s+(?:screenshot|screen\s+shot|image|picture|photo|recording)s?\s+(?:of|from|about)\s+(?:the|that)\s+(?:other|product|app|tool|software|service)\b", re.IGNORECASE),
+    re.compile(r"\battach\s+(?:a|the|their|its)\s+(?:screenshot|screen\s+shot|image|picture|photo|recording)s?\s+(?:of|from|about)\s+(?:its|their)\b", re.IGNORECASE),
+    re.compile(r"\binclude\s+(?:a|the|their|its)\s+(?:screenshot|screen\s+shot|image|picture|photo|recording)s?\s+(?:of|from|about)\s+(?:another|other)\b", re.IGNORECASE),
+    re.compile(r"\binclude\s+(?:a|the|their|its)\s+(?:screenshot|screen\s+shot|image|picture|photo|recording)s?\s+(?:of|from|about)\s+(?:the|that)\s+(?:other|product|app|tool|software|service)\b", re.IGNORECASE),
+    re.compile(r"\binclude\s+(?:a|the|their|its)\s+(?:screenshot|screen\s+shot|image|picture|photo|recording)s?\s+(?:of|from|about)\s+(?:its|their)\b", re.IGNORECASE),
+    # Links and URLs to or from another product.
+    re.compile(r"\b(?:link|url)s?\s+(?:to|from|of)\s+(?:another|other)\b", re.IGNORECASE),
+    re.compile(r"\b(?:link|url)s?\s+(?:to|from|of)\s+(?:the|that)\s+(?:other|product|app|tool|software|service)\b", re.IGNORECASE),
+    re.compile(r"\b(?:link|url)s?\s+(?:to|from|of)\s+(?:its|their)\b", re.IGNORECASE),
+    re.compile(r"\bshare\s+(?:a|the|their|its)\s+(?:link|url)s?\s+(?:to|from|of)\s+(?:another|other)\b", re.IGNORECASE),
+    re.compile(r"\bshare\s+(?:a|the|their|its)\s+(?:link|url)s?\s+(?:to|from|of)\s+(?:the|that)\s+(?:other|product|app|tool|software|service)\b", re.IGNORECASE),
+    re.compile(r"\bshare\s+(?:a|the|their|its)\s+(?:link|url)s?\s+(?:to|from|of)\s+(?:its|their)\b", re.IGNORECASE),
+    re.compile(r"\bpaste\s+(?:a|the|their|its)\s+(?:link|url)s?\s+(?:to|from|of)\s+(?:another|other)\b", re.IGNORECASE),
+    re.compile(r"\bpaste\s+(?:a|the|their|its)\s+(?:link|url)s?\s+(?:to|from|of)\s+(?:the|that)\s+(?:other|product|app|tool|software|service)\b", re.IGNORECASE),
+    re.compile(r"\bpaste\s+(?:a|the|their|its)\s+(?:link|url)s?\s+(?:to|from|of)\s+(?:its|their)\b", re.IGNORECASE),
+    # Pricing of another product.
+    re.compile(r"\bpricing\s+(?:of|for|in|from)\s+(?:another|other)\b", re.IGNORECASE),
+    re.compile(r"\bpricing\s+(?:of|for|in|from)\s+(?:the|that)\s+(?:other|product|app|tool|software|service)\b", re.IGNORECASE),
+    re.compile(r"\bpricing\s+(?:of|for|in|from)\s+(?:its|their)\b", re.IGNORECASE),
+    re.compile(r"\b(?:price|cost|fee)s?\s+(?:of|for|in|from)\s+(?:another|other)\b", re.IGNORECASE),
+    re.compile(r"\b(?:price|cost|fee)s?\s+(?:of|for|in|from)\s+(?:the|that)\s+(?:other|product|app|tool|software|service)\b", re.IGNORECASE),
+    re.compile(r"\b(?:price|cost|fee)s?\s+(?:of|for|in|from)\s+(?:its|their)\b", re.IGNORECASE),
+    re.compile(r"\bhow\s+much\s+(?:does|do|is|are)\s+(?:it|they|the\s+other)\b", re.IGNORECASE),
+    # Identifying descriptions of another product.
+    re.compile(r"\bdescribe\s+(?:the|that)\s+(?:other|product|app|tool|software|service)\b", re.IGNORECASE),
+    re.compile(r"\bdescribe\s+(?:another|other)\s+(?:product|app|tool|software|service)\b", re.IGNORECASE),
+    re.compile(r"\bdescribe\s+(?:its|their)\b", re.IGNORECASE),
+    re.compile(r"\bfeatures?\s+(?:of|in|for)\s+(?:another|other)\b", re.IGNORECASE),
+    re.compile(r"\bfeatures?\s+(?:of|in|for)\s+(?:the|that)\s+(?:other|product|app|tool|software|service)\b", re.IGNORECASE),
+    re.compile(r"\bfeatures?\s+(?:of|in|for)\s+(?:its|their)\b", re.IGNORECASE),
+    re.compile(r"\bproduct\s+description\s+(?:of|for)\s+(?:another|other)\b", re.IGNORECASE),
+    re.compile(r"\bproduct\s+description\s+(?:of|for)\s+(?:the|that)\s+(?:other|product|app|tool|software|service)\b", re.IGNORECASE),
+    re.compile(r"\bproduct\s+description\s+(?:of|for)\s+(?:its|their)\b", re.IGNORECASE),
+    re.compile(r"\bwhat\s+(?:it|they)\s+(?:do|does|offer|provides?)\b", re.IGNORECASE),
 )
 
 # A field whose id asks what the contributor does today needs a publication warning
@@ -203,13 +271,23 @@ def markdown_text(record):
 
 
 def inviting_in(text):
-    """Yields one matched phrase per regex; the audit collects them into one finding."""
-    seen = set()
+    """Yields (category, phrase) for each pattern that matches, across both lists.
+
+    A pattern is one of "inviting" (asks for a product name) or "identifying" (asks for
+    a quote, screenshot, link, price, or identifying description of another product).
+    The audit collects findings by category and reports each one.
+    """
+    seen = {"inviting": set(), "identifying": set()}
     for pattern in INVITING:
         match = pattern.search(text)
-        if match and match.group(0).lower() not in seen:
-            seen.add(match.group(0).lower())
-            yield match.group(0)
+        if match and match.group(0).lower() not in seen["inviting"]:
+            seen["inviting"].add(match.group(0).lower())
+            yield "inviting", match.group(0)
+    for pattern in IDENTIFYING:
+        match = pattern.search(text)
+        if match and match.group(0).lower() not in seen["identifying"]:
+            seen["identifying"].add(match.group(0).lower())
+            yield "identifying", match.group(0)
 
 
 def warning_in(text):
@@ -233,11 +311,23 @@ def scan_template(path):
         text = field_text(record)
         if not text:
             continue
-        matches = list(inviting_in(text))
-        if matches:
-            quoted = ", ".join(f"`{phrase}`" for phrase in matches)
+        inviting_matches = []
+        identifying_matches = []
+        for category, phrase in inviting_in(text):
+            if category == "inviting":
+                inviting_matches.append(phrase)
+            elif category == "identifying":
+                identifying_matches.append(phrase)
+        if inviting_matches:
+            quoted = ", ".join(f"`{phrase}`" for phrase in inviting_matches)
             yield record["__line"], (
                 f"field `{field_id}` invites product names ({quoted})"
+            )
+        if identifying_matches:
+            quoted = ", ".join(f"`{phrase}`" for phrase in identifying_matches)
+            yield record["__line"], (
+                f"field `{field_id}` invites identifying detail of another product "
+                f"({quoted})"
             )
         if kind == "textarea" and WORKFLOW_FIELDS.search(field_id):
             if last_warning_line == 0:
@@ -279,11 +369,15 @@ def report(findings):
         file=sys.stderr,
     )
     print(
-        "    name, the answer is published before a maintainer sees it. Rephrase the field",
+        "    name, a quote, a screenshot, a link, pricing, or a description that pins the",
         file=sys.stderr,
     )
     print(
-        "    in terms of the capability or workflow, and put a publication note above it.",
+        "    product, the answer is published before a maintainer sees it. Rephrase the",
+        file=sys.stderr,
+    )
+    print(
+        "    field in terms of the capability or workflow, and put a publication note above it.",
         file=sys.stderr,
     )
     print(
@@ -369,6 +463,78 @@ SELF_TEST_FIXTURES = (
         "    attributes:\n"
         "      label: Anything else\n"
         "      description: Console output, a screen recording, whatever you have.\n",
+        0,
+    ),
+    # Negative cases for the new identifying-detail patterns. Each fixture adds one
+    # of the categories the maintainer asked the audit to cover: quote, screenshot,
+    # link, pricing, or identifying description of another product. The wording is
+    # chosen so it does NOT also trip the inviting patterns — only the new ones —
+    # so the expected finding count is exactly the one new match plus the workflow-
+    # field-missing-warning match.
+    (
+        "_audit_fixture_quote.yml",
+        "name: quote\nbody:\n"
+        "  - type: textarea\n"
+        "    id: alternatives\n"
+        "    attributes:\n"
+        "      label: Verbatim\n"
+        "      description: Verbatim from the other would help here.\n",
+        2,
+    ),
+    (
+        "_audit_fixture_screenshot.yml",
+        "name: screenshot\nbody:\n"
+        "  - type: textarea\n"
+        "    id: alternatives\n"
+        "    attributes:\n"
+        "      label: Capture\n"
+        "      description: A screen capture of the other would help here.\n",
+        2,
+    ),
+    (
+        "_audit_fixture_link.yml",
+        "name: link\nbody:\n"
+        "  - type: textarea\n"
+        "    id: alternatives\n"
+        "    attributes:\n"
+        "      label: Reference\n"
+        "      description: A link to the other would help here.\n",
+        2,
+    ),
+    (
+        "_audit_fixture_pricing.yml",
+        "name: pricing\nbody:\n"
+        "  - type: textarea\n"
+        "    id: alternatives\n"
+        "    attributes:\n"
+        "      label: Cost\n"
+        "      description: The cost of the other would help here.\n",
+        2,
+    ),
+    (
+        "_audit_fixture_features.yml",
+        "name: features\nbody:\n"
+        "  - type: textarea\n"
+        "    id: alternatives\n"
+        "    attributes:\n"
+        "      label: Capabilities\n"
+        "      description: Describe the features of the other, if you can.\n",
+        2,
+    ),
+    # The contributor's own data must not trip the audit. These are the kinds of
+    # prompts a bug report legitimately asks for.
+    (
+        "_audit_fixture_own_data.yml",
+        "name: own-data\nbody:\n"
+        "  - type: textarea\n"
+        "    id: repro-steps\n"
+        "    attributes:\n"
+        "      label: Steps to reproduce\n"
+        "      description: |\n"
+        "        1. Hold the dictation key.\n"
+        "        2. Say hello.\n"
+        "        3. Paste the error message here.\n"
+        "      placeholder: Attach a screenshot if you can.\n",
         0,
     ),
 )

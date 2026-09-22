@@ -110,6 +110,102 @@ class ReasonTest(unittest.TestCase):
         self.assertEqual(run.returncode, 0, run.stdout)
         self.assertIn("none invite content", run.stdout)
 
+    def test_quote_about_another_product_is_refused(self):
+        self._write(
+            "feature_request.yml",
+            "name: feature\nbody:\n"
+            "  - type: textarea\n"
+            "    id: notes\n"
+            "    attributes:\n"
+            "      label: Notes\n"
+            "      description: Quote from the other product so we can compare.\n",
+        )
+        run = subprocess.run(
+            [sys.executable, AUDIT], cwd=self.tmp, capture_output=True, text=True
+        )
+        self.assertEqual(run.returncode, 1, run.stdout)
+        self.assertIn("identifying detail of another product", run.stderr)
+
+    def test_screenshot_of_another_product_is_refused(self):
+        self._write(
+            "feature_request.yml",
+            "name: feature\nbody:\n"
+            "  - type: textarea\n"
+            "    id: evidence\n"
+            "    attributes:\n"
+            "      label: Evidence\n"
+            "      description: Attach a screenshot from the other tool.\n",
+        )
+        run = subprocess.run(
+            [sys.executable, AUDIT], cwd=self.tmp, capture_output=True, text=True
+        )
+        self.assertEqual(run.returncode, 1, run.stdout)
+        self.assertIn("identifying detail of another product", run.stderr)
+
+    def test_link_to_another_product_is_refused(self):
+        self._write(
+            "feature_request.yml",
+            "name: feature\nbody:\n"
+            "  - type: textarea\n"
+            "    id: references\n"
+            "    attributes:\n"
+            "      label: References\n"
+            "      description: Share a link to the other app's docs.\n",
+        )
+        run = subprocess.run(
+            [sys.executable, AUDIT], cwd=self.tmp, capture_output=True, text=True
+        )
+        self.assertEqual(run.returncode, 1, run.stdout)
+        self.assertIn("identifying detail of another product", run.stderr)
+
+    def test_pricing_of_another_product_is_refused(self):
+        self._write(
+            "feature_request.yml",
+            "name: feature\nbody:\n"
+            "  - type: textarea\n"
+            "    id: budget\n"
+            "    attributes:\n"
+            "      label: Budget\n"
+            "      description: The price of the other product.\n",
+        )
+        run = subprocess.run(
+            [sys.executable, AUDIT], cwd=self.tmp, capture_output=True, text=True
+        )
+        self.assertEqual(run.returncode, 1, run.stdout)
+        self.assertIn("identifying detail of another product", run.stderr)
+
+    def test_identifying_description_of_another_product_is_refused(self):
+        self._write(
+            "feature_request.yml",
+            "name: feature\nbody:\n"
+            "  - type: textarea\n"
+            "    id: context\n"
+            "    attributes:\n"
+            "      label: Context\n"
+            "      description: Describe the features of the other tool.\n",
+        )
+        run = subprocess.run(
+            [sys.executable, AUDIT], cwd=self.tmp, capture_output=True, text=True
+        )
+        self.assertEqual(run.returncode, 1, run.stdout)
+        self.assertIn("identifying detail of another product", run.stderr)
+
+    def test_bug_report_does_not_trip_on_own_evidence(self):
+        self._write(
+            "bug_report.yml",
+            "name: bug\nbody:\n"
+            "  - type: textarea\n"
+            "    id: repro\n"
+            "    attributes:\n"
+            "      label: Steps\n"
+            "      description: Paste the error message and a screenshot of the problem.\n",
+        )
+        run = subprocess.run(
+            [sys.executable, AUDIT], cwd=self.tmp, capture_output=True, text=True
+        )
+        self.assertEqual(run.returncode, 0, run.stdout)
+        self.assertIn("none invite content", run.stdout)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)
