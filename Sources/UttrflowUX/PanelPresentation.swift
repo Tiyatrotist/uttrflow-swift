@@ -260,7 +260,7 @@ public struct PanelPresentation: Sendable, Equatable {
     public let microphone: PanelMicrophone
     /// H7 — what the list is scoped to when that differs from the chip last pressed.
     public let scope: String?
-    /// What VoiceOver is told, each line once when it first appears, since the panel may close before focus reaches it.
+    /// What VoiceOver is told when each line appears in the open panel.
     public let announcements: [String]
     /// What VoiceOver says choosing a row will do, which is a copy when the panel cannot paste.
     public let rowHint: String
@@ -325,7 +325,7 @@ public enum PanelPresenter {
     /// What choosing a row does when the panel can only copy.
     public static let copyRowHint = "Copies to the clipboard, to paste yourself with Command-V"
 
-    /// The notice and the undo offer, as spoken; the view posts each one once. See `Docs/app-quick-panel.md`.
+    /// The notice and the undo offer, as spoken; the controller posts each appearance. See `Docs/app-quick-panel.md`.
     static func announcements(for snapshot: PanelSnapshot) -> [String] {
         [snapshot.notice?.message, snapshot.canUndoDelete ? undoAnnouncement : nil].compactMap { $0 }
     }
