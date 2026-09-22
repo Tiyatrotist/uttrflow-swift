@@ -19,6 +19,34 @@ public struct DockPresentation: Sendable, Equatable {
     public let accessibilityLabel: String
 }
 
+/// What the user has to do, or does not, to end a recording that is already under way.
+public enum StopGesture: Sendable, Equatable {
+    /// Hold-to-talk: releasing the keys ends the recording.
+    case letGo
+    /// Press-to-toggle: pressing the shortcut again ends the recording; releasing does not.
+    case pressAgain
+    /// A hold-to-talk double tap left the microphone open, so pressing the shortcut again ends it.
+    case pressAgainHandsFree
+
+    /// The visible instruction, in the words the dock can fit beside the waveform.
+    var recordingLine: String {
+        switch self {
+        case .letGo: "Let go to finish"
+        case .pressAgain: "Press shortcut to finish"
+        case .pressAgainHandsFree: "Hands-free — press shortcut to finish"
+        }
+    }
+
+    /// What VoiceOver reads before the optional countdown.
+    var recordingAccessibilityPrefix: String {
+        switch self {
+        case .letGo: "Listening. Let go to finish"
+        case .pressAgain: "Listening. Press the shortcut again to finish"
+        case .pressAgainHandsFree: "Listening. Hands-free. Press the shortcut again to finish"
+        }
+    }
+}
+
 /// Turns the pipeline's state into what the floating button draws; never names an engine (§16).
 public enum DictationPresenter {
     /// The microphone time as "0:04" or "1:23"; minutes keep counting past an hour, never rolling over.
@@ -39,7 +67,8 @@ public enum DictationPresenter {
     }
 
     public static func dock(
-        for state: DictationState, advice: DictationAdvice = .keepGoing
+        for state: DictationState, advice: DictationAdvice = .keepGoing,
+        stopGesture: StopGesture = .letGo
     ) -> DockPresentation {
         switch state {
         case .idle:
@@ -51,12 +80,12 @@ public enum DictationPresenter {
         case .recording:
             DockPresentation(
                 // Says what to do, not what is happening: the waveform already says it is listening.
-                symbolName: "mic.fill", primaryLine: "Let go to finish",
+                symbolName: "mic.fill", primaryLine: stopGesture.recordingLine,
                 secondaryLine: RemainingTime.phrase(for: advice),
                 showsWaveform: true, showsProgress: false, isRecording: true, action: nil,
                 accessibilityLabel: RemainingTime.phrase(for: advice)
-                    .map { "Listening. Let go to finish. \($0)." }
-                    ?? "Listening. Let go to finish.")
+                    .map { "\(stopGesture.recordingAccessibilityPrefix). \($0)." }
+                    ?? "\(stopGesture.recordingAccessibilityPrefix).")
 
         // Transcribing, tidying and the wait for the app to take the words are one wait, so one line.
         case .transcribing, .tidying, .inserting:
@@ -122,9 +151,10 @@ public enum DictationPresenter {
 
     /// The button with the speech model's load drawn in where it would otherwise rest or fall silent.
     public static func dock(
-        for state: DictationState, advice: DictationAdvice = .keepGoing, speechModel: SpeechModelLoad?
+        for state: DictationState, advice: DictationAdvice = .keepGoing, speechModel: SpeechModelLoad?,
+        stopGesture: StopGesture = .letGo
     ) -> DockPresentation {
-        let drawn = dock(for: state, advice: advice)
+        let drawn = dock(for: state, advice: advice, stopGesture: stopGesture)
         // A missing model is setup's to fetch, and the button stays out of the way while setup runs.
         guard let load = speechModel, load != .missing else { return drawn }
         switch state {

@@ -100,6 +100,80 @@ struct DictationPresentationTests {
     }
 }
 
+// MARK: - #1315: the recording instruction names the gesture that will actually stop it
+
+@Suite("Recording dock instructions match the gesture")
+struct RecordingInstructionTests {
+    @Test("hold-to-talk tells the user to let go")
+    func letGoTellsYouToLetGo() {
+        let dock = DictationPresenter.dock(for: .recording, stopGesture: .letGo)
+        #expect(dock.primaryLine == "Let go to finish")
+        #expect(dock.accessibilityLabel.contains("Let go to finish"))
+        #expect(
+            !dock.accessibilityLabel.lowercased().contains("press"),
+            "a hold should not say press")
+    }
+
+    @Test("press-to-toggle tells the user to press again, never to let go")
+    func pressToToggleTellsYouToPressAgain() {
+        let dock = DictationPresenter.dock(for: .recording, stopGesture: .pressAgain)
+        #expect(dock.primaryLine == "Press shortcut to finish")
+        #expect(dock.accessibilityLabel.contains("Press the shortcut again"))
+        #expect(
+            !dock.accessibilityLabel.contains("Let go"),
+            "a press-to-toggle recording must not say let go")
+    }
+
+    @Test("a hands-free recording says so and tells the user to press again")
+    func handsFreeTellsYouToPressAgain() {
+        let dock = DictationPresenter.dock(for: .recording, stopGesture: .pressAgainHandsFree)
+        #expect(dock.primaryLine == "Hands-free — press shortcut to finish")
+        #expect(dock.accessibilityLabel.contains("Hands-free"))
+        #expect(dock.accessibilityLabel.contains("Press the shortcut again"))
+        #expect(
+            !dock.accessibilityLabel.contains("Let go"),
+            "a hands-free recording must not say let go")
+    }
+
+    @Test("every gesture still keeps the recording indicator and waveform on")
+    func gesturesKeepTheRecordingLights() {
+        for gesture in [StopGesture.letGo, .pressAgain, .pressAgainHandsFree] {
+            let dock = DictationPresenter.dock(for: .recording, stopGesture: gesture)
+            #expect(dock.isRecording == true, "\(gesture) turned off isRecording")
+            #expect(dock.showsWaveform == true, "\(gesture) turned off showsWaveform")
+        }
+    }
+
+    @Test("every gesture adds its countdown to the accessibility label when one is set")
+    func gesturesKeepTheCountdownInTheLabel() {
+        for gesture in [StopGesture.letGo, .pressAgain, .pressAgainHandsFree] {
+            let dock = DictationPresenter.dock(
+                for: .recording, advice: .approaching(remaining: .seconds(30)),
+                stopGesture: gesture)
+            #expect(dock.secondaryLine != nil, "\(gesture) lost the countdown line")
+            #expect(dock.accessibilityLabel.contains("."), "\(gesture) label is not a sentence")
+        }
+    }
+
+    @Test("non-recording states ignore the stop gesture")
+    func onlyRecordingLooksAtTheStopGesture() {
+        for gesture in [StopGesture.letGo, .pressAgain, .pressAgainHandsFree] {
+            for state in [DictationState.idle, .transcribing, .tidying] {
+                let a = DictationPresenter.dock(for: state, stopGesture: gesture)
+                let b = DictationPresenter.dock(for: state)
+                #expect(a == b, "\(state) changed with gesture \(gesture)")
+            }
+        }
+    }
+
+    @Test("the default gesture remains hold-to-talk, so existing call sites do not change")
+    func defaultIsLetGo() {
+        #expect(
+            DictationPresenter.dock(for: .recording)
+                == DictationPresenter.dock(for: .recording, stopGesture: .letGo))
+    }
+}
+
 // MARK: - Failure
 
 @Suite("Failure presentation on screen")

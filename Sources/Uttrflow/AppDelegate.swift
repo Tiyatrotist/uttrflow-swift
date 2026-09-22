@@ -70,6 +70,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// How the recording in progress is going against ``DictationLimit``.
     private var recordingAdvice: DictationAdvice = .keepGoing
+    /// What the dock has to say to end a recording that is under way right now.
+    private var recordingStopGesture: StopGesture = .letGo
 
     private var pipeline: DictationPipeline?
     private var controller: DictationController<ContinuousClock>?
@@ -372,7 +374,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// The floating button for a state, with the speech model's load drawn in.
     private func dockPresentation(for state: DictationState) -> DockPresentation {
         if case .idle = state, let pasteReport { return pasteReport }
-        return DictationPresenter.dock(for: state, advice: recordingAdvice, speechModel: speechModelLoad)
+        return DictationPresenter.dock(
+            for: state, advice: recordingAdvice, speechModel: speechModelLoad,
+            stopGesture: recordingStopGesture)
     }
 
     /// Asks each clean-up engine whether it could run, so Diagnostics has an answer to show; the task ends once it has.
@@ -710,6 +714,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             clock: ContinuousClock(),
             onAdvice: { [weak self] advice in
                 Task { @MainActor in self?.recordingAdviceChanged(to: advice) }
+            },
+            onStopGestureChange: { [weak self] gesture in
+                Task { @MainActor in self?.recordingStopGestureChanged(to: gesture) }
             }
         )
     }
@@ -719,6 +726,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard advice != recordingAdvice else { return }
         recordingAdvice = advice
         refreshMenuBar()
+        dock.update(with: dockPresentation(for: lastDictationState))
+    }
+
+    /// Redraws the floating button when the gesture that ends a recording has changed.
+    private func recordingStopGestureChanged(to gesture: StopGesture) {
+        guard gesture != recordingStopGesture else { return }
+        recordingStopGesture = gesture
         dock.update(with: dockPresentation(for: lastDictationState))
     }
 
@@ -1424,7 +1438,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         completions?.dictationChanged(isDictating: state.isBusy)
 
         // Cleared as soon as the recording ends, so a countdown cannot outlive it.
-        if !state.isListening { recordingAdvice = .keepGoing }
+        if !state.isListening {
+            recordingAdvice = .keepGoing
+            recordingStopGesture = .letGo
+        }
         menuBar.update(with: MenuBarPresenter.present(menuBarState(for: state)))
         dock.update(with: dockPresentation(for: state))
         announce(DictationPresenter.announcement(for: state))
