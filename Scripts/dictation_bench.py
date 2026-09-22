@@ -56,6 +56,18 @@ REPLIES = [("Okay", "Okay."), ("Thank you", "Thank you."), ("Sounds good", "Soun
            ("Are you free?", "Are you free?"), ("What time?", "What time?"), ("Really?", "Really?"),
            ("Can you call me?", "Can you call me?"), ("Almost done.", "Almost done."),
            ("Running late, sorry.", "Running late, sorry.")]
+HINDI_REPLIES = [
+    ("हाँ ठीक है।", "Haan thik hai."),
+    ("हाँ जी।", "Haan ji."),
+    ("मैं आ रहा हूँ।", "Main aa raha hoon."),
+    ("धन्यवाद।", "Dhanyavaad."),
+    ("नहीं।", "Nahi."),
+    ("ठीक है।", "Thik hai."),
+    ("अच्छा ठीक है।", "Accha thik hai."),
+    ("कोई बात नहीं।", "Koi baat nahi."),
+    ("बस पाँच मिनट।", "Bas paanch minute."),
+    ("चलो ठीक है, कल मिलते हैं।", "Chalo thik hai, kal milte hain."),
+]
 
 NUMBERS = [
     "The invoice comes to 4,250 dollars and 75 cents, due on the 12th of March.",
@@ -144,6 +156,10 @@ def clips():
 
     for i, (said, written) in enumerate(REPLIES):
         add(f"reply{i}-{ENGLISH[i % 3].lower()}", "reply", "english", ENGLISH[i % 3], said, written)
+    for i, (said, written) in enumerate(HINDI_REPLIES):
+        add(f"hi-reply{i}-lekha", "hi-reply", "hindi", "Lekha", said, written,
+            spoken=written, devanagari=said)
+        out[-1]["languages"] = ["hi"]
     for seconds in (5, 15, 30, 60, 120):
         for k, voice in enumerate(ENGLISH):
             said, written = passage(seconds, 7 * k + seconds, paused=seconds >= 30)
@@ -234,7 +250,9 @@ def jobs(args):
     for _ in range(args.repeat):
         for c in chosen:
             for cleaner in cleaners:
-                lines.append("\t".join([c["id"], c["wav"], ",".join(c["vocabulary"]), args.mode, cleaner]))
+                fields = [c["id"], c["wav"], ",".join(c["vocabulary"]), args.mode, cleaner]
+                if c.get("languages"): fields.append(",".join(c["languages"]))
+                lines.append("\t".join(fields))
     sys.stdout.write("\n".join(lines) + "\n")
 
 

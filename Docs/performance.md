@@ -1167,6 +1167,14 @@ vocabulary, Hinglish read in the Latin alphabet, spoken punctuation, self-correc
 `TranscriptionCorpus` passages, and ten clips again with brown noise at 20 and 10 dB SNR, 24 dB
 quieter and 12 dB hotter (clipping). No recording of a person is involved.
 
+The current generator also has ten `hi-reply` clips, from sub-two-second Hindi replies spoken
+by Lekha. Their jobs explicitly use the `hi` Languages profile; select them with
+`python3 Scripts/dictation_bench.py jobs --categories hi-reply` after generating the corpus.
+On the Release `uttrflow-dev bench` in fast mode with the rules cleaner, all ten were decoded as
+Hindi (zero as English, down from four in #699's original measurement). Raw WER was 20.0%; final
+WER was 32.1%. The two shortest replies still had word errors (`हाँ ठीक है` became `हाप पहे`,
+and `हाँ जी` became `हाजजी`). These are synthetic-voice results, not a real-speaker accuracy claim.
+
 **Two word error rates.** *Raw* is the recogniser's pieces joined, against what was said; *final*
 is the inserted text, against what should be typed. Both lower-case, drop punctuation, spell
 numerals, and split identifiers and addresses into words, so "3.5%" and "three point five percent"
@@ -1396,4 +1404,3 @@ refused before the one kept (`refused`).
 
 The corpus names each clip's audio by its voice and words, so changing either speaks it again. Run one `bench` at a time: two processes compete for the Neural Engine and each other's compile.
 The run above took about half an hour, its first load included.
-
