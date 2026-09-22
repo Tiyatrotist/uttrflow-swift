@@ -46,7 +46,7 @@ final class UpdateController: NSObject {
     /// Whether this build can update itself: a feed and a real key; `nonisolated` for the settings probe.
     nonisolated static var isConfigured: Bool {
         guard let feed = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String,
-            let url = URL(string: feed), isAcceptable(url)
+            let url = URL(string: feed), acceptsFeedURL(url)
         else { return false }
         // A placeholder key fails closed: Sparkle would install whatever the feed handed it.
         guard let key = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String,
@@ -57,8 +57,8 @@ final class UpdateController: NSObject {
     }
 
     /// `https`, or `http` to this machine only, so an update can be rehearsed end to end on one Mac.
-    nonisolated private static func isAcceptable(_ url: URL) -> Bool {
-        if url.scheme == "https" { return true }
+    nonisolated static func acceptsFeedURL(_ url: URL) -> Bool {
+        if url.scheme == "https" { return url.host != nil }
         guard url.scheme == "http", let host = url.host else { return false }
         return host == "127.0.0.1" || host == "localhost" || host == "::1"
     }
