@@ -1,6 +1,8 @@
 // Tests that a stage which never returns is timed out.
 import Synchronization
 import Testing
+import UttrflowInput
+import struct Foundation.Data
 
 @testable import UttrflowCore
 @testable import UttrflowPipeline
@@ -52,12 +54,25 @@ private struct NeverAnsweringCleaner: TranscriptCleaning {
     }
 }
 
-/// A ``TextInserting`` that takes the text and never answers, the way a hung application does.
-private struct NeverAnsweringInserter: TextInserting {
-    func insert(_ text: String) async throws(TextInsertionError) -> InsertionAttempt {
+/// The first insertion strategy never returns, so the clipboard fallback cannot start.
+private struct NeverAnsweringEngine: TextInsertionEngine {
+    let method: TextInsertionMethod = .accessibility
+
+    func canInsert() async -> Bool { true }
+
+    func insert(_ text: String) async throws(TextInsertionError) -> InsertionArrival {
         await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in }
-        return InsertionAttempt(.accessibility)
+        return .notReported
     }
+}
+
+private final class TimeoutPasteboard: Pasteboard, Sendable {
+    private let stored = Mutex<String?>("older copied text")
+
+    func text() -> String? { stored.withLock { $0 } }
+    func setText(_ text: String) { stored.withLock { $0 = text } }
+    func setConcealedText(_ text: String) { setText(text) }
+    func setImage(_ data: Data) { stored.withLock { $0 = nil } }
 }
 
 @Suite("Dictation pipeline: a stage that never answers", .timeLimit(.minutes(1)))
@@ -185,13 +200,16 @@ struct DictationStageTimeoutTests {
     func insertionThatNeverAnswers() async {
         let clock = ManualClock()
         let metrics = RecordingMetricsRecorder()
+        let pasteboard = TimeoutPasteboard()
         let pipeline = DictationPipeline(
             capture: FakeAudioCaptureEngine(stopOutcome: .success(.silence(seconds: 2))),
             speech: FakeSpeechEngine(
                 transcribeOutcome: .success(Transcription(text: "what I said"))),
             cleaner: TimeoutTestCleaner(),
             context: FakeContextEngine(),
-            inserter: NeverAnsweringInserter(),
+            inserter: TextInsertionCoordinator(strategies: [
+                NeverAnsweringEngine(), ClipboardTextInsertionEngine(pasteboard: pasteboard),
+            ]),
             metrics: metrics,
             clock: clock)
 
@@ -205,6 +223,11 @@ struct DictationStageTimeoutTests {
             return
         }
         #expect(failure.transcript == "Tidied.")
+        #expect(failure.recovery == .showRecentDictations)
+        #expect(failure.message.contains("Recent"))
+        #expect(!failure.message.contains("copied"))
+        #expect(!failure.message.contains("⌘V"))
+        #expect(pasteboard.text() == "older copied text")
         #expect(await metrics.measurements(for: .insertion).map(\.succeeded) == [false])
         #expect(await metrics.measurements(for: .transcription).map(\.succeeded) == [true])
     }

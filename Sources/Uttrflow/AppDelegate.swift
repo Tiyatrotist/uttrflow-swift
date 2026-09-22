@@ -2150,7 +2150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // Already on the clipboard, put there by the insertion floor before it reported failure.
             Task { await pipeline?.acknowledge() }
         case .showRecentDictations:
-            // The clipboard is what failed, so this opens the menu, where Recent has the words.
+            // Delivery was unconfirmed or the clipboard failed; Recent has the saved words.
             menuBar.openMenu()
         case .retryFromRecording:
             // The audio sits at the top of today's list with its own Retry.
