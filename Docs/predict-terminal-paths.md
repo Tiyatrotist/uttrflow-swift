@@ -20,8 +20,10 @@ that is missing today may exist tomorrow.
 
 Two rules decide what runs where:
 
-1. **A destructive line is never offered, in any field.** `DestructiveCommand.matches` is asked
-   of every line, whatever its evidence. The same test already keeps such a line out of the corpus
+1. **A destructive line is never offered, in any field.** `DestructiveCommand.matches` reads the
+   same parsed commands as the terminal path check and is asked of every line, whatever its evidence.
+   Unresolved shell syntax is refused in terminals; ordinary editor prose is not parsed as a terminal
+   command. The same test already keeps destructive lines out of the corpus
    (`CaptureGate`), so this only closes the lines the model writes and those remembered before the
    capture gate existed.
 2. **The path check runs only in a terminal**, meaning an application `TerminalApplications`
