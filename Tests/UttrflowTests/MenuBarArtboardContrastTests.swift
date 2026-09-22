@@ -51,8 +51,12 @@ struct MenuBarArtboardContrastTests {
         let nextRange = source.range(of: marker, range: menuStart.upperBound..<source.endIndex)
         let nextStart = nextRange?.lowerBound ?? source.endIndex
         let block = String(source[menuStart.upperBound..<nextStart])
-        let regex = NSRegularExpression(pattern: #"style="color:#([0-9A-Fa-f]{6})""#)
+        let regex = try? NSRegularExpression(pattern: #"style="color:#([0-9A-Fa-f]{6})""#)
         var inks: [UInt32] = []
+        guard let regex else {
+            Issue.record("color regex failed to compile")
+            return inks
+        }
         for match in regex.matches(in: block, range: NSRange(block.startIndex..., in: block)) {
             guard match.numberOfRanges >= 2,
                 let hexRange = Range(match.range(at: 1), in: block),
