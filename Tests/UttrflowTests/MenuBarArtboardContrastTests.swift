@@ -44,17 +44,14 @@ struct MenuBarArtboardContrastTests {
     /// Every `style="color:#RRGGBB"` in the attention menu; dots use `background:` and do not count.
     private static func attentionInks(in source: String) -> [UInt32] {
         let marker = "<div class=\"menu\">"
-        // The artboard holds two menus: ready then attention. The colour-bearing rows live in the
-        // second one, so skip past the first marker before slicing the block the regex scans.
         guard let readyStart = source.range(of: marker),
-              let attentionStart = source.range(of: marker, range: readyStart.upperBound..<source.endIndex)
+            let attentionStart = source.range(of: marker, range: readyStart.upperBound..<source.endIndex)
         else {
             Issue.record("attention menu block not found")
             return []
         }
-        // The attention menu is the last `<div class="menu">` in the artboard, so an end-of-file
-        // sentinel is fine when no further marker exists.
-        let endIndex = source.range(of: marker, range: attentionStart.upperBound..<source.endIndex)?.lowerBound
+        let endIndex =
+            source.range(of: marker, range: attentionStart.upperBound..<source.endIndex)?.lowerBound
             ?? source.endIndex
         let block = String(source[attentionStart.upperBound..<endIndex])
         let regex = try? NSRegularExpression(pattern: #"style="color:#([0-9A-Fa-f]{6})""#)
