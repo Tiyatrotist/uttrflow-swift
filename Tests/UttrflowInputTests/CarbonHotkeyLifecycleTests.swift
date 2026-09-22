@@ -11,6 +11,8 @@ struct CarbonHotkeyLifecycleTests {
     /// F13 and F15 with three modifiers: nothing on a stock Mac claims either.
     private let bound = HotkeyBinding(keyCode: 105, modifiers: [.control, .option, .shift])
     private let away = HotkeyBinding(keyCode: 113, modifiers: [.control, .option, .shift])
+    private let third = HotkeyBinding(keyCode: 109, modifiers: [.control, .option, .shift])
+    private let moved = HotkeyBinding(keyCode: 107, modifiers: [.control, .option, .shift])
 
     @Test("bind, change away, change back and activate leaves exactly one registration")
     func changeAwayAndBack() throws {
@@ -36,6 +38,33 @@ struct CarbonHotkeyLifecycleTests {
         await mainQueueDrained()
 
         try expectHeld(bound)
+    }
+
+    /// #142: this is the AppDelegate's claimed-shortcut restart cycle.
+    @Test("stop all then start all leaves every claimed binding held")
+    func stopAllThenStartAllLeavesEveryClaimedBindingHeld() throws {
+        let bindings = [bound, away, third]
+        var monitors = try startAll(bindings)
+        stopAll(monitors)
+        monitors = try startAll(bindings)
+        defer { stopAll(monitors) }
+
+        for binding in bindings { try expectHeld(binding) }
+    }
+
+    /// A changed claimed shortcut must free the old key and hold the new one.
+    @Test("stop all then start all with a changed binding")
+    func stopAllThenStartAllWithAChangedBinding() throws {
+        let previous = [bound, away]
+        var monitors = try startAll(previous)
+        stopAll(monitors)
+
+        let current = [third, moved]
+        monitors = try startAll(current)
+        defer { stopAll(monitors) }
+
+        for binding in previous { try expectFree(binding) }
+        for binding in current { try expectHeld(binding) }
     }
 
     /// Stops on another thread while the main thread waits, so a deferred unregister has not run yet.
@@ -65,5 +94,30 @@ struct CarbonHotkeyLifecycleTests {
         #expect(throws: HotkeyError.shortcutUnavailable) {
             try intruder.start(binding: binding)
         }
+    }
+
+    private func expectFree(_ binding: HotkeyBinding) throws {
+        let intruder = CarbonHotkeyMonitor()
+        defer { intruder.stop() }
+        try intruder.start(binding: binding)
+    }
+
+    private func startAll(_ bindings: [HotkeyBinding]) throws -> [CarbonHotkeyMonitor] {
+        var monitors: [CarbonHotkeyMonitor] = []
+        do {
+            for binding in bindings {
+                let monitor = CarbonHotkeyMonitor()
+                try monitor.start(binding: binding)
+                monitors.append(monitor)
+            }
+            return monitors
+        } catch {
+            stopAll(monitors)
+            throw error
+        }
+    }
+
+    private func stopAll(_ monitors: [CarbonHotkeyMonitor]) {
+        for monitor in monitors { monitor.stop() }
     }
 }
