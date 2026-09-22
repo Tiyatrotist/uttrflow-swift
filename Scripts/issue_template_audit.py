@@ -14,8 +14,8 @@ the contributor to name another product — "other apps", "what tools do you use
 alternatives" — because the answer would be the kind of identifying detail the rule
 forbids, and the question itself is what invites it.
 
-The rule is not that the form may not mention other products; it is that the form must not
-*ask for them*. A field whose label says "What you do today" and whose description says
+The rule is not that the form may not mention another product; it is that the form must
+not *ask for one*. A field whose label says "What you do today" and whose description says
 "the capability or workflow you reach for" passes: the contributor can write "I use a
 separate text-expansion tool" or "I type it by hand", both of which are generic. A field
 whose description says "Including other apps" fails: a reasonable contributor reads it
@@ -24,6 +24,11 @@ maintainer saw it.
 
 The audit also requires a publication warning near any field whose id asks what the
 contributor does today, so the rule reaches them at the moment they are about to write.
+
+The template format is a constrained slice of YAML, and a full parser would pull a
+runtime dependency into every gate run. The script reads the YAML line by line, picking
+out the keys it cares about (`type`, `id`, `attributes.{label,description,placeholder,
+value}`) by indentation, which is the only part of the format the form uses.
 """
 
 import argparse
@@ -31,16 +36,10 @@ import os
 import re
 import sys
 
-try:
-    import yaml
-except ImportError:
-    sys.exit("issue template audit: PyYAML is required (pip install PyYAML).")
-
 TEMPLATES_DIR = ".github/ISSUE_TEMPLATE"
 
-# Phrases that ask the contributor to name another product. Each must be a regex that
-# matches inside a single sentence, because the matches are reported with the line and
-# the surrounding sentence as the location.
+# Phrases that ask the contributor to name another product. Each matches inside a single
+# sentence, because the matches are reported with the surrounding text as the location.
 INVITING = (
     re.compile(r"\bother apps?\b", re.IGNORECASE),
     re.compile(r"\bapps?\s+(?:you|that|which|i\s+use|i\s+have)\b", re.IGNORECASE),
@@ -62,7 +61,9 @@ INVITING = (
 # A field whose id asks what the contributor does today needs a publication warning
 # beside it: the rule reaches the contributor at the moment they are about to write,
 # not after the issue is filed.
-WORKFLOW_FIELDS = re.compile(r"\b(?:alternative|alternatives|instead|currently|today|workflow)\b", re.IGNORECASE)
+WORKFLOW_FIELDS = re.compile(
+    r"\b(?:alternative|alternatives|instead|currently|today|workflow)\b", re.IGNORECASE
+)
 
 # Phrases that mark a markdown block as a publication warning. The wording can vary, but
 # the content must reach the rule in plain language, so the list is the bar rather than
@@ -71,25 +72,138 @@ WORKFLOW_FIELDS = re.compile(r"\b(?:alternative|alternatives|instead|currently|t
 WARNING = (
     re.compile(r"\bpublication note\b", re.IGNORECASE),
     re.compile(r"\bmay not be published\b", re.IGNORECASE),
-    re.compile(r"\bdo not (?:name|publish|describe|include|quote|screenshot|link)\b", re.IGNORECASE),
+    re.compile(
+        r"\bdo not (?:name|publish|describe|include|quote|screenshot|link)\b",
+        re.IGNORECASE,
+    ),
     re.compile(r"\bno (?:screenshots?|links?|quotes?|pricing|names?)\b", re.IGNORECASE),
     re.compile(r"\bidentifying detail\b", re.IGNORECASE),
     re.compile(r"\bdisclosure rule\b", re.IGNORECASE),
 )
 
+# YAML extraction. The format used by every template here is a list of body items, each
+# with a `type`, an optional `id`, and an `attributes` map. Within `attributes`, the keys
+# we care about are `label`, `description`, `placeholder` and `value` (the last for
+# `markdown` blocks). A multi-line value is a `|` block scalar, indented two spaces past
+# its key. These patterns read the values as raw text — no parsing of escapes or nested
+# types — because the audit only inspects strings.
 
-def field_text(item):
+FIELD_TYPES = ("textarea", "input")
+
+KEY_VALUE = re.compile(r"^(\s*)([a-zA-Z_][a-zA-Z0-9_]*):\s*(.*)$")
+BLOCK_SCALAR = re.compile(r"^(\s*)([a-zA-Z_][a-zA-Z0-9_]*):\s*[|>][+-]?\s*$")
+
+
+def read_text(path):
+    """Yields (line_number, line_text) for the file at `path`."""
+    with open(path, errors="ignore") as handle:
+        for number, line in enumerate(handle, start=1):
+            yield number, line.rstrip("\n")
+
+
+def parse_yaml(path):
+    """Yields one record per `body` item in the template, each a dict of fields.
+
+    Records are returned in document order. A record without a `type` is skipped, as is
+    one whose type is not `textarea`, `input` or `markdown` — the audit only inspects
+    those three. Indentation-based parsing: a new top-level key (no leading whitespace)
+    starts a new section, and a `body` section is the only one it reads.
+    """
+    in_body = False
+    record = None
+    block_key = None
+    block_indent = None
+    block_lines = []
+
+    def close_block():
+        nonlocal block_key, block_indent, block_lines
+        if record is not None and block_key:
+            record[block_key] = "\n".join(block_lines).rstrip()
+        block_key = None
+        block_indent = None
+        block_lines = []
+
+    def leading_spaces(text):
+        return len(text) - len(text.lstrip(" "))
+
+    for number, line in read_text(path):
+        if not line.strip():
+            continue
+        indent = leading_spaces(line)
+        if not in_body:
+            if indent == 0 and line.startswith("body:"):
+                in_body = True
+            continue
+        if indent == 0:
+            # A new top-level key ends the body section.
+            close_block()
+            if record is not None:
+                yield record
+                record = None
+            in_body = False
+            continue
+        # A new list item under `body:` starts a new record.
+        if line.startswith("  - ") or (indent == 2 and line.startswith("- ")):
+            close_block()
+            if record is not None:
+                yield record
+            record = {"__line": number}
+            tail = line.lstrip(" ")[2:]  # drop "- "
+            if ":" in tail:
+                key, _, value = tail.partition(":")
+                record[key.strip()] = value.strip()
+            continue
+        # A key under the current list item, or nested under one of its keys.
+        if indent in (4, 6):
+            stripped = line.lstrip(" ")
+            match = BLOCK_SCALAR.match(stripped)
+            if match:
+                close_block()
+                block_key = match.group(2)
+                block_indent = indent
+                block_lines = []
+                continue
+            match = KEY_VALUE.match(stripped)
+            if match and record is not None:
+                close_block()
+                key, value = match.group(2), match.group(3).strip()
+                record[key] = value
+                continue
+        # Continuation of an indented block scalar. The scalar's content is indented
+        # strictly past the key, and the parser collects lines until indentation drops
+        # back to the key's level.
+        if block_key is not None and indent > block_indent:
+            block_lines.append(line[block_indent + 2:])
+            continue
+        # Anything else ends the current block scalar.
+        close_block()
+    close_block()
+    if record is not None:
+        yield record
+
+
+def record_text(record, *keys):
+    """Joins the named keys' values, skipping missing ones, for one audit decision."""
+    parts = []
+    for key in keys:
+        value = record.get(key)
+        if value:
+            parts.append(value)
+    return "\n".join(parts)
+
+
+def field_text(record):
     """Every word a contributor reads before they fill in a textarea or input."""
-    attributes = item.get("attributes") or {}
-    parts = [item.get("id") or "", attributes.get("label") or ""]
-    for key in ("description", "placeholder"):
-        if attributes.get(key):
-            parts.append(attributes[key])
-    return "\n".join(filter(None, parts))
+    return record_text(record, "id", "label", "description", "placeholder")
+
+
+def markdown_text(record):
+    """The rendered markdown of a `type: markdown` block."""
+    return record_text(record, "value")
 
 
 def inviting_in(text):
-    """Yields one matched phrase per regex; one finding per field collects them all."""
+    """Yields one matched phrase per regex; the audit collects them into one finding."""
     seen = set()
     for pattern in INVITING:
         match = pattern.search(text)
@@ -104,81 +218,37 @@ def warning_in(text):
 
 
 def scan_template(path):
-    """Yields (path, line, finding) for each violation in one template.
-
-    `line` is the 1-indexed line in the rendered YAML where the offending text begins,
-    reported so the message points at the field rather than at the script.
-    """
-    try:
-        with open(path, errors="ignore") as handle:
-            document = yaml.safe_load(handle.read())
-    except yaml.YAMLError as error:
-        yield path, 0, f"could not be parsed as YAML ({error})"
-        return
-    if not isinstance(document, dict) or not isinstance(document.get("body"), list):
-        # A file under `.github/ISSUE_TEMPLATE/` without a `body` list is the form
-        # chooser config (`config.yml`) or a link, not a contributor form, so it does
-        # not invite content and is not what this audit polices.
-        return
-
+    """Yields (line, finding) for each violation in one template."""
     last_warning_line = 0
-    body = document["body"]
-    for index, item in enumerate(body):
-        kind = item.get("type")
+    for record in parse_yaml(path):
+        kind = record.get("type")
         if kind == "markdown":
-            value = (item.get("attributes") or {}).get("value") or ""
-            if warning_in(value):
-                # Mark the line where the warning began, so the next workflow field can
-                # say whether the warning came before it in the rendered form.
-                line = value_line(path, value)
-                last_warning_line = max(last_warning_line, line)
+            value = markdown_text(record)
+            if value and warning_in(value):
+                last_warning_line = max(last_warning_line, record["__line"])
             continue
-        if kind not in ("textarea", "input"):
+        if kind not in FIELD_TYPES:
             continue
-        field_id = item.get("id") or f"(body[{index}])"
-        text = field_text(item)
+        field_id = record.get("id") or "(unlabeled)"
+        text = field_text(record)
         if not text:
             continue
         matches = list(inviting_in(text))
         if matches:
             quoted = ", ".join(f"`{phrase}`" for phrase in matches)
-            yield path, attribute_line(path, item), (
+            yield record["__line"], (
                 f"field `{field_id}` invites product names ({quoted})"
             )
         if kind == "textarea" and WORKFLOW_FIELDS.search(field_id):
             if last_warning_line == 0:
-                yield path, attribute_line(path, item), (
+                yield record["__line"], (
                     f"field `{field_id}` asks what the contributor does today "
                     "but the template has no publication warning above it"
                 )
 
 
-def attribute_line(path, item):
-    """The rendered-YAML line where the field's attributes begin."""
-    attributes = item.get("attributes") or {}
-    label = attributes.get("label") or item.get("id") or ""
-    needle = label.splitlines()[0].strip()
-    if not needle:
-        needle = (attributes.get("description") or "").splitlines()[0].strip()
-    with open(path, errors="ignore") as handle:
-        for number, line in enumerate(handle, start=1):
-            if needle and needle in line:
-                return number
-    return 0
-
-
-def value_line(path, value):
-    """The rendered-YAML line where a markdown block's value begins."""
-    needle = value.splitlines()[0].strip()
-    with open(path, errors="ignore") as handle:
-        for number, line in enumerate(handle, start=1):
-            if needle and needle in line:
-                return number
-    return 0
-
-
 def scan_tree():
-    """Returns the list of findings for every template under `.github/ISSUE_TEMPLATE/`."""
+    """Returns the list of (path, line, finding) for every template under templates dir."""
     if not os.path.isdir(TEMPLATES_DIR):
         return [(TEMPLATES_DIR, 0, f"`{TEMPLATES_DIR}` is not a directory in this tree")]
     findings = []
@@ -188,7 +258,8 @@ def scan_tree():
         path = os.path.join(TEMPLATES_DIR, name)
         if not os.path.isfile(path):
             continue
-        findings.extend(scan_template(path))
+        for line, finding in scan_template(path):
+            findings.append((path, line, finding))
     return findings
 
 
@@ -225,13 +296,10 @@ def report(findings):
 def self_test():
     """Run invented templates through the scan; print any that misfire; return their count.
 
-    The fixtures live alongside this file so the test is reproducible from a checkout.
-    Each entry is (filename, yaml_text, expected_finding_count).
+    Each fixture is written into the templates directory for the duration of the run,
+    parsed by the same code path `make verify` will exercise, and removed afterwards.
     """
-    fixtures = FIXTURES_DIR
-    if not os.path.isdir(fixtures):
-        print(f"  ✗ self-test: `{fixtures}` is not a directory", file=sys.stderr)
-        return 1
+    fixtures = TEMPLATES_DIR
     wrong = 0
     for name, text, expected in SELF_TEST_FIXTURES:
         path = os.path.join(fixtures, name)
@@ -248,8 +316,6 @@ def self_test():
     return wrong
 
 
-# A self-test fixture is written into a scratch directory under TEMPLATES_DIR for the
-# duration of the run. Each row is a (filename, yaml_text, expected_finding_count) tuple.
 SELF_TEST_FIXTURES = (
     (
         "_audit_fixture_passing.yml",
@@ -306,8 +372,6 @@ SELF_TEST_FIXTURES = (
         0,
     ),
 )
-
-FIXTURES_DIR = os.path.join(".github", "ISSUE_TEMPLATE")
 
 
 def main():
