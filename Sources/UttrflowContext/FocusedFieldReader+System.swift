@@ -198,7 +198,7 @@ public enum FocusedFieldReader {
         return CGRect(origin: origin, size: size)
     }
 
-    /// The field's own frame for the snapshot, omitted when it is actually the caret's frame the host parks at the caret for input methods.
+    /// The field's frame for the snapshot, returned only when the host published one wider than a caret.
     private static func fieldFrame(of field: AXUIElement) -> CGRect? {
         guard let frame = frame(of: field), !FocusedFieldSnapshot.isCaretShaped(frame)
         else { return nil }
