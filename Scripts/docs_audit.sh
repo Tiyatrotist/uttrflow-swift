@@ -58,6 +58,10 @@ check_claude_md_delegation() {
             claude_md_problem="CLAUDE.md is a symlink, but to '$target', not AGENTS.md"
             return 1
         fi
+        if [[ ! -e "$root/AGENTS.md" ]]; then
+            claude_md_problem="CLAUDE.md is a symlink to AGENTS.md, but $root/AGENTS.md is not there"
+            return 1
+        fi
         return 0
     fi
     local first
@@ -68,6 +72,10 @@ check_claude_md_delegation() {
         else
             claude_md_problem="CLAUDE.md is neither an '@AGENTS.md' import nor a symlink to AGENTS.md (first non-blank, non-comment line: '$first')"
         fi
+        return 1
+    fi
+    if [[ ! -e "$root/AGENTS.md" ]]; then
+        claude_md_problem="CLAUDE.md imports AGENTS.md, but $root/AGENTS.md is not there"
         return 1
     fi
     return 0
@@ -88,6 +96,7 @@ if [[ "${1:-}" == "--self-test" ]]; then
         "prose-blurb:prose-blurb:Read AGENTS.md for the rules.\\n:1"
         "empty:empty::1"
         "hash-only:hash-only:# heading\\n:1"
+        "missing-target:missing-target:@AGENTS.md\\n:1"
     )
 
     printf 'CLAUDE.md delegation fixture\n'
@@ -96,11 +105,11 @@ if [[ "${1:-}" == "--self-test" ]]; then
         IFS=':' read -r label slug body expect_fail <<<"$case"
         case_dir="$work/$slug"
         mkdir -p "$case_dir"
-        : > "$case_dir/AGENTS.md"
         case "$label" in
             no-file) ;;
-            symlink) ln -s AGENTS.md "$case_dir/CLAUDE.md" ;;
-            *) printf '%b' "$body" > "$case_dir/CLAUDE.md" ;;
+            missing-target) printf '%b' "$body" > "$case_dir/CLAUDE.md" ;;
+            symlink) : > "$case_dir/AGENTS.md"; ln -s AGENTS.md "$case_dir/CLAUDE.md" ;;
+            *) : > "$case_dir/AGENTS.md"; printf '%b' "$body" > "$case_dir/CLAUDE.md" ;;
         esac
 
         if check_claude_md_delegation "$case_dir"; then
