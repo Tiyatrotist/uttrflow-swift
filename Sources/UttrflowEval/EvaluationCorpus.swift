@@ -212,6 +212,12 @@ public enum EvaluationCorpus {
             mustNotAdd: ["40"]
         ),
         .init(
+            id: "signed-temperature", category: .everyday,
+            spoken: "temperature fell to -5 degrees overnight",
+            expected: "Temperature fell to -5 degrees overnight.",
+            mustKeep: ["-5", "degrees"]
+        ),
+        .init(
             id: "number-correction-with-unit", category: .everyday,
             spoken: "we need twelve boxes i mean fifteen boxes",
             expected: "We need 15 boxes.",
