@@ -23,11 +23,21 @@
 # this file exist, does this link resolve, is this number still true — and nothing about
 # whether the prose around them is accurate, which no script can answer. It needs no build.
 #
-# Usage:  ./Scripts/docs_audit.sh        (belongs in `make verify`, ahead of the build)
+# Usage:  ./Scripts/docs_audit.sh [--self-test]  (belongs in `make verify`, ahead of the build)
 set -euo pipefail
 
 PACKAGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PACKAGE_ROOT"
+
+SELF_TEST=0
+if [[ "${1:-}" == "--self-test" ]]; then
+    SELF_TEST=1
+    shift
+fi
+if [[ "$#" -ne 0 ]]; then
+    printf 'usage: %s [--self-test]\n' "$0" >&2
+    exit 2
+fi
 
 failures=0
 
@@ -41,6 +51,126 @@ fail() {
 }
 
 pass() { printf '  ✓ %s\n' "$1"; }
+
+changelog_release_bullet_findings() {
+    read -r -d '' CHANGELOG_PROGRAM <<'PYTHON' || true
+import re
+import sys
+
+heading = re.compile(r"^## \[([^\]]+)\]")
+current = None
+for number, line in enumerate(open("CHANGELOG.md", errors="ignore"), 1):
+    match = heading.match(line)
+    if match:
+        current = match.group(1)
+        continue
+    if current and current != "Unreleased" and line.startswith("- "):
+        print(f"{current}\t{number}\t{line.rstrip()}")
+PYTHON
+
+    python3 -c "$CHANGELOG_PROGRAM" |
+    while IFS=$'\t' read -r version line bullet; do
+        [[ -n "$version" ]] || continue
+        tag="v$version"
+        tag_commit="$(git rev-parse --verify --quiet "$tag^{commit}" || true)"
+        [[ -n "$tag_commit" ]] || continue
+
+        origin="$(
+            git blame --line-porcelain -L "$line,$line" -- CHANGELOG.md |
+                sed -n '1s/ .*//p'
+        )"
+        [[ -n "$origin" && "$origin" != 00000000* ]] || continue
+
+        if ! git merge-base --is-ancestor "$origin" "$tag_commit"; then
+            printf '%s:%s  %s  (line added by %s after %s)\n' \
+                "CHANGELOG.md" "$line" "$bullet" "$origin" "$tag"
+        fi
+    done
+}
+
+run_changelog_self_test() {
+    printf 'CHANGELOG release-bullet fixture\n'
+
+    local scratch
+    scratch="$(mktemp -d)"
+    trap 'rm -rf "$scratch"' RETURN
+
+    write_changelog() {
+        local mode="$1"
+        cat >CHANGELOG.md <<'EOF'
+# Changelog
+
+## [Unreleased]
+
+### Fixed
+EOF
+        if [[ "$mode" == "unreleased" ]]; then
+            cat >>CHANGELOG.md <<'EOF'
+- **A post-tag fix waits here.** It belongs to the next release (#2).
+EOF
+        fi
+        cat >>CHANGELOG.md <<'EOF'
+
+## [2026.9.14] — 2026-09-14
+
+### Fixed
+- **The shipped fix.** It is part of the tagged build (#1).
+EOF
+        if [[ "$mode" == "released" ]]; then
+            cat >>CHANGELOG.md <<'EOF'
+- **A post-tag fix is misfiled here.** It is not part of the tagged build (#2).
+EOF
+        fi
+    }
+
+    (
+        set -euo pipefail
+        cd "$scratch"
+        git init -q
+        git config user.name "Docs Audit"
+        git config user.email "docs-audit@example.invalid"
+
+        write_changelog tagged
+        git add CHANGELOG.md
+        git commit -qm "Release notes"
+        git tag v2026.9.14
+
+        write_changelog unreleased
+        git add CHANGELOG.md
+        git commit -qm "Keep next fix unreleased"
+        changelog_release_bullet_findings
+    ) >"$scratch/unreleased.out"
+
+    if [[ -s "$scratch/unreleased.out" ]]; then
+        fail "an Unreleased post-tag bullet failed the fixture" \
+            "The release-bullet check must allow fixes queued for the next release." \
+            "" $'\n'"$(cat "$scratch/unreleased.out")"
+    else
+        pass "post-tag bullet under Unreleased passes"
+    fi
+
+    (
+        set -euo pipefail
+        cd "$scratch"
+        git reset -q --hard v2026.9.14
+        write_changelog released
+        git add CHANGELOG.md
+        git commit -qm "Misfile next fix under old release"
+        changelog_release_bullet_findings
+    ) >"$scratch/released.out"
+
+    if [[ -s "$scratch/released.out" ]]; then
+        pass "post-tag bullet under a tagged release fails"
+    else
+        fail "a released-section post-tag bullet passed the fixture" \
+            "The fixture recreated issue #1123, but the audit did not report it."
+    fi
+}
+
+if [[ "$SELF_TEST" -eq 1 ]]; then
+    run_changelog_self_test
+    printf '\n'
+fi
 
 # ---------------------------------------------------------------------------
 # 0. The scan must actually be looking at something.
@@ -316,10 +446,30 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 4. A tagged release's bullets must have existed by the tag.
+# ---------------------------------------------------------------------------
+#
+# Calendar release sections are a promise about the build named by their tag. Corrections to
+# prose or link definitions can happen later, but a new bullet under `Fixed`, `Added`, `Changed`
+# or `Security` says that tagged build shipped work it did not contain. Issue #1123 was exactly
+# that: post-tag fixes were moved out of `Unreleased` and into the previous release's section.
+printf '\nCHANGELOG release bullets\n'
+
+post_tag_bullets="$(changelog_release_bullet_findings)"
+if [[ -n "${post_tag_bullets//[[:space:]]/}" ]]; then
+    fail "a tagged release section contains a bullet added after its tag" \
+        "Move the entry back under Unreleased, or cut a new release whose tag contains it." \
+        "Typos and link corrections are still allowed; this check watches bullet claims." \
+        "" $'\n'"$post_tag_bullets"
+else
+    pass "every bullet in a tagged release section existed by that tag"
+fi
+
+# ---------------------------------------------------------------------------
 printf '\n'
 if [[ "$failures" -gt 0 ]]; then
     printf 'docs audit: %s check(s) failed. The documentation contradicts the tree.\n\n' "$failures" >&2
     exit 1
 fi
 
-printf 'docs audit: the paths, links and test count in %s documents all check out.\n\n' "$DOC_COUNT"
+printf 'docs audit: the paths, links, test count and release bullets in %s documents all check out.\n\n' "$DOC_COUNT"

@@ -64,7 +64,7 @@ store-permissions: ## Prove nothing writes a local store's files except through 
 
 .PHONY: docs-audit
 docs-audit: ## Prove the documentation still describes this tree. Needs no build.
-	./Scripts/docs_audit.sh
+	./Scripts/docs_audit.sh --self-test
 
 .PHONY: pii-audit
 pii-audit: ## Prove no personal data is in the tree. Needs no build.
