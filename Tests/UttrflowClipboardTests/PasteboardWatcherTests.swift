@@ -334,6 +334,18 @@ struct PasteboardWatcherTests {
         #expect(await watcher.newClip(at: noon)?.clip.kind == .image)
     }
 
+    @Test("does not keep a concealed picture")
+    func concealedPictureIsSkipped() async {
+        let clipboard = FakeClipboard()
+        let watcher = watcher(clipboard)
+
+        clipboard.write(
+            nil, picture: (data: Data([0x89, 0x50, 0x4E, 0x47]), width: 2, height: 2),
+            marked: .concealed)
+
+        #expect(await watcher.newClip(at: noon) == nil)
+    }
+
     @Test("still ignores its own write when the copy arrives first")
     func announcementSurvivesUntilItsOwnWriteArrives() async {
         let clipboard = FakeClipboard()
