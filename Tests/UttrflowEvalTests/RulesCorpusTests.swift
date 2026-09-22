@@ -55,6 +55,7 @@ struct RulesCorpusTests {
         "number-invoice-not-an-item", "number-gate-not-an-item", "number-platform-not-an-item",
         "number-flight-not-an-item", "number-room-not-an-item", "number-press-not-an-item",
         "number-jersey-not-an-item",
+        "hindi-translation-refused", "hindi-worked-example-refused",
         "hinglish-late", "hinglish-trailing-english", "hinglish-false-start", "hinglish-request",
         "hinglish-question", "hinglish-apology-kept",
     ]

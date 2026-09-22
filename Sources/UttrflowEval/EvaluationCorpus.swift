@@ -609,6 +609,20 @@ public enum EvaluationCorpus {
 
     static let multilingual: [EvaluationCase] = [
         .init(
+            id: "hindi-translation-refused", category: .multilingual, language: .hindi,
+            spoken: "मीटिंग चार बजे है, नहीं नहीं, पांच बजे है.",
+            expected: "Meeting chaar baje hai, nahi nahi, paanch baje hai.",
+            mustKeep: ["nahi", "paanch"],
+            mustNotAdd: ["o'clock"]
+        ),
+        .init(
+            id: "hindi-worked-example-refused", category: .multilingual, language: .hindi,
+            spoken: "मतलब मैं कल आएगा, हाँ, अच्छा तो फिर मिलते हैं.",
+            expected: "Matlab main kal aayega, haan, accha to phir milte hain.",
+            mustKeep: ["kal", "milte"],
+            mustNotAdd: ["standup", "deployment"]
+        ),
+        .init(
             id: "hinglish-late", category: .multilingual, language: .hindi,
             spoken: "मैं meeting के लिए बीस मिनट late हो जाऊंगा",
             expected: "Main meeting ke liye bees minute late ho jaunga.",
