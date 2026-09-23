@@ -43,7 +43,8 @@ public final class ManualClock: Clock, Sendable {
         /// Sleepers cancelled before they were installed, which a task group does routinely.
         var cancelledBeforeSleeping: Set<Int> = []
         var nextID = 0
-        var parkedAdvance: ParkedAdvance?
+        /// Every advance currently parked, oldest first; a sleep installing consumes only the first.
+        var parkedAdvances: [ParkedAdvance] = []
     }
 
     /// Moves the clock and collects what that woke, with the lock already held.
@@ -59,6 +60,9 @@ public final class ManualClock: Clock, Sendable {
     public init() {}
 
     public var now: Instant { state.withLock(\.now) }
+
+    /// How many advances are currently parked, waiting for something to sleep; for a test to synchronise on.
+    public var parkedAdvanceCount: Int { state.withLock { $0.parkedAdvances.count } }
 
     public var minimumResolution: Duration { .nanoseconds(1) }
 
@@ -79,8 +83,8 @@ public final class ManualClock: Clock, Sendable {
                 let due = state.withLock { state -> [Sleeper]? in
                     guard !state.sleepers.isEmpty else {
                         if Task.isCancelled { return [] }
-                        state.parkedAdvance = ParkedAdvance(
-                            id: id, duration: duration, continuation: continuation)
+                        state.parkedAdvances.append(
+                            ParkedAdvance(id: id, duration: duration, continuation: continuation))
                         return nil
                     }
                     return Self.advance(&state, by: duration)
@@ -91,9 +95,10 @@ public final class ManualClock: Clock, Sendable {
             }
         } onCancel: {
             let parked = state.withLock { state -> ParkedAdvance? in
-                guard state.parkedAdvance?.id == id else { return nil }
-                defer { state.parkedAdvance = nil }
-                return state.parkedAdvance
+                guard let index = state.parkedAdvances.firstIndex(where: { $0.id == id }) else {
+                    return nil
+                }
+                return state.parkedAdvances.remove(at: index)
             }
             parked?.continuation.resume()
         }
@@ -133,8 +138,8 @@ public final class ManualClock: Clock, Sendable {
                     state.sleepers.append(
                         Sleeper(id: id, deadline: deadline, continuation: continuation))
                     // Still holding the lock, so nothing can be removed in between.
-                    if let parked = state.parkedAdvance {
-                        state.parkedAdvance = nil
+                    if !state.parkedAdvances.isEmpty {
+                        let parked = state.parkedAdvances.removeFirst()
                         woken = Self.advance(&state, by: parked.duration)
                         waiting = parked.continuation
                     }
