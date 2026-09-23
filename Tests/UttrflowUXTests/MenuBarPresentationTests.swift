@@ -430,6 +430,23 @@ struct MenuBarShortcutTests {
         #expect(clipboard.shortcut?.modifiers == [.command, .shift])
     }
 
+    /// #142: a printed shortcut is a promise that pressing it will reach Uttrflow.
+    @Test("an unarmed clipboard shortcut is not advertised")
+    func unarmedClipboardShortcut() {
+        let shown = MenuBarPresenter.present(MenuBarState(unarmedShortcuts: [.clipboard]))
+        guard
+            case .command(let clipboard)? = shown.items.first(where: {
+                if case .command(let command) = $0 { return command.intent == .openClipboard }
+                return false
+            })
+        else {
+            Issue.record("the menu has no way to the clipboard")
+            return
+        }
+        #expect(clipboard.title == "Clipboard")
+        #expect(clipboard.shortcut == nil)
+    }
+
     /// Shift is named rather than left to a set comparison, which passes even when it is ignored.
     @Test("shift is a modifier this model can express")
     func shiftIsExpressible() {

@@ -336,15 +336,21 @@ struct NamedSecretScan {
     private mutating func closingQuote(from open: TextPosition, quote: UInt8) -> String.Index? {
         if let cached = quotedRun, cached.open == open.index { return cached.end }
         var index = text.index(after: open.index)
+        var backslashes = 0
         var close: String.Index?
         while index < text.endIndex {
             read += 1
             let character = text[index]
-            if character.loneASCII == quote {
+            if character.loneASCII == quote, backslashes.isMultiple(of: 2) {
                 close = index > text.index(after: open.index) ? index : nil
                 break
             }
             if character == "\n" { break }
+            if character.loneASCII == UInt8(ascii: "\\") {
+                backslashes += 1
+            } else {
+                backslashes = 0
+            }
             index = text.index(after: index)
         }
         quotedRun = (open.index, close)
@@ -470,6 +476,9 @@ struct NamedSecretScan {
 
 /// Unicode word boundaries, which `\b` means, found forward once and asked about in increasing order.
 struct WordBreaks {
+    /// From one boundary to the next: a character, then every further one the boundary rules keep in the same word.
+    nonisolated(unsafe) private static let toNextBoundary = #/(?s).(?:\B.)*/#
+
     private let text: String
     /// Boundaries at or after the earliest place still asked about, in order.
     private var found: [String.Index]
@@ -483,11 +492,85 @@ struct WordBreaks {
     mutating func isBoundary(_ index: String.Index, from floor: String.Index) -> Bool {
         while let last = found.last, last < index {
             if last < floor { found.removeAll(keepingCapacity: true) }
-            found.append(text._wordIndex(after: last))
+            found.append(Self.boundary(in: text, after: last))
         }
         if let kept = found.firstIndex(where: { $0 >= floor }), kept > 0 {
             found.removeFirst(kept)
         }
         return found.contains(index)
+    }
+
+    /// The next boundary after one, read from the ASCII rules where they decide it and from the pattern otherwise. See Docs/clipboard-secrets.md.
+    private static func boundary(in text: String, after start: String.Index) -> String.Index {
+        asciiBoundary(in: text, after: start)
+            ?? text[start...].prefixMatch(of: toNextBoundary)?.range.upperBound ?? text.endIndex
+    }
+
+    /// The next boundary read from the ASCII rules, or nothing when a character the rules would weigh is not lone ASCII.
+    private static func asciiBoundary(in text: String, after start: String.Index) -> String.Index? {
+        guard start < text.endIndex, var previous = text[start].loneASCII.map(WordClass.init) else {
+            return nil
+        }
+        var beforeThat: WordClass?
+        var index = text.index(after: start)
+        while index < text.endIndex {
+            guard let byte = text[index].loneASCII else { return nil }
+            let current = WordClass(byte)
+            let after = text.index(after: index)
+            var following: WordClass?
+            // Only a joiner's two rules weigh the character after it, so nothing else pays for reading one.
+            if current.joins, after < text.endIndex {
+                guard let byte = text[after].loneASCII else { return nil }
+                following = WordClass(byte)
+            }
+            if !joins(beforeThat, previous, current, following) { return index }
+            beforeThat = previous
+            previous = current
+            index = after
+        }
+        return text.endIndex
+    }
+
+    /// Whether the word rules keep `current` in the same word as `previous`, given the character before it and the one after it.
+    private static func joins(
+        _ beforeThat: WordClass?,
+        _ previous: WordClass,
+        _ current: WordClass,
+        _ following: WordClass?
+    ) -> Bool {
+        switch (previous, current) {
+        case (.space, .space): return true
+        case (.letter, .letter), (.letter, .number), (.number, .letter), (.number, .number):
+            return true
+        case (.letter, .letterJoiner), (.letter, .bothJoiner): return following == .letter
+        case (.number, .numberJoiner), (.number, .bothJoiner): return following == .number
+        case (.letter, .underscore), (.number, .underscore), (.underscore, .underscore): return true
+        case (.underscore, .letter), (.underscore, .number): return true
+        case (.letterJoiner, .letter), (.bothJoiner, .letter): return beforeThat == .letter
+        case (.numberJoiner, .number), (.bothJoiner, .number): return beforeThat == .number
+        default: return false
+        }
+    }
+}
+
+/// What an ASCII character counts as to the word rules, which put every character the rules never join in one class.
+private enum WordClass {
+    case other, space, letter, number, underscore, letterJoiner, numberJoiner, bothJoiner
+
+    /// Whether this class can hold two words together, which is what makes the character after it worth reading.
+    var joins: Bool { self == .letterJoiner || self == .numberJoiner || self == .bothJoiner }
+
+    init(_ byte: UInt8) {
+        switch byte {
+        case UInt8(ascii: " "): self = .space
+        case UInt8(ascii: "_"): self = .underscore
+        case UInt8(ascii: ":"): self = .letterJoiner
+        case UInt8(ascii: "'"), UInt8(ascii: "."): self = .bothJoiner
+        case UInt8(ascii: ","), UInt8(ascii: ";"): self = .numberJoiner
+        case UInt8(ascii: "0")...UInt8(ascii: "9"): self = .number
+        case UInt8(ascii: "A")...UInt8(ascii: "Z"), UInt8(ascii: "a")...UInt8(ascii: "z"):
+            self = .letter
+        default: self = .other
+        }
     }
 }

@@ -35,6 +35,11 @@ private func writeWeights(
 /// The bytes ``writeTokenizer(into:)`` adds to a model's directory.
 private let tokenizerBytes = Int64(TokenizerAssets.fileNames.count)
 
+private func isExcludedFromBackup(_ url: URL) throws -> Bool {
+    let values = try url.resourceValues(forKeys: [.isExcludedFromBackupKey])
+    return values.isExcludedFromBackup == true
+}
+
 /// Runs against a real temporary directory, since the store's whole job is filesystem behaviour.
 @Suite("FileSystemSpeechModelStore")
 struct FileSystemSpeechModelStoreTests {
@@ -91,6 +96,19 @@ struct FileSystemSpeechModelStoreTests {
         #expect(store.isInstalled(.base))
         #expect(store.installedModels() == [.base])
         #expect(store.bytesOnDisk(.base) == Int64(weightFiles.count * 16) + tokenizerBytes)
+    }
+
+    @Test("installed models are kept out of backups")
+    func installedModelsAreExcludedFromBackup() async throws {
+        let sandbox = Sandbox()
+        let store = FileSystemSpeechModelStore(root: sandbox.root, download: writingDownloader())
+
+        let url = try await store.install(.base) { _ in }
+        let tokenizer = url.appending(path: TokenizerAssets.fileNames[0])
+
+        #expect(try isExcludedFromBackup(sandbox.root))
+        #expect(try isExcludedFromBackup(url))
+        #expect(try isExcludedFromBackup(tokenizer))
     }
 
     @Test("reports progress and always finishes at one")

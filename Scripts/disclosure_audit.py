@@ -75,6 +75,25 @@
 # No one of those holds on its own. The hooks are skipped by --no-verify, the workflow is
 # skipped by an admin merge, and the settings hook only binds agents on this machine. They
 # are layered because the ways around each one do not overlap.
+#
+# The settings hook finds this file through `git rev-parse --show-toplevel`, not through
+# CLAUDE_PROJECT_DIR, and the difference is not cosmetic. That variable holds the directory
+# the agent's session *started* in, which need not be this repository: a session opened
+# somewhere else and pointed at this checkout afterwards loads those settings while the
+# variable still names the other place. The interpolation then resolves to a path with no
+# Scripts/ in it, python exits on the missing file, and because a failed gate refuses the
+# command, every shell command in that session is blocked — git, gh, swift, all of it. The
+# gate stops being a check and becomes a wall, which is how it was found.
+#
+# --hook needs nothing from the filesystem but this file: it reads the payload on stdin and
+# matches it against the constants below, with no baseline and no git. So the work tree at
+# the current directory is enough to locate it, and CLAUDE_PROJECT_DIR stays as the fallback
+# for the case that has neither.
+#
+# What it must not do is pass the command through when it cannot find itself. The intercept
+# below matches `gh issue`, `gh pr` and `gh api`, and those publish to a named repository
+# from any directory at all — so "not in a work tree" is not the same as "nothing to
+# protect". Unresolved stays blocked, and blocked is the safe direction.
 
 import argparse
 import base64

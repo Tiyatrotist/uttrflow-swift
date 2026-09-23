@@ -153,6 +153,37 @@ struct PasteConfirmationTests {
         #expect(await confirming(SlowFocus(answer: "anything")).waitFor("") == .notReported)
     }
 
+    /// #1308: an ignored paste must not be reported as landed just because the old caret text already matched.
+    @Test("does not confirm a caret unchanged since before the paste, even when it already matched")
+    func refusesAnUnchangedPreExistingMatch() async {
+        let focus = SlowFocus(answer: "dictated words")
+
+        let outcome = await confirming(focus).waitFor("dictated words", before: .text("dictated words"))
+
+        #expect(outcome == .gaveUp(.milliseconds(10)))
+        #expect(InsertionArrival(outcome) == .unconfirmed)
+    }
+
+    /// A caret that changes after the paste, even to the same words, is genuine evidence it landed.
+    @Test("confirms once the caret changes, even when it settles back on words seen before the paste")
+    func confirmsOnceTheCaretActuallyChanges() async {
+        let focus = SlowFocus(answer: "dictated words", readsBeforeItLands: 2)
+
+        let outcome = await confirming(focus).waitFor("dictated words", before: .text("dictated words"))
+
+        #expect(outcome == .landed(.milliseconds(2)))
+    }
+
+    /// A `before` reading that did not already match must not stop an ordinary paste from confirming.
+    @Test("confirms normally when the words were not already at the caret before the paste")
+    func beforeThatDidNotMatchStillConfirms() async {
+        let focus = SlowFocus(answer: "dictated words")
+
+        let outcome = await confirming(focus).waitFor("dictated words", before: .text("something else"))
+
+        #expect(outcome == .landed(.milliseconds(1)))
+    }
+
     /// #213: the shipped budget and interval, against a read that costs more than the sleep before it.
     private func inALargeDocument(
         _ answer: String, landingAfter readsBeforeItLands: Int = 0

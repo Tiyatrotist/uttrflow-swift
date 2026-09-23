@@ -18,6 +18,10 @@ Three places make it true, from the most specific to the last resort.
 Snippet expansions are the user's own text and run after that last step, so a snippet the
 user wrote in Devanagari is inserted as written.
 
+Recognition still answers in Devanagari, and what that costs in decoder steps — with the options
+for decoding straight to Latin, and why none of them is taken — is measured in
+`Docs/speech-engines.md`.
+
 ## The romaniser
 
 `Sources/UttrflowCore/Script/Romaniser.swift` writes Devanagari the way Hinglish is typed in a

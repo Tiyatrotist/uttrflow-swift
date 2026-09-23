@@ -55,10 +55,6 @@ struct QuickPanelView: View {
         }
         // Closes a menu left open from the last showing; the panel is built once and shown many times.
         .onChange(of: openCount) { openMenu = nil }
-        // Spoken as well as drawn, since a copy-only choice closes the panel before focus reaches the bar.
-        .onChange(of: presentation.announcements) { old, new in
-            for line in new where !old.contains(line) { Self.announce(line) }
-        }
         .task(id: openCount) {
             query = presentation.query
             hovered = nil
@@ -154,7 +150,7 @@ struct QuickPanelView: View {
                 .onKeyPress(.downArrow) { send(.down) }
                 .onKeyPress(.return) { send(.return) }
                 .onKeyPress(.escape) { send(.escape) }
-                .onKeyPress(phases: .down) { commandKey($0) }
+                .onKeyPress(phases: .down) { keyPress($0) }
         }
     }
 
@@ -355,13 +351,6 @@ struct QuickPanelView: View {
             .padding(.bottom, 8)
     }
 
-    /// Posts one line to VoiceOver at high priority, so the panel closing does not cut it off.
-    private static func announce(_ line: String) {
-        var spoken = AttributedString(line)
-        spoken.accessibilitySpeechAnnouncementPriority = .high
-        AccessibilityNotification.Announcement(spoken).post()
-    }
-
     /// What the panel says when it could only copy; not an error, because the words are on the clipboard.
     private func noticeBar(_ notice: PanelNotice) -> some View {
         HStack(spacing: 7) {
@@ -531,6 +520,10 @@ struct QuickPanelView: View {
         .frame(width: 34, height: 24)
         .clipShape(.rect(cornerRadius: 4))
         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.panelLine, lineWidth: 1))
+        // Kicks the off-main decode on appearance and again if the row reuses the same view for a different file.
+        .task(id: file) {
+            PanelThumbnails.shared.prepare(file)
+        }
         .accessibilityHidden(true)
     }
 
@@ -658,6 +651,12 @@ struct QuickPanelView: View {
                         isDestructive && hoveredItem == action.id
                             ? Color.dockWarning : Color.panelLabel)
                 Spacer(minLength: 0)
+                // The chord is how the action is found without the pointer, so it is drawn beside it.
+                if let shortcut = action.shortcut {
+                    Text(shortcut.label)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.panelLabelDim)
+                }
             }
             .padding(.horizontal, 12)
             .frame(height: 30)
@@ -928,11 +927,24 @@ struct QuickPanelView: View {
     // MARK: - Keys
 
     private func send(_ key: PanelKey) -> KeyPress.Result {
+        // SwiftUI runs these before the field editor, so a composing input method would never see the key.
+        guard PanelComposition.panelMayTake(key, whileComposing: isComposing) else { return .ignored }
         relayKey(key)
         return .handled
     }
 
-    /// Every ⌘-chord in one handler; two `onKeyPress(phases:)` on one view do not compose.
+    /// Whether the field editor holds marked text, which is the one thing a key handler cannot read from the key.
+    @MainActor private var isComposing: Bool {
+        (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() ?? false
+    }
+
+    /// One handler for the chords and the long moves; two `onKeyPress(phases:)` on one view do not compose.
+    private func keyPress(_ press: KeyPress) -> KeyPress.Result {
+        let jumped = jumpKey(press)
+        return jumped == .handled ? jumped : commandKey(press)
+    }
+
+    /// Every ⌘-chord, in the order the panel claims them.
     private func commandKey(_ press: KeyPress) -> KeyPress.Result {
         guard press.modifiers.contains(.command) else { return .ignored }
         if press.characters == "z" {
@@ -941,10 +953,32 @@ struct QuickPanelView: View {
         }
         // ⌘⏎ pastes the words without the formatting: a modifier, not a mode.
         if press.key == .return {
-            relayKey(.returnPlain)
+            return send(.returnPlain)
+        }
+        if let intent = rowIntent(for: press) {
+            perform(intent)
             return .handled
         }
         return commandDigit(press)
+    }
+
+    /// What a ⌘ chord does to the highlighted row, which the presenter answers from that row's own actions.
+    private func rowIntent(for press: KeyPress) -> PanelIntent? {
+        guard let character = press.characters.lowercased().first else { return nil }
+        let chord = PanelChord(character, shifted: press.modifiers.contains(.shift))
+        return presentation.intent(for: chord)
+    }
+
+    /// The long moves through the list, which ↑↓ would take a thousand presses to make.
+    private func jumpKey(_ press: KeyPress) -> KeyPress.Result {
+        guard !press.modifiers.contains(.command) else { return .ignored }
+        switch press.key {
+        case .pageUp: return send(.jump(.pageUp))
+        case .pageDown: return send(.jump(.pageDown))
+        case .home: return send(.jump(.top))
+        case .end: return send(.jump(.bottom))
+        default: return .ignored
+        }
     }
 
     /// ⌘1–⌘9 pick a collection; anything else still reaches the field.
@@ -1090,9 +1124,9 @@ extension Color {
     static let panelCardHigh = Color(rgb: BrandPalette.Surface.raised)
     static let panelLine = Color(rgb: BrandPalette.Line.separator.dark)
     static let panelLabel = Color(rgb: BrandPalette.Text.primary.dark)
-    /// 7.4:1 on the panel.
+    /// 6.1:1 on the panel.
     static let panelLabelSoft = Color(rgb: BrandPalette.Text.muted.dark)
-    /// The dimmest grey in the design, for what the eye reaches only when it goes looking.
+    /// The dimmest grey words are allowed, for what the eye reaches only when it goes looking.
     static let panelLabelDim = Color(rgb: BrandPalette.Text.dim.dark)
     /// Below the dimmest grey, for the row glyph and the ⋯; both lift to ordinary grey when looked at.
     static let panelGhost = Color(rgb: BrandPalette.Text.ghost)

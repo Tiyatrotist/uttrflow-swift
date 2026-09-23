@@ -56,28 +56,52 @@ with a dictionary into a 400. Declining to send them costs no total, because
 `processingTotalMs` still times the whole journey. When the column gains the two names,
 `TelemetryStage.init(_:)` is the one place that changes.
 
-## Ranges are clamped, not refused
+## Counts are clamped, and a version is not
 
 The backend's Zod schema is `.strict()` and its table has `check` constraints: an
-out-of-range number is a 400 or a 500, and a report that cannot be sent is worse than one
-rounded into shape. `TelemetryLimit` names the three ranges once so the four types that
-enforce them cannot drift apart:
+out-of-range count or duration is a 400 or a 500, and for a measurement a report that
+cannot be sent is worse than one rounded into shape. `TelemetryLimit` names the ranges once
+so the four types that enforce them cannot drift apart:
 
 | limit         | range               | note                                    |
 |---------------|---------------------|-----------------------------------------|
 | `count`       | 0...2 147 483 647   | a non-negative 32-bit integer           |
 | `durationMs`  | 0...604 800 000     | a week; no honest measurement reaches it |
-| `versionPart` | 0...999             | each of the three version numbers       |
+| `versionPart` | 0...999             | a version's second and third number, and the macOS major version |
+| `versionYear` | 0...9999            | a version's first number, which is a year |
 
 Percentiles are never allowed below the one under them (p90 is raised to p50, p99 to
 p90), `cancelledCount` is capped at `dictationCount`, and a `Duration` is floored at zero
 so a clock stepping backwards mid-stage cannot produce a negative number that costs the
 whole report.
 
-A report is refused outright (the initialiser returns `nil`) only when the window did not
-advance or nothing happened in it: the table requires `window_ended_at > window_started_at`,
-and a report of no dictations is a request that costs the user's battery to tell the
-server nothing.
+### The version is refused, not clamped
+
+A version is not a quantity, and rounding one into range does not make it approximately
+right — it makes it another release's version, which a reader has no way to doubt. The app
+is versioned `YEAR.MONTH.DAY` with no leading zeros (`2026.9.14`, and `2026.9.14.1` for a
+second release that day, whose fourth part telemetry does not carry), so the first number
+is a four-digit year: clamped to `0...999` it read `999.9.14`, and every calendar release
+of every year read the same. `versionYear` is that first number's own range, wide enough
+for a four-digit year, and the other two parts stay on `versionPart` because a month and a
+day cannot reach 999 either way.
+
+So a version outside those ranges refuses the whole report rather than arriving as a
+different one. Version is the one field that separates one release's behaviour from
+another's: a report that cannot say which release it came from is worth less than no
+report, because it is counted against a release that did not produce it. The same holds
+for `osVersionMajor`, which rides the same `versionPart` range.
+
+**The backend has to agree, and it is a separate repository.** Its `app_version_major`
+column checks `between 0 and 999`, as does the ingest validator, so until both are widened
+to four digits a calendar version is a 400 rather than a wrong row. Nothing sends telemetry
+yet, so there is no window where reports are lost; wiring the collector up waits on that
+change.
+
+A report is refused outright (the initialiser returns `nil`) otherwise only when the window
+did not advance or nothing happened in it: the table requires
+`window_ended_at > window_started_at`, and a report of no dictations is a request that
+costs the user's battery to tell the server nothing.
 
 Optionals are omitted with `encodeIfPresent` rather than encoded as `null`, because the
 server's fields are `.optional()` and Zod refuses an explicit `null` for those. The

@@ -4,12 +4,12 @@
 session, read the profile — and a handful of rules it keeps while making them. The code
 says what each call does; this page says why the rules are the way they are.
 
-## A missing network is never a refusal
+## A missing response is never a refusal
 
-The transport throws only when a request did not happen. Every answer the server gave,
-including `401` and `502`, comes back as a response. That distinction is the offline
-promise: a Mac that cannot reach the server keeps its cached profile, and a Mac that has
-been *told* its session is over does not.
+The transport throws when no response arrived. Every answer the server gave, including
+`401` and `502`, comes back as a response. That distinction is the offline promise: a Mac
+that cannot reach the server keeps its cached profile, and a Mac that has been *told* its
+session is over does not.
 
 A `5xx` is deliberately not treated as unreachable. The server was reached and it
 failed; calling that "no connection" would send the user to check their Wi-Fi over an
@@ -25,6 +25,14 @@ Rotation means the previous refresh token is already dead once a new session arr
 storing the new one is the session, not housekeeping. A Keychain that refuses to store it
 fails the sign-in with `AccountError.sessionCouldNotBeKept`: an account that appears,
 works, and is gone at the next launch is worse than a reported failure.
+
+Refresh rotation is idempotent by attempt. The client sends an idempotency key with each
+refresh and reuses it after a transport failure, because the server may have accepted the
+old token and lost only the response. Within the server's retry window, the same old token
+and key answer with the same rotated session rather than turning a dropped response into a
+sign-out. If that ambiguous retry is refused, the client keeps the credential and reports a
+retryable network failure instead of clearing the session on an answer that might be an
+expired recovery window.
 
 ## Nothing is believed without a signature
 

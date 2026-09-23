@@ -99,13 +99,14 @@ public struct SystemEnvironmentReader: EnvironmentReading {
             && isDirectory.boolValue
     }
 
-    /// Every program on the search path.
+    /// Every program on the search path, up to `executableLimit` across every directory combined.
     private func executables() -> [String] {
         var found: [String] = []
-        for directory in Self.searchPaths() {
+        directories: for directory in Self.searchPaths() {
             guard found.count < Self.executableLimit else { break }
-            for name in visible(in: directory)
-            where FileManager.default.isExecutableFile(atPath: "\(directory)/\(name)") {
+            for name in visible(in: directory) {
+                guard found.count < Self.executableLimit else { break directories }
+                guard FileManager.default.isExecutableFile(atPath: "\(directory)/\(name)") else { continue }
                 found.append(name)
             }
         }
