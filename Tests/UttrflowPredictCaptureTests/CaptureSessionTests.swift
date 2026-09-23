@@ -22,6 +22,39 @@ private actor Recorder: CaptureSink {
     var texts: [String] { recorded.map(\.text) }
 }
 
+/// A sink that throws the first `recordFailures` record calls and the first `supersedeFailures` supersede calls, then accepts, so transient write failures can be exercised.
+private actor FlakySink: CaptureSink {
+    private(set) var recorded: [String] = []
+    private(set) var superseded: [(text: String, replacement: String)] = []
+    private var recordFailures: Int
+    private var supersedeFailures: Int
+
+    init(recordFailures: Int = 0, supersedeFailures: Int = 0) {
+        self.recordFailures = recordFailures
+        self.supersedeFailures = supersedeFailures
+    }
+
+    func record(
+        _ text: String, in surface: Surface, after previous: String?, selfSourced: Bool, at moment: Date
+    ) throws {
+        if recordFailures > 0 {
+            recordFailures -= 1
+            throw FlakySinkError.transient
+        }
+        recorded.append(text)
+    }
+
+    func supersede(_ text: String, with replacement: String, in surface: Surface) throws {
+        if supersedeFailures > 0 {
+            supersedeFailures -= 1
+            throw FlakySinkError.transient
+        }
+        superseded.append((text, replacement))
+    }
+}
+
+private enum FlakySinkError: Error { case transient }
+
 private let start = Date(timeIntervalSince1970: 1_800_000_000)
 private let terminal = FieldReading(bundleIdentifier: "com.example.terminal", role: "AXTextArea")
 private let browser = FieldReading(
@@ -33,14 +66,14 @@ private func only(_ reason: CommitReason) -> CommitPolicy {
 }
 
 /// A session over a scratch preferences file, with the given applications already opted in.
-private func session(
-    _ scratch: borrowing Scratch, _ recorder: Recorder, allowing: [String] = [],
+private func session<Sink: CaptureSink>(
+    _ scratch: borrowing Scratch, _ sink: Sink, allowing: [String] = [],
     policy: CommitPolicy = .everyEnding
 )
     async throws -> CaptureSession
 {
     let session = CaptureSession(
-        sink: recorder, preferencesFile: CapturePreferencesFile(path: scratch.preferencesPath),
+        sink: sink, preferencesFile: CapturePreferencesFile(path: scratch.preferencesPath),
         policy: policy)
     for bundleIdentifier in allowing { try await session.record(.allowed, for: bundleIdentifier) }
     return session
@@ -377,5 +410,70 @@ struct CaptureSessionForgettingTests {
         let reloaded = CapturePreferencesFile(path: scratch.preferencesPath).load()
         #expect(reloaded.state(of: "com.example.terminal") == .unknown)
         #expect(reloaded.state(of: "com.example.editor") == .allowed)
+    }
+}
+
+@Suite("Surviving a transient capture write failure")
+struct CaptureSessionTransientFailureTests {
+    @Test("A failed idle write does not lock the detector; the next eligible tick retries it.")
+    func failedIdleIsRetriedByTheNextTick() async throws {
+        let scratch = Scratch()
+        let sink = FlakySink(recordFailures: 1)
+        let session = try await session(scratch, sink, allowing: ["com.example.terminal"])
+        _ = try await session.handle(.keystroke("git status", at: start), in: terminal)
+
+        let firstTick = start.addingTimeInterval(CommitDetector.idleInterval)
+        await #expect(throws: FlakySinkError.self) {
+            _ = try await session.handle(.tick(at: firstTick), in: terminal)
+        }
+        #expect(await sink.recorded.isEmpty)
+
+        let secondTick = firstTick.addingTimeInterval(CommitDetector.idleInterval)
+        let outcome = try await session.handle(.tick(at: secondTick), in: terminal)
+        #expect(outcome == .recorded("git status"))
+        #expect(await sink.recorded == ["git status"])
+    }
+
+    @Test("After a recovered idle write, a Return of the same value is not recorded twice.")
+    func returnAfterRecoveredIdleIsNotARecord() async throws {
+        let scratch = Scratch()
+        let sink = FlakySink(recordFailures: 1)
+        let session = try await session(scratch, sink, allowing: ["com.example.terminal"])
+        _ = try await session.handle(.keystroke("git status", at: start), in: terminal)
+
+        let firstTick = start.addingTimeInterval(CommitDetector.idleInterval)
+        await #expect(throws: FlakySinkError.self) {
+            _ = try await session.handle(.tick(at: firstTick), in: terminal)
+        }
+        let secondTick = firstTick.addingTimeInterval(CommitDetector.idleInterval)
+        #expect(try await session.handle(.tick(at: secondTick), in: terminal) == .recorded("git status"))
+        #expect(
+            try await session.handle(.returnPressed(at: secondTick.addingTimeInterval(1)), in: terminal)
+                == .nothing)
+        #expect(await sink.recorded == ["git status"])
+    }
+
+    @Test("A failing supersede leaves the session coherent, so a later tick still retires the draft.")
+    func failedSupersedeKeepsStateCoherent() async throws {
+        let scratch = Scratch()
+        let sink = FlakySink(recordFailures: 0, supersedeFailures: 1)
+        let session = try await session(scratch, sink, allowing: ["com.example.terminal"])
+        let field = FieldReading(bundleIdentifier: "com.example.terminal", role: "AXTextArea")
+
+        _ = try await session.handle(.keystroke("git pu", at: start), in: field)
+        let firstIdle = start.addingTimeInterval(CommitDetector.idleInterval)
+        #expect(try await session.handle(.tick(at: firstIdle), in: field) == .recorded("git pu"))
+        _ = try await session.handle(.keystroke("git push", at: firstIdle.addingTimeInterval(1)), in: field)
+        let supersedeTick = firstIdle.addingTimeInterval(1 + CommitDetector.idleInterval)
+        await #expect(throws: FlakySinkError.self) {
+            _ = try await session.handle(.tick(at: supersedeTick), in: field)
+        }
+        #expect(await sink.recorded == ["git pu"])
+
+        let retryTick = supersedeTick.addingTimeInterval(CommitDetector.idleInterval)
+        let outcome = try await session.handle(.tick(at: retryTick), in: field)
+        #expect(outcome == .recorded("git push"))
+        #expect(await sink.recorded == ["git pu", "git push"])
+        #expect(await sink.superseded.map(\.text) == ["git pu"])
     }
 }
