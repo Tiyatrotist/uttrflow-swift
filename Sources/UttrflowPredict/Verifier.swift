@@ -1,4 +1,5 @@
 public import struct Foundation.Date
+private import Synchronization
 
 /// Runs the gates in order, remembers what they decided, and never makes a keystroke wait.
 public actor Verifier {
@@ -259,26 +260,30 @@ public actor Verifier {
         return await Self.raced(candidate, following: context, by: scoring, before: deadline)
     }
 
-    /// The model against the clock, so a slow answer costs the candidate rather than the keystroke.
+    /// The model against the clock: the scorer is signalled, not awaited, so a noncooperative one cannot hold up the verdict.
     private static func raced(
         _ candidate: String, following context: String, by scoring: any CandidateScoring,
         before deadline: Budget
     ) async -> Plausibility {
-        await withTaskGroup(of: Plausibility.self, returning: Plausibility.self) { group in
-            group.addTask {
+        let race = PlausibilityRace()
+        var scorer: Task<Void, Never>?
+        await withCheckedContinuation { continuation in
+            // Armed before either racer exists, so neither can arrive at an empty race.
+            race.arm(continuation)
+            scorer = Task {
                 guard let score = await scoring.logLikelihood(of: candidate, following: context) else {
-                    return .silent
+                    return race.finish(.silent)
                 }
-                return .scored(score)
+                race.finish(.scored(score))
             }
-            group.addTask {
+            Task {
                 await deadline.runsOut()
-                return .overBudget
+                race.finish(.overBudget)
             }
-            let first = await group.next() ?? .overBudget
-            group.cancelAll()
-            return first
         }
+        // Not awaited: whatever GPU work is already in flight keeps the model alive on its own past this return.
+        scorer?.cancel()
+        return race.result()
     }
 
     /// When this keystroke's whole set of candidates has to have been judged by.
@@ -305,5 +310,37 @@ struct Budget: Sendable {
         return Budget(
             hasRunOut: { clock.now >= end },
             runsOut: { try? await clock.sleep(until: end, tolerance: nil) })
+    }
+}
+
+/// Whichever of the model and the deadline answers a keystroke's plausibility first.
+private final class PlausibilityRace: Sendable {
+    /// The waiting caller and the first answer, kept together under one lock.
+    private struct State {
+        var waiting: CheckedContinuation<Void, Never>?
+        var outcome: Plausibility?
+    }
+
+    private let state = Mutex(State())
+
+    /// Parks the caller until the first answer.
+    func arm(_ continuation: CheckedContinuation<Void, Never>) {
+        state.withLock { $0.waiting = continuation }
+    }
+
+    /// Records an answer, and wakes the caller for the first one only.
+    func finish(_ outcome: Plausibility) {
+        let waiting = state.withLock { state -> CheckedContinuation<Void, Never>? in
+            guard state.outcome == nil else { return nil }
+            state.outcome = outcome
+            defer { state.waiting = nil }
+            return state.waiting
+        }
+        waiting?.resume()
+    }
+
+    /// The winner's answer, silent if somehow reached before either racer finished.
+    func result() -> Plausibility {
+        state.withLock { $0.outcome } ?? .silent
     }
 }
