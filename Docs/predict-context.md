@@ -9,13 +9,13 @@ the two constraints every decision below is measured against.
 
 | Piece | Where | Before G1 | Now |
 |---|---|---|---|
-| Field reading | `Sources/UttrflowContext/FocusedFieldReader+System.swift` | One AX read per turn: bundle id, app name, role, subrole, identifier, placeholder, description, document (URL or cwd), whole value, selection, caret rect, window rect, font size + family, secure, composing. Not read: the window title, any text outside the field. | The same read, plus a second, separately budgeted read of the focused window's title and the visible text around the field (`surroundings`), made only once a model pass is certain. |
+| Field reading | `Sources/UttrflowContext/FocusedFieldReader+System.swift` | One AX read per turn: bundle id, app name, role, subrole, identifier, placeholder, description, document (URL or cwd), whole value, selection, caret rect, window rect, font size + family, secure, composing. Not read: the window title, any text outside the field. | The same read, plus a second, separately budgeted read of the focused window's title and the visible text around the field (`surroundings`), made once a model pass is certain and cached by `SuggestionContextCache` for one second per window. |
 | What the model is told | `Sources/UttrflowPredict/CandidateGeneration.swift` → `GenerationSituation` | `application`, `field`, `document`, `preceding` (≤400 chars of the field's own text before the caret's line). | Those four, plus `windowTitle`, `surroundings`, `recentLines` (the person's own lines here, newest first) and `isMultiline`. |
 | The prompt | `Sources/UttrflowLocalModel/MLXCandidateScorer.swift`, `Sources/UttrflowLocalModel/PromptBuilder.swift` | One fixed instruction + one user message; a new `ChatSession` per call prefilled the ~120-token instruction every time; `maxTokens` fixed at 128, temperature 0. | The instruction prefix is prefilled once at load into a KV cache, and the last pass's whole prompt is kept in one too, so a pass reads only the tokens past the longest run it shares with the prompt before it; `maxTokens` is `min(128, register.maxTokens × share)`, share 1 for the one line and 3 for the alternatives; temperature 0. |
 | Memory | `Sources/UttrflowPredictStore/PredictStore.swift`, SQLite `surface`/`entry` | Per surface (bundle + role + locator + scope): every line the user typed there (with consent), counts, accepted/rejected, last used. Queried only by prefix and successor; no "the last N lines this person wrote here". | `recent(in:limit:)` exists: newest first, each text once, across every document of the field, self-sourced-only and superseded lines left out, over the `entry_recent` index. |
 | Gates | `Sources/UttrflowPredict/Verifier.swift`, `Sources/UttrflowPredict/Verification.swift` | Remembered lines pass attestation (environment index), nearest-neighbour correction, then the 4B plausibility floor (−6.0, ~100 ms per line). Generated lines are not scored. | Unchanged. |
 | Timing | `Sources/Uttrflow/Suggestion/SuggestionCoordinator.swift` | 120 ms debounce, in-flight pass cancelled by the next key, last answer reused while the line still begins one of its lines, prose answered 400 ms after the last key. Generation of 3–4 lines ≈ 500–1 000 ms on the 4B; corpus path ≈ 1–150 ms. | The same debounce, cancellation and reuse; one line generated first and the alternatives fetched behind it; an empty answer remembered per line. Measured in the table below. |
-| Register | — | `isProse` = multi-line field that is not a terminal was the only "kind" the code knew. Accept key by bundle-prefix table (terminals →, editors ⌥⇥) — key semantics, not context. | `Register` in `UttrflowPredict` computes five facts off the moment and turns them into prompt hints and a token budget; `isProse` and the accept-key table still do their own jobs. |
+| Register | — | `isProse` = multi-line field that is not a terminal was the only "kind" the code knew. Accept key by bundle-prefix table (terminals →, editors ⌥⇥) — key semantics, not context. | `Register` in `UttrflowPredict` computes seven facts off the moment — including whether the field writes addresses or searches — and turns them into prompt hints, a token budget and a history-only refusal; `isProse` and the accept-key table still do their own jobs. |
 
 ## The approach in one paragraph
 
@@ -51,17 +51,22 @@ milliseconds, not hundreds.
    calendar's own words, glued or not. `uttrflow-dev context --bundle <id> --surroundings` prints
    exactly what this read hands the model. Around it, every Accessibility call into the other application gives up
    after 50 ms (`elementTimeoutInSeconds`), the walk runs on its own queue, and the turn
-   waits at most 200 ms for it (`Deadline`) before going on without it. There is no cache:
-   the read happens once a pass is certain — after the debounce, never for a reused
-   answer — so a cancelled burst never pays for it. In a chat this is the last few messages
+   waits at most 200 ms for it (`Deadline`) before going on without it. `SuggestionContextCache`
+   reuses a built `GenerationSituation` for the same turn — so the alternatives pass asks the
+   machine nothing a second time — and caches one window's surroundings for one second per
+   window key, so a burst of passes over an unchanged window walks it once. A walk that times
+   out is not kept, and a cancelled burst before the walk starts never pays for it. In a chat this is the last few messages
    and who they are from; in Mail the quoted thread; in a browser the page heading and the
    field's label; in a terminal nothing (the value already holds the scrollback,
    `preceding`).
-2. **Read the person (one SQL query).** `PredictStore.recent(in:limit:)` with a limit of 6 —
-   the most recent distinct lines this user typed in this field, newest first, over the
-   `entry_recent` index on `(surface_id, last_used)`. Only surfaces the user allowed
-   learning from have any. In WhatsApp this is literally how they answer people; in a
-   terminal their real commands; in Notes their own phrasing.
+2. **Read the person (an indexed read per matching scope).** `PredictStore.recent(in:limit:)`
+   with a limit of 6 first reads the surface's own retired texts, then runs one indexed
+   `ORDER BY last_used DESC LIMIT ?` read over `entry_recent` for each scope that matches this
+   surface, before deduplicating and ranking the results in Swift — the current document first,
+   then newest, arrival order breaking ties. The cost scales with the number of matching scopes,
+   not a single query. Only surfaces the user allowed learning from have any. In WhatsApp this is
+   literally how they answer people; in a terminal their real commands; in Notes their own
+   phrasing.
 3. **Derive register hints (pure, tested, no model).** `Register.infer` computes from the
    situation and the typed text:
    - `isMultiline`: whether the field holds many lines (the prose role, or a value with a
@@ -79,8 +84,15 @@ milliseconds, not hundreds.
      over `preceding`, the typed text and the recent lines (shell lines sit near 0.14,
      prose under 0.06; the line is 0.10);
    - `usesSentenceCase`: whether at least half the person's lines here start upper-case and
-     end with sentence punctuation, or nothing when they have written nothing here yet.
-   These are numbers and booleans, derived the same way in every application.
+     end with sentence punctuation, or nothing when they have written nothing here yet;
+   - `writesAddresses`: whether this person's lines here are web addresses, or (with none of
+     their own) whether the field's own accessibility name says it takes one — a bare word then
+     continues into a host, never a shell command;
+   - `isSearchField`: whether the field's own accessibility name says it searches, so its next
+     word only ever comes from what this person has looked for before.
+   `writesAddresses` and `isSearchField` together decide `answersFromHistoryAlone`: an address
+   or search field's line can only come from what this person entered here before, never from
+   generation. These are numbers and booleans, derived the same way in every application.
 4. **Assemble the prompt under a budget.** `PromptBuilder` (in `UttrflowLocalModel`,
    deterministic, tested by estimated token count) lays out: where the caret is and the hints →
    what is on screen around the field → the lines this person wrote here before →
