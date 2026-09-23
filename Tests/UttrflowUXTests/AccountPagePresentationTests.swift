@@ -225,7 +225,18 @@ struct AccountDetailsTests {
         #expect(page.callout.message == AccountPagePresenter.localDataPromise)
         #expect(page.callout.message.contains("signing out leaves every one of them"))
         #expect(page.callout.tone == .good)
-        #expect(page.footnote?.contains("for nothing else") == true)
+    }
+
+    @Test("the network note scopes the offline dictation guarantee")
+    func networkUse() {
+        let footnote = HistoryFixture.accountPage().footnote
+        #expect(footnote == AccountPagePresenter.networkUseFootnote)
+        #expect(footnote?.contains("profile refreshes") == true)
+        #expect(footnote?.contains("update checks") == true)
+        #expect(footnote?.contains("model setup") == true)
+        #expect(footnote?.contains("Dictation itself runs on this Mac") == true)
+        #expect(footnote?.contains("for nothing else") == false)
+        #expect(footnote?.contains("never needs it again") == false)
     }
 }
 
@@ -269,6 +280,8 @@ struct AccountEmptyTests {
         #expect(page.footnote == nil)
         #expect(page.emptyState?.title == "Not signed in")
         #expect(page.emptyState?.action?.intent == .signIn)
+        #expect(page.emptyState?.message.contains("dictation runs on this Mac") == true)
+        #expect(page.emptyState?.message.contains("never needs it again") == false)
     }
 
     /// The promise about local data is most worth reading by somebody deciding whether to sign in.

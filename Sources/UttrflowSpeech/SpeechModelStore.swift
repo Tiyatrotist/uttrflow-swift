@@ -162,6 +162,11 @@ public struct FileSystemSpeechModelStore: SpeechModelStore {
         _ model: SpeechModel, onProgress: @escaping @Sendable (Double) -> Void
     ) async throws(SpeechEngineError) -> URL {
         let destination = location(of: model)
+        do {
+            try PrivateFile.makeDirectory(at: root)
+        } catch {
+            throw Self.failure(error, needing: Self.installMargin)
+        }
         for component in missingComponents(of: model) {
             switch component {
             case .weights:
@@ -186,7 +191,8 @@ public struct FileSystemSpeechModelStore: SpeechModelStore {
             throw .notEnoughSpace(neededBytes: needed)
         }
         do {
-            try fileManager.createDirectory(at: staging, withIntermediateDirectories: true)
+            try PrivateFile.makeDirectory(at: stagingRoot)
+            try PrivateFile.makeDirectory(at: staging)
             // Staging is kept on failure, so asking again resumes from the files already fetched.
             try await download(model, .weights, staging, onProgress)
         } catch {
@@ -245,6 +251,7 @@ public struct FileSystemSpeechModelStore: SpeechModelStore {
         } else {
             try fileManager.moveItem(at: staging, to: destination)
         }
+        try? PrivateFile.excludeFromBackup(at: destination)
         removeStagingRootIfEmpty()
     }
 
@@ -254,7 +261,7 @@ public struct FileSystemSpeechModelStore: SpeechModelStore {
         onProgress: @escaping @Sendable (Double) -> Void
     ) async throws(SpeechEngineError) {
         do {
-            try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+            try PrivateFile.makeDirectory(at: destination)
             try await download(model, .tokenizer, destination, onProgress)
         } catch {
             TokenizerAssets.remove(from: destination)

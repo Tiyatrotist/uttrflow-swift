@@ -23,11 +23,21 @@
 # this file exist, does this link resolve, is this number still true — and nothing about
 # whether the prose around them is accurate, which no script can answer. It needs no build.
 #
-# Usage:  ./Scripts/docs_audit.sh        (belongs in `make verify`, ahead of the build)
+# Usage:  ./Scripts/docs_audit.sh            (belongs in `make verify`, ahead of the build)
+#         ./Scripts/docs_audit.sh --self-test   also runs the CLAUDE.md delegation fixture
 set -euo pipefail
 
 PACKAGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$PACKAGE_ROOT"
+
+SELF_TEST=0
+if [[ "${1:-}" == "--self-test" ]]; then
+    SELF_TEST=1
+    shift
+fi
+if [[ "$#" -ne 0 ]]; then
+    printf 'usage: %s [--self-test]\n' "$0" >&2
+    exit 2
+fi
 
 failures=0
 
@@ -41,6 +51,222 @@ fail() {
 }
 
 pass() { printf '  ✓ %s\n' "$1"; }
+
+changelog_release_bullet_findings() {
+    read -r -d '' CHANGELOG_PROGRAM <<'PYTHON' || true
+import re
+import sys
+
+heading = re.compile(r"^## \[([^\]]+)\]")
+current = None
+for number, line in enumerate(open("CHANGELOG.md", errors="ignore"), 1):
+    match = heading.match(line)
+    if match:
+        current = match.group(1)
+        continue
+    if current and current != "Unreleased" and line.startswith("- "):
+        print(f"{current}\t{number}\t{line.rstrip()}")
+PYTHON
+
+    python3 -c "$CHANGELOG_PROGRAM" |
+    while IFS=$'\t' read -r version line bullet; do
+        [[ -n "$version" ]] || continue
+        tag="v$version"
+        tag_commit="$(git rev-parse --verify --quiet "$tag^{commit}" || true)"
+        [[ -n "$tag_commit" ]] || continue
+
+        origin="$(
+            git blame --line-porcelain -L "$line,$line" -- CHANGELOG.md |
+                sed -n '1s/ .*//p'
+        )"
+        [[ -n "$origin" && "$origin" != 00000000* ]] || continue
+
+        if ! git merge-base --is-ancestor "$origin" "$tag_commit"; then
+            printf '%s:%s  %s  (line added by %s after %s)\n' \
+                "CHANGELOG.md" "$line" "$bullet" "$origin" "$tag"
+        fi
+    done
+}
+
+run_changelog_self_test() {
+    printf 'CHANGELOG release-bullet fixture\n'
+
+    local scratch
+    scratch="$(mktemp -d)"
+    trap 'rm -rf "$scratch"' RETURN
+
+    write_changelog() {
+        local mode="$1"
+        cat >CHANGELOG.md <<'EOF'
+# Changelog
+
+## [Unreleased]
+
+### Fixed
+EOF
+        if [[ "$mode" == "unreleased" ]]; then
+            cat >>CHANGELOG.md <<'EOF'
+- **A post-tag fix waits here.** It belongs to the next release (#2).
+EOF
+        fi
+        cat >>CHANGELOG.md <<'EOF'
+
+## [2026.9.14] — 2026-09-14
+
+### Fixed
+- **The shipped fix.** It is part of the tagged build (#1).
+EOF
+        if [[ "$mode" == "released" ]]; then
+            cat >>CHANGELOG.md <<'EOF'
+- **A post-tag fix is misfiled here.** It is not part of the tagged build (#2).
+EOF
+        fi
+    }
+
+    (
+        set -euo pipefail
+        cd "$scratch"
+        git init -q
+        git config user.name "Docs Audit"
+        git config user.email "docs-audit@example.invalid"
+
+        write_changelog tagged
+        git add CHANGELOG.md
+        git commit -qm "Release notes"
+        git tag v2026.9.14
+
+        write_changelog unreleased
+        git add CHANGELOG.md
+        git commit -qm "Keep next fix unreleased"
+        changelog_release_bullet_findings
+    ) >"$scratch/unreleased.out"
+
+    if [[ -s "$scratch/unreleased.out" ]]; then
+        fail "an Unreleased post-tag bullet failed the fixture" \
+            "The release-bullet check must allow fixes queued for the next release." \
+            "" $'\n'"$(cat "$scratch/unreleased.out")"
+    else
+        pass "post-tag bullet under Unreleased passes"
+    fi
+
+    (
+        set -euo pipefail
+        cd "$scratch"
+        git reset -q --hard v2026.9.14
+        write_changelog released
+        git add CHANGELOG.md
+        git commit -qm "Misfile next fix under old release"
+        changelog_release_bullet_findings
+    ) >"$scratch/released.out"
+
+    if [[ -s "$scratch/released.out" ]]; then
+        pass "post-tag bullet under a tagged release fails"
+    else
+        fail "a released-section post-tag bullet passed the fixture" \
+            "The fixture recreated issue #1123, but the audit did not report it."
+    fi
+}
+
+if [[ "$SELF_TEST" -eq 1 ]]; then
+    run_changelog_self_test
+    printf '\n'
+fi
+
+# The CLAUDE.md delegation check, factored so `--self-test` can call it against fixtures.
+# Sets `claude_md_problem` (the failure reason, empty on pass) and returns 0/1.
+claude_md_problem=""
+check_claude_md_delegation() {
+    local root="$1"
+    claude_md_problem=""
+    if [[ ! -e "$root/CLAUDE.md" ]]; then
+        return 0
+    fi
+    if [[ -L "$root/CLAUDE.md" ]]; then
+        local target
+        target="$(readlink "$root/CLAUDE.md")"
+        if [[ "$target" != "AGENTS.md" ]]; then
+            claude_md_problem="CLAUDE.md is a symlink, but to '$target', not AGENTS.md"
+            return 1
+        fi
+        if [[ ! -e "$root/AGENTS.md" ]]; then
+            claude_md_problem="CLAUDE.md is a symlink to AGENTS.md, but $root/AGENTS.md is not there"
+            return 1
+        fi
+        return 0
+    fi
+    local first
+    first="$(grep -vE '^[[:space:]]*(#|$)' "$root/CLAUDE.md" | head -n1 | tr -d '\r' || true)"
+    if [[ "$first" != "@AGENTS.md" ]]; then
+        if [[ -z "$first" ]]; then
+            claude_md_problem="CLAUDE.md is empty; it should be an '@AGENTS.md' import or a real symlink"
+        else
+            claude_md_problem="CLAUDE.md is neither an '@AGENTS.md' import nor a symlink to AGENTS.md (first non-blank, non-comment line: '$first')"
+        fi
+        return 1
+    fi
+    if [[ ! -e "$root/AGENTS.md" ]]; then
+        claude_md_problem="CLAUDE.md imports AGENTS.md, but $root/AGENTS.md is not there"
+        return 1
+    fi
+    return 0
+}
+
+# `--self-test` runs the CLAUDE.md delegation fixture before the normal scan, so the
+# audit's checks themselves fail noisily when they stop biting. Same pattern as
+# log_privacy_audit.py and perf_budget_audit.py.
+if [[ "$SELF_TEST" -eq 1 ]]; then
+    work="$(mktemp -d -t uttrflow-docs-audit.XXXXXX)"
+    trap 'rm -rf "$work"' EXIT
+
+    declare -a cases=(
+        "no-file:absent::0"
+        "at-import:at-import:@AGENTS.md\\n:0"
+        "symlink:symlink::0"
+        "markdown-link:markdown-link:See [AGENTS.md](AGENTS.md).\\n:1"
+        "prose-blurb:prose-blurb:Read AGENTS.md for the rules.\\n:1"
+        "empty:empty::1"
+        "hash-only:hash-only:# heading\\n:1"
+        "missing-target:missing-target:@AGENTS.md\\n:1"
+    )
+
+    printf 'CLAUDE.md delegation fixture\n'
+
+    for case in "${cases[@]}"; do
+        IFS=':' read -r label slug body expect_fail <<<"$case"
+        case_dir="$work/$slug"
+        mkdir -p "$case_dir"
+        case "$label" in
+            no-file) ;;
+            missing-target) printf '%b' "$body" > "$case_dir/CLAUDE.md" ;;
+            symlink) : > "$case_dir/AGENTS.md"; ln -s AGENTS.md "$case_dir/CLAUDE.md" ;;
+            *) : > "$case_dir/AGENTS.md"; printf '%b' "$body" > "$case_dir/CLAUDE.md" ;;
+        esac
+
+        if check_claude_md_delegation "$case_dir"; then
+            actual="pass"
+        else
+            actual="fail"
+        fi
+        expected="pass"; [[ "$expect_fail" == "1" ]] && expected="fail"
+
+        if [[ "$actual" == "$expected" ]]; then
+            pass "$label ($body → $actual)"
+        else
+            fail "self-test case '$label' was expected to $expected but the audit said $actual" \
+                "body written into CLAUDE.md: $body" \
+                "claude_md_problem: ${claude_md_problem:-<none>}"
+        fi
+    done
+
+    if [[ "$failures" -gt 0 ]]; then
+        printf '\ndocs audit self-test: %s case(s) did not match.\n\n' "$failures" >&2
+        exit 1
+    fi
+    printf '\ndocs audit self-test: every fixture case behaved as expected.\n\n'
+    failures=0
+fi
+
+cd "$PACKAGE_ROOT"
 
 # ---------------------------------------------------------------------------
 # 0. The scan must actually be looking at something.
@@ -66,6 +292,46 @@ if [[ "$DOC_COUNT" -lt 20 ]]; then
     exit 1
 fi
 pass "$DOC_COUNT Markdown files (tracked, plus written-but-not-yet-staged)"
+
+# ---------------------------------------------------------------------------
+# 0a. The documented pull-request lifecycle must match the live main ruleset.
+# ---------------------------------------------------------------------------
+#
+# Issue #1120 was not a typo but a blocked lifecycle: AGENTS.md said a green PR could be
+# self-merged while the live ruleset required independent review. The ruleset itself is
+# outside this tree, so this check keeps the local policy on the review-required side of
+# that boundary until the ruleset is deliberately changed.
+printf '\nPull request lifecycle\n'
+
+if grep -Fq "**An agent may merge its own pull request once it is green**" AGENTS.md; then
+    fail "AGENTS.md still documents the removed self-merge rule" \
+        "The live main ruleset requires an approving review, code-owner review and" \
+        "last-pusher approval. A local policy that says agents may merge themselves" \
+        "sends finished pull requests into a gate they cannot satisfy."
+fi
+
+missing_policy=()
+for required in \
+    "release-policy:v4" \
+    "requires one approving review" \
+    "code-owner review" \
+    "approval by someone other than the last pusher" \
+    "strict_required_status_checks_policy" \
+    "Keep the worktree and branch while the PR is open"
+do
+    if ! grep -Fq "$required" AGENTS.md; then
+        missing_policy+=("$required")
+    fi
+done
+
+if ((${#missing_policy[@]})); then
+    fail "AGENTS.md no longer records the review-required main ruleset" \
+        "The policy must tell agents that implementation stops at a green pull request," \
+        "and must name the live ruleset gates that enforce that boundary." \
+        "" $'\n'"$(printf '    %s\n' "${missing_policy[@]}")"
+else
+    pass "AGENTS.md says agents stop at a green PR and names the review gates"
+fi
 
 # ---------------------------------------------------------------------------
 # 1. Every backticked path that claims to be a file in this repository exists.
@@ -316,10 +582,163 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 4. The worktree cleanup recipe must wait for a merged pull request.
+# ---------------------------------------------------------------------------
+#
+# The contributor recipe once opened a pull request and immediately deleted the worktree,
+# local branch and remote branch. `git branch -d` does not prove the branch reached `main`;
+# it can succeed when the local branch is merely merged to its upstream. The doc must keep
+# every cleanup command below a GitHub merged-state check.
+printf '\nWorktree cleanup order\n'
+
+read -r -d '' CLEANUP_PROGRAM <<'PYTHON' || true
+import re
+
+text = open("AGENTS.md", errors="ignore").read()
+start = text.find("**Every feature is built in a worktree")
+end = text.find("`sasta-trader` is a different project", start)
+if start == -1 or end == -1:
+    print("AGENTS.md  cannot find the worktree recipe section")
+    raise SystemExit
+
+section = text[start:end]
+required = [
+    ("pull request creation", r"^gh pr create --base main"),
+    ("GitHub merge-state check", r"^gh pr view [^\n]*--json mergedAt"),
+    ("worktree removal", r"^git worktree remove"),
+    ("local branch deletion", r"^git branch -[dD]"),
+    ("remote branch deletion", r"^git push origin --delete"),
+]
+
+positions = {}
+for name, pattern in required:
+    match = re.search(pattern, section, re.MULTILINE)
+    if not match:
+        print(f"AGENTS.md  missing {name}: {pattern}")
+    else:
+        positions[name] = match.start()
+
+merge = positions.get("GitHub merge-state check")
+if merge is not None:
+    for name in ("worktree removal", "local branch deletion", "remote branch deletion"):
+        where = positions.get(name)
+        if where is not None and where < merge:
+            print(f"AGENTS.md  {name} appears before the GitHub merge-state check")
+
+create = positions.get("pull request creation")
+if create is not None and merge is not None and merge < create:
+    print("AGENTS.md  merge-state check appears before pull request creation")
+PYTHON
+cleanup_order="$(python3 -c "$CLEANUP_PROGRAM")"
+
+if [[ -n "${cleanup_order//[[:space:]]/}" ]]; then
+    fail "the worktree cleanup recipe can delete a pull request branch before it is merged" \
+        "Keep the worktree and both feature-branch refs while the pull request is open." \
+        "Verify through GitHub that the pull request has merged before cleanup commands." \
+        "" $'\n'"$cleanup_order"
+else
+    pass "branch cleanup follows GitHub merge verification in AGENTS.md"
+fi
+
+# ---------------------------------------------------------------------------
+# 5. A tagged release's bullets must have existed by the tag.
+# ---------------------------------------------------------------------------
+#
+# Calendar release sections are a promise about the build named by their tag. Corrections to
+# prose or link definitions can happen later, but a new bullet under `Fixed`, `Added`, `Changed`
+# or `Security` says that tagged build shipped work it did not contain. Issue #1123 was exactly
+# that: post-tag fixes were moved out of `Unreleased` and into the previous release's section.
+printf '\nCHANGELOG release bullets\n'
+
+post_tag_bullets="$(changelog_release_bullet_findings)"
+if [[ -n "${post_tag_bullets//[[:space:]]/}" ]]; then
+    fail "a tagged release section contains a bullet added after its tag" \
+        "Move the entry back under Unreleased, or cut a new release whose tag contains it." \
+        "Typos and link corrections are still allowed; this check watches bullet claims." \
+        "" $'\n'"$post_tag_bullets"
+else
+    pass "every bullet in a tagged release section existed by that tag"
+fi
+
+# ---------------------------------------------------------------------------
+# 6. Every artboard text row clears WCAG AA contrast against its translucent backing.
+# ---------------------------------------------------------------------------
+#
+# The artboard generators draw a translucent menu over a gradient, and a backdrop blur
+# cannot lift the backing above the gradient's brightest source stop — so the contrast
+# against the brightest stop is the best case anywhere on the surface, and the darkest
+# stop is the worst. The audit script reads the gradient stops and menu fill from the
+# generator, walks the inline text-color declarations, and fails any row that drops below
+# 4.5:1 over any composited background.
+printf '\nDesign artboard contrast\n'
+
+if [[ ! -x "$PACKAGE_ROOT/Scripts/design_contrast_audit.py" ]]; then
+    fail "Scripts/design_contrast_audit.py is missing or not executable" \
+        "The audit pins the menu-bar artboard's text contrast; without it the generator" \
+        "could regress to the colours that production already moved off."
+else
+    if "$PACKAGE_ROOT/Scripts/design_contrast_audit.py" --self-test; then
+        if "$PACKAGE_ROOT/Scripts/design_contrast_audit.py" >&2; then
+            pass "every attention text row clears 4.5:1 against its composited backgrounds"
+        else
+            fail "an artboard text row fails WCAG AA contrast against its composited backing" \
+                "The audit prints which generator rule and which colour broke. The backing" \
+                "is translucent over a gradient, so the worst case is the gradient's darkest" \
+                "stop, not the average — backdrop blur cannot brighten past the brightest stop."
+        fi
+    else
+        fail "Scripts/design_contrast_audit.py --self-test failed" \
+            "The audit's own self-test (a known pass and a known fail) is no longer both" \
+            "passing, so the ratio predicate is broken. Fix the audit, not the artboard."
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 7. CLAUDE.md, if it exists, delegates to AGENTS.md by import or symlink.
+# ---------------------------------------------------------------------------
+#
+# A tracked CLAUDE.md is a claim about what Claude Code will load as project memory: with
+# default Project instructions, Claude Code reads CLAUDE.md before any tool call and does
+# not consult AGENTS.md on its own. A CLAUDE.md that holds a prose pointer at AGENTS.md
+# therefore loads the pointer sentence and stops — the 491 lines of operating rules in
+# AGENTS.md are injected only if the model decides, on its own, to follow the link.
+#
+# Three contents pass, in this order:
+#
+#   1. CLAUDE.md is absent. There is no claim to police, and AGENTS.md loads directly.
+#   2. CLAUDE.md is a real filesystem symlink whose resolved target is `AGENTS.md`. The
+#      file Claude Code reads is AGENTS.md, full stop — the indirection is at the FS layer
+#      rather than at the prose layer.
+#   3. CLAUDE.md's first non-blank, non-comment line is `@AGENTS.md`. That is Claude
+#      Code's import syntax; the file is read and its contents are merged into the
+#      project memory for the session.
+#
+# Any other content is a failure. The Markdown-link pointer that lived here until #1125
+# was the trap: the link rendered, the model received one sentence, and the rules were not
+# injected without a separate Read-tool decision the model could equally skip.
+printf '\nCLAUDE.md delegation\n'
+
+if check_claude_md_delegation "$PACKAGE_ROOT"; then
+    if [[ -e CLAUDE.md ]]; then
+        pass "CLAUDE.md delegates to AGENTS.md"
+    else
+        pass "no CLAUDE.md to check"
+    fi
+else
+    fail "$claude_md_problem" \
+        "A tracked CLAUDE.md is loaded by Claude Code as project memory ahead of any tool." \
+        "Prose that points at AGENTS.md — Markdown link or otherwise — is one sentence the" \
+        "model receives, not an import; the 491 lines of operating rules in AGENTS.md are" \
+        "not injected unless the model decides, on its own, to open the file." \
+        "Replace the body with a single '@AGENTS.md' line, or delete CLAUDE.md and let" \
+        "AGENTS.md load directly, or turn CLAUDE.md into a real symlink to AGENTS.md."
+fi
+
+# ---------------------------------------------------------------------------
 printf '\n'
 if [[ "$failures" -gt 0 ]]; then
     printf 'docs audit: %s check(s) failed. The documentation contradicts the tree.\n\n' "$failures" >&2
     exit 1
 fi
 
-printf 'docs audit: the paths, links and test count in %s documents all check out.\n\n' "$DOC_COUNT"
+printf 'docs audit: the paths, links, test count, worktree cleanup order, release bullets and CLAUDE.md delegation in %s documents all check out.\n\n' "$DOC_COUNT"

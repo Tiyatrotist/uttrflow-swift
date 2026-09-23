@@ -71,6 +71,10 @@ private final class EngineDevice: InputDevice, @unchecked Sendable {
     /// Builds an engine for whatever the current input device is, and starts it.
     func open() throws(AudioCaptureError) {
         guard state.withLock(\.sink) != nil else { throw .notRecording }
+        // Read before the engine: a refused microphone reports a working format and taps silence.
+        guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
+            throw .microphoneDenied
+        }
 
         let engine = AVAudioEngine()
         let inputBus: AVAudioNodeBus = 0

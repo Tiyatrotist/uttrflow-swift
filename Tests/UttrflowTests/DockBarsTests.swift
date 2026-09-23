@@ -156,7 +156,7 @@ struct DockArrivalTests {
         #expect(dock.lastArrival == when)
     }
 
-    /// The row outlives the microphone by one state, so the working animation settles the real bars.
+    /// The row outlives the microphone by one state and is cleared by the next recording.
     @Test("the row survives the end of a recording")
     func rowSurvivesTheEnd() {
         let dock = model()

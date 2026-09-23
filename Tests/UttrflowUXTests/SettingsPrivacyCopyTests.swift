@@ -147,6 +147,13 @@ struct SettingsPrivacyCopyTests {
         #expect(!SettingsPresenter.privacyPromise.contains("Recordings are never saved"))
     }
 
+    @Test("the privacy promise says local stores are excluded from Mac backups")
+    func thePromiseNamesBackupExclusion() {
+        let promise = SettingsPresenter.privacyPromise
+        #expect(promise.contains("Local history, clips, suggestions and retry recordings"))
+        #expect(promise.contains("excluded from Mac backups"))
+    }
+
     /// Not absolutist: the speech model arrives over the network, so no promise denies one.
     @Test("the promise never claims the app stays off the network")
     func thePromiseDoesNotOverreachAboutTheNetwork() {

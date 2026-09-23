@@ -69,18 +69,25 @@ public enum TelemetryStage: String, Sendable, Equatable, CaseIterable, Codable {
 public struct TelemetryReport: Sendable, Equatable, Encodable {
     /// The app's version as three numbers, never as a string.
     public struct AppVersion: Sendable, Equatable, Encodable {
-        /// The first number.
+        /// The first number, a four-digit year under the calendar scheme.
         public let major: Int
         /// The second number.
         public let minor: Int
         /// The third number.
         public let patch: Int
 
-        /// Clamps each part to the server's `versionPart` of 0...999; anything else is a 400.
+        /// Keeps each part as it was given; a part outside the server's ranges refuses the report instead.
         public init(major: Int, minor: Int, patch: Int) {
-            self.major = TelemetryLimit.versionPart.clamping(major)
-            self.minor = TelemetryLimit.versionPart.clamping(minor)
-            self.patch = TelemetryLimit.versionPart.clamping(patch)
+            self.major = major
+            self.minor = minor
+            self.patch = patch
+        }
+
+        /// Whether the server's ranges hold all three parts. See Docs/account-telemetry.md.
+        var isWithinContract: Bool {
+            TelemetryLimit.versionYear.contains(major)
+                && TelemetryLimit.versionPart.contains(minor)
+                && TelemetryLimit.versionPart.contains(patch)
         }
     }
 
@@ -152,7 +159,7 @@ public struct TelemetryReport: Sendable, Equatable, Encodable {
     /// One entry per stage at most, sorted by name.
     public let stages: [StageOutcome]
 
-    /// Builds a report, or `nil` when the window did not advance or held no dictation; numbers are clamped.
+    /// Builds a report, or `nil` when the window is empty or a version is out of range; counts are clamped.
     public init?(
         windowStartedAt: Date,
         windowEndedAt: Date,
@@ -171,12 +178,15 @@ public struct TelemetryReport: Sendable, Equatable, Encodable {
         stages: [StageOutcome] = []
     ) {
         let dictations = TelemetryLimit.count.clamping(dictationCount)
-        guard windowEndedAt > windowStartedAt, dictations > 0 else { return nil }
+        // A version brought into range is another release's version, and a reader would believe it.
+        guard windowEndedAt > windowStartedAt, dictations > 0, appVersion.isWithinContract,
+            TelemetryLimit.versionPart.contains(osVersionMajor ?? 0)  // An unknown OS refuses nothing.
+        else { return nil }
 
         self.windowStartedAt = windowStartedAt
         self.windowEndedAt = windowEndedAt
         self.appVersion = appVersion
-        self.osVersionMajor = osVersionMajor.map(TelemetryLimit.versionPart.clamping)
+        self.osVersionMajor = osVersionMajor
         self.dictationCount = dictations
         self.cancelledCount = min(TelemetryLimit.count.clamping(cancelledCount), dictations)
         self.failureCount = TelemetryLimit.count.clamping(failureCount)
@@ -243,8 +253,10 @@ enum TelemetryLimit {
     static let count = 0...2_147_483_647
     /// The server's `durationMs`: up to a week, which no honest measurement reaches.
     static let durationMs = 0...604_800_000
-    /// The server's `versionPart`.
+    /// The server's `versionPart`: a month, a day, or a macOS major version.
     static let versionPart = 0...999
+    /// The server's range for a version's first part, which holds a four-digit calendar year.
+    static let versionYear = 0...9999
 
     /// A latency percentile the table accepts: clamped, and never below the percentile under it.
     static func latency(_ milliseconds: Int?, notBelow floor: Int? = nil) -> Int? {

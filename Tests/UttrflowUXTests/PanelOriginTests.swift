@@ -140,8 +140,8 @@ struct PanelOriginTests {
         let dictation = PanelFixture.clip("said just now", minutesAgo: 1, origin: .uttrflow)
         let clips = [dictation, PanelFixture.clip("copied a while back", minutesAgo: 20)]
 
-        let panel = PanelSnapshot.opening(
-            clips: clips, now: PanelFixture.now, locale: PanelFixture.locale,
+        let panel = PanelFixture.opened(
+            clips, now: PanelFixture.now, locale: PanelFixture.locale,
             resuming: PanelResume(
                 scope: .uttrflow, category: nil, selection: dictation.id, sheet: nil,
                 closedAt: PanelFixture.now.addingTimeInterval(-3)))
@@ -156,8 +156,8 @@ struct PanelOriginTests {
         let dictation = PanelFixture.clip("said just now", minutesAgo: 1, origin: .uttrflow)
         let clips = [dictation, PanelFixture.clip("copied a while back", minutesAgo: 20)]
 
-        let panel = PanelSnapshot.opening(
-            clips: clips, now: PanelFixture.now, locale: PanelFixture.locale,
+        let panel = PanelFixture.opened(
+            clips, now: PanelFixture.now, locale: PanelFixture.locale,
             resuming: PanelResume(
                 scope: .history, category: nil, selection: dictation.id, sheet: nil,
                 closedAt: PanelFixture.now.addingTimeInterval(-3)))

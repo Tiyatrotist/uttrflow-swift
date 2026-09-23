@@ -36,6 +36,22 @@ struct SpeechWindowingTests {
         #expect(windowing.nextCut(in: audio, sampleRate: Take.rate, from: 0) == nil)
     }
 
+    @Test("cuts a long pause between short phrases once five seconds have been collected")
+    func cutsLongEarlyPause() throws {
+        let audio = Take.speech(3) + Take.silence(1.1) + Take.speech(3)
+        let cut = try #require(windowing.nextCut(in: audio, sampleRate: Take.rate, from: 0))
+        #expect(abs(Take.seconds(cut) - 3.55) < 0.05)
+        #expect(windowing.windows(in: audio, sampleRate: Take.rate).count == 2)
+    }
+
+    @Test("does not cut shorter early hesitations or speech before the early minimum")
+    func leavesShortEarlyPauses() {
+        let hesitation = Take.speech(3) + Take.silence(0.9) + Take.speech(3)
+        let tooEarly = Take.speech(2) + Take.silence(1.2) + Take.speech(4)
+        #expect(windowing.nextCut(in: hesitation, sampleRate: Take.rate, from: 0) == nil)
+        #expect(windowing.nextCut(in: tooEarly, sampleRate: Take.rate, from: 0) == nil)
+    }
+
     @Test("gives no cut for an empty recording, a bad rate or a start past the end")
     func refusesNonsense() {
         let audio = Take.speech(10)
@@ -50,6 +66,25 @@ struct SpeechWindowingTests {
         let audio = Take.speech(7) + Take.silence(1) + Take.speech(4)
         let cut = try #require(windowing.nextCut(in: audio, sampleRate: Take.rate, from: 0))
         #expect(abs(Take.seconds(cut) - 7.5) < 0.05)
+    }
+
+    @Test("cuts at a sentence pause the minimum length falls inside")
+    func cutsAtPauseAcrossMinimum() throws {
+        let audio = Take.speech(4.5) + Take.silence(1) + Take.speech(3)
+        let cut = try #require(windowing.nextCut(in: audio, sampleRate: Take.rate, from: 0))
+        #expect(abs(Take.seconds(cut) - 5) < 0.05)
+    }
+
+    @Test("still refuses a breath across the minimum, because it is short rather than early")
+    func refusesShortPauseAcrossMinimum() {
+        let audio = Take.speech(4.8) + Take.silence(0.5) + Take.speech(4)
+        #expect(windowing.nextCut(in: audio, sampleRate: Take.rate, from: 0) == nil)
+    }
+
+    @Test("never cuts before the early minimum, however long the pause it opens on")
+    func neverCutsBeforeMinimum() {
+        let audio = Take.silence(2) + Take.speech(6)
+        #expect(windowing.nextCut(in: audio, sampleRate: Take.rate, from: 0) == nil)
     }
 
     @Test("ignores a short pause while the window is still comfortable to grow")
@@ -136,6 +171,8 @@ struct SpeechWindowingTests {
             minimumLength: 1, sentencePause: 0.2, comfortableLength: 2, anyPause: 0.1,
             maximumLength: 3)
         #expect(custom.minimumLength == 1)
+        #expect(custom.earlyLength == 2.5)
+        #expect(custom.earlyPause == 1.0)
         #expect(custom.maximumLength == 3)
         #expect(custom != .standard)
     }
