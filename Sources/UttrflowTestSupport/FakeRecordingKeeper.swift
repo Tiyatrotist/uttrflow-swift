@@ -34,6 +34,9 @@ public actor FakeRecordingKeeper: RecordingKeeper {
 
     public func audio(of id: UUID) throws(AudioCaptureError) -> AudioSamples {
         audioRequests.append(id)
+        guard currentRecording?.id == id || waitingRecordings.contains(where: { $0.id == id }) else {
+            throw .engineFailed(description: "no recording kept for \(id)")
+        }
         return try audioOutcome.resolve()
     }
 
