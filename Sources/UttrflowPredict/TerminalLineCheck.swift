@@ -159,10 +159,37 @@ public struct TerminalLineCheck: Sendable {
 
     /// A search's files, which follow the pattern unless a flag gave the pattern.
     func searched(_ arguments: [ShellWord], from directory: String?) -> Landing? {
-        let patternFlags: Set = ["-e", "-f", "--regexp", "--file"]
-        let patternGiven = arguments.contains {
-            patternFlags.contains($0.text) || $0.text.hasPrefix("--regexp=") || $0.text.hasPrefix("--file=")
+        var patternGiven = false
+        var patternFiles: [ShellWord] = []
+        var position = 0
+        while position < arguments.count {
+            let word = arguments[position]
+            let flag = word.text
+            if flag == "--" { break }
+            if ["-e", "--regexp", "-f", "--file"].contains(flag) {
+                guard position + 1 < arguments.count else { return nil }
+                patternGiven = true
+                if flag == "-f" || flag == "--file" { patternFiles.append(arguments[position + 1]) }
+                position += 2
+            } else if flag.hasPrefix("-f"), flag.count > 2 {
+                patternGiven = true
+                patternFiles.append(ShellWord(String(flag.dropFirst(2)), isUnresolved: word.isUnresolved))
+                position += 1
+            } else if flag.hasPrefix("--file=") {
+                patternGiven = true
+                patternFiles.append(ShellWord(String(flag.dropFirst(7)), isUnresolved: word.isUnresolved))
+                position += 1
+            } else if flag.hasPrefix("-e"), flag.count > 2 || flag.hasPrefix("--regexp=") {
+                patternGiven = true
+                position += 1
+            } else if Self.searchValueFlags.contains(flag) {
+                guard position + 1 < arguments.count else { return nil }
+                position += 2
+            } else {
+                position += 1
+            }
         }
+        guard allExist(patternFiles, as: .file, from: directory) else { return nil }
         let operands = Self.operands(of: arguments, valueFlags: Self.searchValueFlags, plusIsFlag: false)
         return allExist(patternGiven ? operands[...] : operands.dropFirst(), as: .anything, from: directory)
             ? .stays : nil

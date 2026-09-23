@@ -200,4 +200,38 @@ struct CommitDetectorTests {
         ]
         #expect(events.allSatisfy { $0.moment == start })
     }
+
+    @Test("Forgetting the last idle commit lets the next eligible tick re-emit the same value.")
+    func forgottenIdleCommitIsReEmitted() {
+        var detector = CommitDetector()
+        _ = typing("git push", into: &detector)
+        let first = detector.receive(.tick(at: start.addingTimeInterval(60)))
+        #expect(first?.text == "git push")
+        #expect(detector.receive(.tick(at: start.addingTimeInterval(120))) == nil)
+        detector.forgetLastIdleCommit()
+        let second = detector.receive(.tick(at: start.addingTimeInterval(180)))
+        #expect(second?.text == "git push")
+        #expect(detector.receive(.tick(at: start.addingTimeInterval(240))) == nil)
+    }
+
+    @Test("Forgetting the last idle commit keeps the prior supersession, so the next tick still retires it.")
+    func forgottenIdleCommitKeepsSupersession() {
+        var detector = CommitDetector()
+        _ = typing("git pu", into: &detector)
+        #expect(detector.receive(.tick(at: start.addingTimeInterval(60)))?.text == "git pu")
+        _ = detector.receive(.keystroke("git push", at: start.addingTimeInterval(61)))
+        #expect(
+            detector.receive(.tick(at: start.addingTimeInterval(120)))?.supersedes == "git pu")
+        detector.forgetLastIdleCommit()
+        let retry = detector.receive(.tick(at: start.addingTimeInterval(180)))
+        #expect(retry?.text == "git push")
+        #expect(retry?.supersedes == "git pu")
+    }
+
+    @Test("Forgetting an idle commit when nothing has been committed is a no-op.")
+    func forgetLastIdleCommitWithoutACommitIsANoOp() {
+        var detector = CommitDetector()
+        detector.forgetLastIdleCommit()
+        #expect(detector == CommitDetector())
+    }
 }

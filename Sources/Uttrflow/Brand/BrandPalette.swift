@@ -91,10 +91,11 @@ enum BrandPalette {
     /// The text tones, strongest first.
     enum Text {
         static let primary = BrandTone(dark: 0xF4_F4F6, light: 0x17_1320)
-        static let muted = BrandTone(dark: 0x8B_90A0, light: 0x6F_6880)
-        static let dim = BrandTone(dark: 0x56_5B68, light: 0xA4_9DB3)
-        /// Below the dimmest tone, for glyphs that lift when looked at.
-        static let ghost: UInt32 = 0x3A_3F4A
+        static let muted = BrandTone(dark: 0x8B_90A0, light: 0x64_5B76)
+        /// The dimmest tone words may use; 4.5:1 on the rail leaves it close to `muted` in the light.
+        static let dim = BrandTone(dark: 0x7A_7F8E, light: 0x6D_6481)
+        /// Below the dimmest text tone, for glyphs that lift when looked at; a mark's floor is 3:1.
+        static let ghost: UInt32 = 0x65_6E80
     }
 
     /// Colours that mean something.

@@ -66,6 +66,14 @@ empty History with fifty clips in the panel. And since a search now spans what U
 made as well, *"nothing you have copied"* told a user with nothing but dictations that
 their search had looked somewhere it had not.
 
+The third nothing on the same axis: **a list that has not been read yet**. The window is shown
+and made key before the store is asked for anything (see `Docs/app-quick-panel.md`), so for the
+moment in between the panel holds no clips and has no idea whether there are any. Saying
+*"Nothing copied yet"* there would be the same specific-and-wrong error, this time against a
+clipboard nobody has looked at. `PanelSnapshot.isAwaitingList` marks that moment, and the
+presenter says nothing about emptiness and offers nothing to keep until the list arrives: an
+unread list is an unknown, not a nothing.
+
 ## The line under the list
 
 Precedence: the undo offer, then the sheet's keys, then the empty state's reason, then
@@ -124,3 +132,30 @@ rest as "N more · keep typing to narrow it". Browsing is never capped. Two case
 advice impossible to follow, so the cap bends for them (#898): a clip whose whole text is the
 query leads its group, since nothing more can be typed to reach it, and a collection named
 exactly lists every clip in it, since a picture has no text to narrow by.
+
+## The keys an input method owns
+
+With an input method that composes — Japanese Kana or Romaji, Chinese Pinyin, Korean 2-Set,
+Hindi Transliteration — the word being typed is *marked text* in the field editor, and four
+keys belong to the input method while it is there: Return commits the candidate, ↑ and ↓ walk
+the candidate list, and Escape cancels the word. SwiftUI runs `onKeyPress` **before** the field
+editor sees the key, so a handler that answers `.handled` takes the key away from the input
+method and it never arrives.
+
+`PanelComposition.panelMayTake(_:whileComposing:)` holds the rule, and `send` is the one place
+that asks it, so the search field and the sheet's field are covered by the same guard. Marked
+text is also not reported through the `text:` binding, so the query still holds only what was
+committed — which is why taking Return pasted the top row of the *unfiltered* list.
+
+Whether a composition is open is the one part a key handler cannot read from the key: the view
+asks the field editor, `(NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText()`.
+That read is in `QuickPanelView`, which is excluded from coverage (#630), so it is checked by
+hand:
+
+1. Add Japanese – Romaji in System Settings › Keyboard › Text Input.
+2. Copy two pieces of text, one containing 日本.
+3. In a text editor press ⇧⌘V, switch to Japanese, type `nihon`, press Space to convert.
+4. Return commits 日本 into the search field and the list filters; it does not paste.
+5. During composition, ↓ walks the candidate list, and Escape cancels the word rather than
+   closing the panel.
+6. With no composition open, Return, ↑, ↓ and Escape work on the first press as always.

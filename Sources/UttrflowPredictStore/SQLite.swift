@@ -142,6 +142,15 @@ extension OpaquePointer {
         sqlite3_bind_text(self, index, value, -1, copyBoundText)
     }
 
+    /// Puts optional text at this one-based placeholder, preserving nil as NULL.
+    func bind(_ index: Int32, _ value: String?) {
+        guard let value else {
+            sqlite3_bind_null(self, index)
+            return
+        }
+        bind(index, value)
+    }
+
     /// Puts a whole number at this one-based placeholder.
     func bind(_ index: Int32, _ value: Int64) {
         sqlite3_bind_int64(self, index, value)
@@ -155,6 +164,11 @@ extension OpaquePointer {
     /// The text in this zero-based column, empty where the column holds nothing.
     func text(_ column: Int32) -> String {
         sqlite3_column_text(self, column).map { String(cString: $0) } ?? ""
+    }
+
+    /// The text in this zero-based column, or nil when the column holds NULL.
+    func optionalText(_ column: Int32) -> String? {
+        sqlite3_column_type(self, column) == SQLITE_NULL ? nil : text(column)
     }
 
     /// The whole number in this zero-based column.
