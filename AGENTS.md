@@ -366,9 +366,25 @@ cd .claude/worktrees/<name>                                       # and stay the
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 … work, commit by name, `make verify` before every push …
 # the pre-push hook runs `make verify` for main; CI runs it once more on the PR
-git push -u origin <name> && gh pr create --base main
+git push -u origin <name>
+gh pr create --base main --head <name>
+# Keep this worktree and both feature-branch refs while the pull request is open.
+```
+
+Do not clean up from a successful push, from `gh pr create`, or from `git branch -d`
+returning zero. A local branch can be "merged" to its upstream and still not be in `main`,
+which means deleting the worktree and branch would leave an open pull request with no head
+branch to update when CI or review asks for a repair.
+
+Only after GitHub says the pull request is merged:
+
+```bash
+pr=<number>
+gh pr view "$pr" --json mergedAt --jq 'select(.mergedAt != null) | .mergedAt'
+# Continue only if the command printed a merge timestamp.
 cd -                                                              # back to the main checkout
-git worktree remove .claude/worktrees/<name> && git branch -d <name>
+git worktree remove .claude/worktrees/<name>
+git branch -d <name> 2>/dev/null || git branch -D <name>
 git push origin --delete <name>
 ```
 

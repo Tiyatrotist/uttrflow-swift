@@ -542,7 +542,66 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 4. A tagged release's bullets must have existed by the tag.
+# 4. The worktree cleanup recipe must wait for a merged pull request.
+# ---------------------------------------------------------------------------
+#
+# The contributor recipe once opened a pull request and immediately deleted the worktree,
+# local branch and remote branch. `git branch -d` does not prove the branch reached `main`;
+# it can succeed when the local branch is merely merged to its upstream. The doc must keep
+# every cleanup command below a GitHub merged-state check.
+printf '\nWorktree cleanup order\n'
+
+read -r -d '' CLEANUP_PROGRAM <<'PYTHON' || true
+import re
+
+text = open("AGENTS.md", errors="ignore").read()
+start = text.find("**Every feature is built in a worktree")
+end = text.find("`sasta-trader` is a different project", start)
+if start == -1 or end == -1:
+    print("AGENTS.md  cannot find the worktree recipe section")
+    raise SystemExit
+
+section = text[start:end]
+required = [
+    ("pull request creation", r"^gh pr create --base main"),
+    ("GitHub merge-state check", r"^gh pr view [^\n]*--json mergedAt"),
+    ("worktree removal", r"^git worktree remove"),
+    ("local branch deletion", r"^git branch -[dD]"),
+    ("remote branch deletion", r"^git push origin --delete"),
+]
+
+positions = {}
+for name, pattern in required:
+    match = re.search(pattern, section, re.MULTILINE)
+    if not match:
+        print(f"AGENTS.md  missing {name}: {pattern}")
+    else:
+        positions[name] = match.start()
+
+merge = positions.get("GitHub merge-state check")
+if merge is not None:
+    for name in ("worktree removal", "local branch deletion", "remote branch deletion"):
+        where = positions.get(name)
+        if where is not None and where < merge:
+            print(f"AGENTS.md  {name} appears before the GitHub merge-state check")
+
+create = positions.get("pull request creation")
+if create is not None and merge is not None and merge < create:
+    print("AGENTS.md  merge-state check appears before pull request creation")
+PYTHON
+cleanup_order="$(python3 -c "$CLEANUP_PROGRAM")"
+
+if [[ -n "${cleanup_order//[[:space:]]/}" ]]; then
+    fail "the worktree cleanup recipe can delete a pull request branch before it is merged" \
+        "Keep the worktree and both feature-branch refs while the pull request is open." \
+        "Verify through GitHub that the pull request has merged before cleanup commands." \
+        "" $'\n'"$cleanup_order"
+else
+    pass "branch cleanup follows GitHub merge verification in AGENTS.md"
+fi
+
+# ---------------------------------------------------------------------------
+# 5. A tagged release's bullets must have existed by the tag.
 # ---------------------------------------------------------------------------
 #
 # Calendar release sections are a promise about the build named by their tag. Corrections to
@@ -562,7 +621,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 5. Every artboard text row clears WCAG AA contrast against its translucent backing.
+# 6. Every artboard text row clears WCAG AA contrast against its translucent backing.
 # ---------------------------------------------------------------------------
 #
 # The artboard generators draw a translucent menu over a gradient, and a backdrop blur
@@ -595,7 +654,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6. CLAUDE.md, if it exists, delegates to AGENTS.md by import or symlink.
+# 7. CLAUDE.md, if it exists, delegates to AGENTS.md by import or symlink.
 # ---------------------------------------------------------------------------
 #
 # A tracked CLAUDE.md is a claim about what Claude Code will load as project memory: with
@@ -642,4 +701,4 @@ if [[ "$failures" -gt 0 ]]; then
     exit 1
 fi
 
-printf 'docs audit: the paths, links, test count, release bullets and CLAUDE.md delegation in %s documents all check out.\n\n' "$DOC_COUNT"
+printf 'docs audit: the paths, links, test count, worktree cleanup order, release bullets and CLAUDE.md delegation in %s documents all check out.\n\n' "$DOC_COUNT"
