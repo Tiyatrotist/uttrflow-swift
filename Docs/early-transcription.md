@@ -92,10 +92,10 @@ comfortable length, which is between two words far more often than inside one.
 
 ## How it works
 
-`SpeechWindowing` decides where a piece ends, from the loudness frames `VoiceActivity`
-already computes. A cut may not fall before five seconds; where it may, a pause of 0.8 s
-ends the piece, which is a sentence ending rather than a breath. Once the cut falls past
-fifteen seconds, a pause of 0.4 s will do.
+already computes. A cut may not fall before 2.5 s; where it may, a pause of 1.0 s can end
+an early phrase, a pause of 0.8 s ends the piece once the cut falls past five seconds,
+which is a sentence ending rather than a breath, and past fifteen seconds a pause of 0.4 s
+will do.
 
 **A pause is as long as the speaker made it, wherever the five-second mark falls inside
 it.** Every quiet run is measured from where it truly began and the cut goes to its
@@ -104,6 +104,14 @@ only from five seconds instead saw 0.5 s of it, read a sentence ending as a brea
 left the commonest dictation length one piece — which is what #917 was. A piece never holds more than thirty seconds, the
 recogniser's own window, and with no pause at all it is cut there — which is exactly
 what the recogniser would have done to it anyway.
+
+The longer early pause protects a repeated-sentence case. The default recogniser returned
+one copy from a 6.65 s English clip containing two identical sentences separated by 1.1 s
+of silence, while it returned one copy from each half decoded separately. With the early
+cut, the 13.16 s English-to-Hindi benchmark clip returned both English sentences and the
+Hindi continuation in three fast runs and one real-time run. On the three fast runs, raw
+WER fell from 26.8% to 9.8%, and final WER from 38.7% to 16.1%. This is a synthetic-voice
+measurement, not evidence that every repetition is recovered.
 
 While recording, `DictationPipeline` looks at the audio so far once a second
 (`AudioCaptureEngine.capturedSoFar()`, a copy of the buffer at the canonical rate). The
