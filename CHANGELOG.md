@@ -12,10 +12,22 @@ Each released version is a git tag and a build at
 ## [Unreleased]
 
 ### Fixed
+- **Inline ghost stops at the host window's edge when the field's frame is unusable.** When the
+  focused field's Accessibility frame was a caret-shaped 3pt rectangle or the caret was scrolled
+  outside it, the ghost ran all the way to the screen's right edge, painting over the host
+  window's chrome and controls. The host window's rectangle is now the second rung of the bound
+  ladder, between the field and the screen, and a caret-shaped field frame is no longer taken
+  as a real field at all (#1101).
 - **Copy Diagnostics no longer puts dictated words on the clipboard.** When the AI clean-up refused
   an answer, the copied report quoted the words it refused over — a name, a number, whatever was
   said — though the report promises it counts and never quotes. It now names the kind of refusal
   and not the words. The Diagnostics page on your Mac still shows the full reason (#645).
+- **Uttrflow no longer sends your Hugging Face token when it downloads the AI suggestion model.**
+  If you had ever signed in to Hugging Face on this Mac, the app attached your personal token to
+  its own downloads. It now asks for public files as nobody, and ignores `HF_ENDPOINT` (#666).
+- **The AI suggestion models and the speech tokenizer are pinned to exact versions.** A new install
+  gets the version this release was tested against rather than whatever was published since, and
+  the tokenizer is checked against a recorded hash before it is used (#666).
 - **Forgetting what AI suggestions learned now removes it from disk straight away.** The lines
   were deleted from the store but stayed readable in a file beside it until you quit Uttrflow, so
   a backup taken in between still held them. If that file cannot be emptied, forgetting now says
@@ -34,6 +46,14 @@ Each released version is a git tag and a build at
 - **Suggestions is now called AI suggestions.** The Settings tab and its heading, the menu
   bar switch, the notes on that screen and what VoiceOver reads for a suggestion all use the
   new name. Nothing you chose there changes: every setting is kept as it was.
+
+### Fixed
+- **A copied picture the clipboard does not keep no longer leaves its file on disk.** A
+  screenshot dropped the moment it arrives, because the pictures folder is already at its
+  limit, used to leave a PNG behind that nothing ever deleted, so repeated copies grew the
+  folder past the limit it declares. Pictures left behind by an earlier version are removed
+  the next time Uttrflow starts; no clip refers to them, so nothing you can still see goes
+  with them (#777).
 
 ## [2026.9.14] — 2026-09-14
 

@@ -89,6 +89,13 @@ struct DoubleMetaphoneTests {
         #expect(sound("banana") == "PNN")
     }
 
+    @Test("Latin accents do not change a leading or internal sound")
+    func latinAccents() {
+        #expect(sound("Émile") == sound("Emile"))
+        #expect(sound("E\u{301}mile") == sound("Emile"))
+        #expect(sound("Müller") == sound("Muller"))
+    }
+
     // MARK: Consonants, one rule at a time
 
     @Test("collapses a doubled letter into the one sound it spells")

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/Scripts/disclosure_audit.py\" --hook"
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || echo \"$CLAUDE_PROJECT_DIR\")/Scripts/disclosure_audit.py\" --hook"
           }
         ]
       }

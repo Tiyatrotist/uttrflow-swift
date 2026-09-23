@@ -1,4 +1,5 @@
 public import struct Foundation.Date
+import UttrflowCore
 
 /// One text field, told apart from every other field the user types in.
 public struct Surface: Hashable, Sendable {
@@ -15,7 +16,7 @@ public struct Surface: Hashable, Sendable {
     public init(
         bundleIdentifier: String, role: String, locator: String? = nil, scope: String? = nil
     ) {
-        self.bundleIdentifier = bundleIdentifier
+        self.bundleIdentifier = ApplicationKey.of(bundleIdentifier)
         self.role = role
         self.locator = locator
         self.scope = scope

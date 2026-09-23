@@ -108,6 +108,30 @@ struct SecretDetectionTests {
         #expect(ClipKindDetector.kind(of: text) == .secret)
     }
 
+    @Test("masks quoted named secrets whose value contains an escaped quote")
+    func escapedQuotesInNamedSecrets() {
+        let dotenv = #"password="abc123\"def456""#
+        #expect(SecretShapes.hasNamedSecret(dotenv))
+        #expect(ClipKindDetector.kind(of: dotenv) == .secret)
+
+        let json = #"""
+            {
+              "password": "abc123\"def456",
+              "enabled": true
+            }
+            """#
+        #expect(SecretShapes.hasNamedSecret(json))
+        #expect(ClipKindDetector.kind(of: json) == .secret)
+    }
+
+    @Test("counts odd and even backslash runs before a quote")
+    func quoteEscapingParity() {
+        #expect(ClipKindDetector.kind(of: #"password="abc123\"def456""#) == .secret)
+        #expect(ClipKindDetector.kind(of: #"password="abc123\\\"def456""#) == .secret)
+        #expect(ClipKindDetector.kind(of: #"password="abc123\\""#) == .secret)
+        #expect(!SecretShapes.hasNamedSecret(#"password="abc123\\"def456""#))
+    }
+
     /// A whole environment file is caught by any one of its lines.
     @Test("masks an environment file pasted whole")
     func environmentFile() {

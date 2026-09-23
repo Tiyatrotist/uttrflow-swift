@@ -5,6 +5,10 @@ Delete. Both post events into the same stream the user's own keyboard feeds, whi
 what makes them work everywhere and what makes each of the rules below necessary.
 `Docs/insertion.md` covers where the events are posted; this page covers what is in them.
 
+There are no per-application results on this page and there should not be: a posted event carries
+the same thing wherever it lands. It feeds the `Completion` column of
+[compatibility.md](compatibility.md) and the undo note beside it.
+
 ## Every posted event is stamped as ours
 
 The feature reads the keyboard from two places — the `CGEventTap` in `KeyInterceptor` and
