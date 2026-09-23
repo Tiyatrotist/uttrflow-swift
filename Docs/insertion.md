@@ -76,6 +76,11 @@ Four answers, and only one of them is a fact:
   at once, between reads or in the middle of a wait, without reading the field again, and is
   reported upwards as unconfirmed, never as landed.
 
+If the insertion stage itself times out, no strategy is known to have reached the clipboard.
+The failure therefore points to the saved transcript under Recent, not to a manual paste that
+could insert an older clipboard item. A completed clipboard fallback still reports its own
+delivery and can offer manual paste.
+
 The dictation sits in ``DictationState/inserting`` throughout, which the floating button draws
 as work in progress. That state exists so that the tick is a claim about the words rather than
 about the clock: a paste into a busy application takes as long as it takes, and saying so is

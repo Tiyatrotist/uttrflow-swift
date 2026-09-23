@@ -751,8 +751,7 @@ public actor DictationPipeline {
             }
             // Either way the dictation has to end, so the next one can begin.
             guard let attempt = inserted else {
-                throw TextInsertionError.insertionRejected(
-                    description: "the application did not respond")
+                throw TextInsertionError.insertionTimedOut
             }
             // A field found secure at the write counts from here on, before anything is learnt from it.
             if attempt.intoSecureField { destinationIsSecure = true }

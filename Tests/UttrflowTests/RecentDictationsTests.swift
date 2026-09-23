@@ -2,6 +2,8 @@
 
 import Foundation
 import Testing
+import UttrflowCore
+import UttrflowPipeline
 
 @testable import Uttrflow
 
@@ -39,6 +41,22 @@ private func recentsFilled(with lines: [String], capacity: Int? = nil) -> Recent
 
 @Suite("Recent dictations")
 struct RecentDictationsTests {
+    @MainActor
+    @Test("salvaged insertion words remain in Recent when the next recording starts")
+    func insertionFailureSurvivesNextRecording() throws {
+        let sandbox = Sandbox()
+        let app = AppDelegate(container: sandbox.root)
+        let failure = DictationFailure(
+            message: "Insertion was not confirmed.", recovery: .showRecentDictations,
+            severity: .degraded, transcript: "Words from the timeout")
+
+        app.render(.failed(failure))
+        app.render(.recording)
+
+        let recent = try #require(Mirror(reflecting: app).descendant("recents") as? RecentDictations)
+        #expect(recent.entries.first?.text == "Words from the timeout")
+    }
+
     @Test("A new list is empty and has nothing to preview")
     func startsEmpty() {
         let list = RecentDictations()
