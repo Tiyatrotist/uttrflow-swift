@@ -486,26 +486,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Finishes the dictation in flight before letting the process die, but not for ever.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let pipeline else {
-            // The clipboard's held uses are written first, so a quit does not cost the eviction order.
-            Task { [clipboard] in
-                await clipboard.flushUse()
-                NSApplication.shared.reply(toApplicationShouldTerminate: true)
-            }
-            return .terminateLater
-        }
-
         Task { [weak self, pipeline, clipboard] in
-            await clipboard.flushUse()
-            // A recording waits on the user, not the app, and the key may never come up.
-            if await pipeline.currentState.isListening { await pipeline.finishRecording() }
-
-            _ = try? await withStageTimeout(Self.quitBudget, clock: ContinuousClock()) {
-                for await state in await pipeline.states() where !state.isBusy { return }
+            let controller = self?.controller
+            let quittingPipeline = pipeline.map { pipeline in
+                AppQuitCoordinator.Pipeline(
+                    currentState: { await pipeline.currentState },
+                    finishRecording: { await pipeline.finishRecording() },
+                    states: { await pipeline.states() })
             }
-            await self?.controller?.stop()
-            // On every path: an unanswered `terminateLater` is an app that cannot be quit.
-            NSApplication.shared.reply(toApplicationShouldTerminate: true)
+            await AppQuitCoordinator.finish(
+                budget: Self.quitBudget,
+                clock: ContinuousClock(),
+                pipeline: quittingPipeline,
+                flushClipboard: { await clipboard.flushUse() },
+                stopController: { await controller?.stop() },
+                reply: {
+                    // On every path: an unanswered `terminateLater` is an app that cannot be quit.
+                    await MainActor.run {
+                        NSApplication.shared.reply(toApplicationShouldTerminate: true)
+                    }
+                })
         }
         return .terminateLater
     }
