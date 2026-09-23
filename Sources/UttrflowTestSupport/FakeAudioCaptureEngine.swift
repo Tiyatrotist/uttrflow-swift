@@ -30,14 +30,16 @@ public actor FakeAudioCaptureEngine: AudioCaptureEngine {
 
     public func start() async throws(AudioCaptureError) {
         await calls.append(.start)
+        guard currentState == .idle else { throw .alreadyRecording }
         try startOutcome.resolve()
         currentState = .recording
     }
 
     public func stop() async throws(AudioCaptureError) -> AudioSamples {
         await calls.append(.stop)
-        let samples = try stopOutcome.resolve()
+        guard currentState == .recording else { throw .notRecording }
         currentState = .idle
+        let samples = try stopOutcome.resolve()
         return samples
     }
 
