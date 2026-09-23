@@ -4,10 +4,10 @@ import AppKit
 import Sparkle
 import UttrflowUX
 
-/// Decides when Sparkle may replace the running bundle; the rule is `UpdateGate`. See Docs/app-updates.md.
+/// Decides when Sparkle may check (`UpdateStartupGate`) and replace the bundle (`UpdateGate`). See Docs/app-updates.md.
 @MainActor
 final class UpdateController: NSObject {
-    /// Sparkle's own controller, started after first launch so no check competes with the model download.
+    /// Sparkle's own controller; `startUpdater()` waits on `startupGate` so no check competes with the model load.
     private lazy var controller = SPUStandardUpdaterController(
         startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
 
@@ -22,8 +22,8 @@ final class UpdateController: NSObject {
     /// Wakes the controller when the gate is due to open, since a quiet app never reports again on its own.
     private var wakeUp: Task<Void, Never>?
 
-    /// Whether the app has told Sparkle to begin. Guarded because starting twice throws.
-    private var hasStarted = false
+    /// When Sparkle's `startUpdater()` may run; see ``UpdateStartupGate``.
+    private var startupGate = UpdateStartupGate()
 
     /// How far along an update is, published so the menu bar can redraw from it.
     private(set) var progress: UpdateProgress = .idle {
@@ -56,18 +56,24 @@ final class UpdateController: NSObject {
         return Bundle.main.object(forInfoDictionaryKey: "SUVerifyUpdateBeforeExtraction") as? Bool == true
     }
 
-    /// Starts checking. Called once, after the app has finished coming up.
+    /// Configures Sparkle; an automatic check itself waits for ``modelLoadingSettled()``.
     func begin(automatically: Bool) {
-        guard Self.isConfigured, !hasStarted else { return }
-        hasStarted = true
+        guard Self.isConfigured, !startupGate.isConfigured else { return }
+        startupGate.configure()
         updater.automaticallyChecksForUpdates = true
         updater.automaticallyDownloadsUpdates = automatically
-        controller.startUpdater()
+        if startupGate.mayStartAutomatically() { controller.startUpdater() }
+    }
+
+    /// The speech model has settled — loaded, failed, or was never installed; safe before or after `begin`.
+    func modelLoadingSettled() {
+        startupGate.settle()
+        if startupGate.mayStartAutomatically() { controller.startUpdater() }
     }
 
     /// The user changed the switch in Settings.
     func setInstallsAutomatically(_ isOn: Bool) {
-        guard hasStarted else { return }
+        guard startupGate.isConfigured else { return }
         updater.automaticallyDownloadsUpdates = isOn
     }
 
@@ -110,10 +116,11 @@ final class UpdateController: NSObject {
         }
     }
 
-    /// The menu's "Check for Updates…", the one path allowed to put a window in front of somebody.
+    /// The menu's "Check for Updates…"; bypasses the startup grace period and puts a window in front.
     func checkForUpdates() {
         guard Self.isConfigured else { return }
         begin(automatically: updater.automaticallyDownloadsUpdates)
+        if startupGate.mayStartManually() { controller.startUpdater() }
         // Only a check the user asked for says so; see `MenuBarPresenter.updateLine`.
         progress = .checking
         updater.checkForUpdates()

@@ -39,9 +39,10 @@
 	  signed. Scripts/bundle.sh and UpdateController refuse a feed without it. See
 	  Docs/releasing.md ("Updating").
 
-	  Six hours between checks, and never in the first minutes of a launch: a check
-	  competing with the speech-model download is a check that slows down the one thing
-	  a new user is waiting for.
+	  Six hours between checks. UpdateController also holds Sparkle's own startUpdater()
+	  back until the speech model has finished loading, failed to, or was never
+	  installed, so an automatic check never competes with the one thing a new user is
+	  waiting for. This interval alone does not provide that grace period.
 	-->
 	<key>SUFeedURL</key>
 	<string>https://api.uttrflow.com/v1/updates/macos/appcast.xml</string>

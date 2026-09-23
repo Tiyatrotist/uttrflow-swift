@@ -247,7 +247,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         presentOnboardingIfNeeded()
         // Shown at launch, since a menu-bar icon alone is an interface most people never find.
         if onboarding == nil { show(.main(.home)) }
-        // Last, from the setting: an update check here would race the model download.
+        // Configured last, from the setting; the automatic check itself waits for `modelLoadingSettled()`.
         updates.onProgressChanged = { [weak self] in self?.refreshMenuBar() }
         updates.begin(automatically: settings.installsUpdatesAutomatically)
     }
@@ -351,6 +351,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func loadSpeechModel() {
         guard modelStore.isInstalled(.default) else {
             speechReadiness = .notInstalled
+            // Nothing to load, so nothing for an automatic update check to compete with.
+            updates.modelLoadingSettled()
             return
         }
         speechReadiness = .loading
@@ -369,6 +371,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             speechReadiness =
                 isReady ? .ready : modelStore.isInstalled(.default) ? .loadFailed : .notInstalled
             refreshSpeechModelSurfaces()
+            // The load ended, one way or another; an automatic update check may now start.
+            updates.modelLoadingSettled()
         }
     }
 
