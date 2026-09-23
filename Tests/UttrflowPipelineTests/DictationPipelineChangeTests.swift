@@ -145,15 +145,17 @@ private final class FakeCleaner: TranscriptCleaning, Sendable {
 private final class FakeInserter: TextInserting, Sendable {
     private let state = Mutex<[String]>([])
     private let refuses: Bool
+    private let arrival: InsertionArrival
 
-    init(refuses: Bool = false) {
+    init(refuses: Bool = false, arrival: InsertionArrival = .notReported) {
         self.refuses = refuses
+        self.arrival = arrival
     }
 
     func insert(_ text: String) async throws(TextInsertionError) -> InsertionAttempt {
         state.withLock { $0.append(text) }
         guard !refuses else { throw .clipboardUnavailable }
-        return InsertionAttempt(.accessibility)
+        return InsertionAttempt(.accessibility, arrival: arrival)
     }
 
     var received: [String] { state.withLock { $0 } }
@@ -471,6 +473,26 @@ struct DictationPipelineLearningTests {
         #expect(learner.entries.isEmpty)
     }
 
+    /// Issue 1242: an unconfirmed paste is not proof the words reached the user, so nothing is counted yet.
+    @Test("Counts nothing from an insertion the target never confirmed")
+    func countsNothingFromAnUnconfirmedInsertion() async {
+        let learner = FakeLearner()
+        let pipeline = makePipeline(
+            inserter: FakeInserter(arrival: .unconfirmed),
+            corrector: FakeCorrector(proposing: [paymentSheet]),
+            snippets: FakeExpander(answering: { text in
+                ExpandedTranscript(
+                    text: text,
+                    snippets: [SnippetUse(snippetID: snippet, matched: "x", expansion: "x")])
+            }),
+            learner: learner)
+
+        await dictate(with: pipeline)
+
+        #expect(learner.entries.isEmpty)
+        #expect(learner.snippets.isEmpty)
+    }
+
     /// This runs after the dictation is announced as inserted, so a refused note cannot be a failure.
     @Test("A store that refuses the note does not undo the dictation")
     func aRefusedNoteChangesNothing() async {
@@ -528,6 +550,18 @@ struct DictationPipelineVocabularyTests {
         let vocabulary = FakeVocabulary()
         let pipeline = makePipeline(
             inserter: FakeInserter(refuses: true), vocabulary: vocabulary)
+
+        await dictate(with: pipeline)
+
+        #expect(vocabulary.lessons.isEmpty)
+    }
+
+    /// Issue 1242: the words may never have reached the user, so nothing is learnt from them yet.
+    @Test("Teaches the dictionary nothing when the insertion goes unconfirmed")
+    func learnsNothingFromAnUnconfirmedInsertion() async {
+        let vocabulary = FakeVocabulary()
+        let pipeline = makePipeline(
+            inserter: FakeInserter(arrival: .unconfirmed), vocabulary: vocabulary)
 
         await dictate(with: pipeline)
 
