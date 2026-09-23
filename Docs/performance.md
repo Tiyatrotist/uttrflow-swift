@@ -217,6 +217,7 @@ Measured on Release builds with `/usr/bin/time -l` and MLX's own counters, 48 GB
 | speech model, Whisper large-v3 turbo on CoreML | launch, `loadSpeechModel()` | quit | +114 MB footprint loaded, 267 MB peak footprint and 340 MB peak resident mid-dictation; the weights are file-mapped, so macOS can drop them itself |
 | suggestion model, Gemma 3 4B QAT on MLX | launch or the moment AI suggestions is turned on, only for somebody who turned it on | AI suggestions turned off; no query for 3 minutes on a Mac under 16 GB, 10 minutes otherwise; or quit | 2,485 MB of GPU memory, 3,036 MB at a pass's peak, 3,464 MB peak process footprint; anonymous, so nothing but a release frees it |
 | MLX's buffer cache | during a pass | the end of every pass | capped at 256 MB, 0 MB between passes |
+| the last pass's prompt in a KV cache | the end of a suggestion pass | the next pass trims it, or the weights are dropped | 91 MB of GPU memory measured over one typed reply, see [what a suggestion pass prefills](#what-a-suggestion-pass-prefills) |
 | the recording | the shortcut | the end of the dictation | at most 15 MB: 240 s at 16 kHz in 4-byte samples |
 | clipboard thumbnails | the panel is drawn | least recently used first | at most 32 MB, see `Docs/clipboard-budget.md` |
 | clipboard, history, dictionary and suggestion stores | launch | quit | under a megabyte of text each at measured sizes; the prediction corpus is SQLite on disk |
@@ -421,6 +422,66 @@ What is left is the score: `judgedTokens` tokenises the candidate twice, about 1
 through the same regex, and that is now the largest tokenizer cost. The regex is the dependency's;
 upstream it is huggingface/swift-transformers#383, with a fix open as #386, and nothing here
 patches or bumps it.
+
+### What a suggestion pass prefills
+
+Consecutive keystrokes on one line ask almost the same question. `PromptBuilder.message` puts
+the stable parts first — where the caret is, the screen around it, this person's earlier lines,
+the text before the line — and the typed line last, so one keystroke's prompt shares all but its
+own last tokens with the one before it. Until #891 a pass read the shared part again every time:
+the instruction prefix came from the warm cache built at load, and everything past it was
+prefilled from scratch.
+
+`MLXCandidateScorer` now keeps the last pass's prompt tokens and the `[KVCache]` they were read
+into. The next pass takes the longest run of tokens the two prompts share, trims the kept cache
+back to it and reads only the rest, falling back to a copy of the warm instructions when the
+shared run is no shorter than those and to a whole prefill when the cache cannot be trimmed. The
+last shared token is always read again, since the model answers from the token it has just read.
+The kept cache is handed to one pass at a time — taken out of the actor when a pass adopts it and
+put back when that pass's decode has stopped — so two overlapping passes never write one cache,
+and it is dropped with everything else read from the weights on release, on memory pressure and
+on a reload.
+
+Measured 21 September 2026 on the M5 Pro, one Release `uttrflow-bakeoff` per build,
+`gpu-memory --typing --passes 50 --cancel-every 0` — one reply typed a character a pass under
+one screen of messages — rounds interleaved between the two builds, the token and prefill
+figures from a stderr line and an off switch that were never committed. Six rounds each; the
+machine carried other builds at a load average of 30–75 for three of them, which is why the
+prefill column is the one to read and the pass column is quoted per round.
+
+| | prompt tokens | read a pass | prefill p50, six rounds | pass p50, six rounds |
+|---|--:|--:|--:|--:|
+| before | 328 | 123 | 65, 66, 71, 74, 90, 97 ms | 229, 230, 236, 245, 307, 608 ms |
+| after | 328 | 11–15 | 45, 46, 46, 52, 55, 70 ms | 204, 206, 208, 228, 239, 428 ms |
+
+- **The shared run is almost the whole prompt.** Of 328 prompt tokens, 315 at p50 were shared
+  with the previous keystroke's prompt — 110 of them past the 205-token instruction prefix. Only
+  11 tokens a pass were genuinely new.
+- **The prefill saves about 20–25 ms a pass**, on every keystroke's pass and again on its
+  alternatives pass. `promptTime` counts the first decode step as well as the prefill, which is
+  why reading 11 tokens instead of 123 costs 45 ms rather than nothing.
+- **Prefill is the larger half of a short pass and a small part of a long one.** Here it was 66 ms
+  against 50 ms of decode over five generated tokens; on the seven browser moments in
+  `Docs/predict-context.md` it was 82–96 ms against a whole pass of 902–1,160 ms, because those
+  decode forty to ninety tokens. The 20–25 ms is the same either way; the share is not.
+- **It costs 91 MB of GPU memory held between passes**, which is the kept cache: MLX's active
+  memory after fifty passes went from 2,485 MB to 2,576 MB and the process footprint from
+  2,841 MB to 2,932 MB. That is spent only while somebody is typing with suggestions on, and it
+  is given back by the same release that gives back the weights. It also deepens an overshoot
+  that is already there: `gpu-memory --typing` reports `suggestionsBetweenPasses` at 3,071–3,097 MB
+  of the 3,072 MB budget on `main` and at 3,169–3,201 MB with the kept cache, so the budget line
+  in [the budget](#the-budget) is at its edge before the change and past it after. #475 is the
+  open issue for the overshoot itself.
+- **It changes an answer where one was a near tie.** The last tokens of a prompt are read in a
+  batch of eleven rather than a batch of 123, and bf16 rounds a small batch differently, so a
+  near tie at temperature 0 can fall the other way. Over `complete --fixtures` 81 of 1,154
+  fixtures came to a different first line: 79 of those hit before and after, one turned a miss
+  into a hit and one stayed a miss, and all 81 stayed in register — 1,107 hits and 1,130 in
+  register before, 1,108 and 1,130 after. With the reuse switched off the same binary reproduced
+  every one of the 1,154 lines of `main` exactly, so reuse is the only thing that moves an answer.
+  Over sixty consecutive keystrokes one line differed, and each build was byte-identical across
+  two runs of its own. Any prefix reuse has this property; what it is not is a stale read, since
+  the shared tokens sit at the same positions and hold the state a fresh prefill would compute.
 
 ### The processor time that is not the app's
 

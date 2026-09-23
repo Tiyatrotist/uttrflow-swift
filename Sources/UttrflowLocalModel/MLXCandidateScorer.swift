@@ -113,6 +113,7 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         warm = nil
         prompt = nil
         vocabulary = nil
+        kept = nil
     }
 
     /// Marks a pass as using the model.
@@ -159,6 +160,35 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         // Built once and only ever copied afterwards, which is what makes sharing it across passes safe.
         let tokens: [Int]
         let cache: [KVCache]
+    }
+
+    /// The last pass's prompt tokens and the model's state after them, so the next pass reads only what changed. See `Docs/performance.md`.
+    private struct KeptPrefix: @unchecked Sendable {
+        // Held by one pass at a time, which is what makes writing to it safe.
+        let tokens: [Int]
+        let cache: [KVCache]
+    }
+
+    /// What the last pass read, or nothing while a pass holds it and until a pass has read something.
+    private var kept: KeptPrefix?
+
+    /// How many opening tokens two prompts share, the last one always left to be read again so the model has a token to answer from, or nothing when that is no more than the warmed instructions hold.
+    static func sharedPrefix(of read: [Int], and all: [Int], beating warmed: Int) -> Int? {
+        guard !all.isEmpty else { return nil }
+        let shared = min(zip(read, all).prefix { $0 == $1 }.count, all.count - 1)
+        guard shared > warmed else { return nil }
+        return shared
+    }
+
+    /// How many of `all`'s opening tokens the kept cache holds once the rest is trimmed off it, or nothing when it shares too little or cannot be trimmed.
+    private static func trimmed(_ kept: KeptPrefix, to all: [Int], beating warmed: Int) -> Int? {
+        // Every layer's cache has to have counted the same tokens for one trim to leave them all at the shared prefix.
+        guard let shared = sharedPrefix(of: kept.tokens, and: all, beating: warmed),
+            canTrimPromptCache(kept.cache), let offset = kept.cache.first?.offset,
+            kept.cache.allSatisfy({ $0.offset == offset }), offset >= shared
+        else { return nil }
+        trimPromptCache(kept.cache, numTokens: offset - shared)
+        return shared
     }
 
     /// Reads the instructions into a cache once, taking their exact tokens as the run two different messages share.
@@ -268,13 +298,17 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         let choice = opening.flatMap { CompletionText.choice(of: situation.choices, at: $0) }
         let warm = self.warm
         let prompt = self.prompt
+        // Taken out for this pass, so two passes that overlap never write one cache.
+        let kept = self.kept
+        self.kept = nil
         let vocabulary = self.vocabulary
         let perLine = register.maxTokens
         let cap = maximumTokens
         let stream: AsyncStream<Generation>
         let generation: Task<Void, Never>
+        let read: KeptPrefix?
         do {
-            (stream, generation) = try await container.perform { loaded in
+            (stream, generation, read) = try await container.perform { loaded in
                 try Task.checkCancellation()
                 var context = loaded
                 // The producer ends at the newline itself when one line is wanted, so no decode step is spent past it.
@@ -295,8 +329,14 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
                 }
                 var feed = LMInput(text: LMInput.Text(tokens: MLXArray(all.map(Int32.init))))
                 var cache: [KVCache]?
-                // When the prompt opens exactly as the warm cache read it, the pass pays only for the tokens past that.
-                if let warm, all.count > warm.tokens.count, Array(all[..<warm.tokens.count]) == warm.tokens {
+                // The tokens this prompt shares with the last one are already read, so the pass pays only for the rest.
+                if let kept, let shared = Self.trimmed(kept, to: all, beating: warm?.tokens.count ?? 0) {
+                    feed = LMInput(text: LMInput.Text(tokens: MLXArray(all[shared...].map(Int32.init))))
+                    cache = kept.cache
+                } else if let warm, all.count > warm.tokens.count,
+                    Array(all[..<warm.tokens.count]) == warm.tokens
+                {
+                    // When the prompt opens exactly as the warm cache read it, the pass pays only for the tokens past that.
                     let rest = MLXArray(all[warm.tokens.count...].map(Int32.init))
                     feed = LMInput(text: LMInput.Text(tokens: rest))
                     cache = warm.cache.map { $0.copy() }
@@ -327,9 +367,10 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
                     iterator = try TokenIterator(
                         input: feed, model: context.model, cache: cache, parameters: parameters)
                 }
-                return generateTask(
+                let (stream, generation) = generateTask(
                     promptTokenCount: feed.text.tokens.size, modelConfiguration: context.configuration,
                     tokenizer: context.tokenizer, iterator: iterator)
+                return (stream, generation, cache.map { KeptPrefix(tokens: all, cache: $0) })
             }
         } catch is CancellationError {
             // A cancelled pass answers a line that is gone, and nothing is drawn for it either way.
@@ -349,6 +390,8 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         // The decode stops before the pass ends, so a release never empties weights a step is still reading.
         generation.cancel()
         await generation.value
+        // Kept only now the decode has stopped writing to the cache, and only while the weights it was read from are loaded.
+        if self.container != nil { self.kept = read }
         if let info {
             Self.log.debug(
                 "PASS prompt=\(info.promptTokenCount) promptMs=\(Int(info.promptTime * 1_000)) generated=\(info.generationTokenCount) generateMs=\(Int(info.generateTime * 1_000))"
