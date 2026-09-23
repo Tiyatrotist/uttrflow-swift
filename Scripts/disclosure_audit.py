@@ -210,11 +210,15 @@ TIER2 = compile_terms(TIER2_B64)
 
 
 def hits(text, patterns):
-    """Yields (line_number, line, matched_text) for every match in a block of text."""
+    """Yields (line_number, line, matched_text) for every non-overlapping match in a block of text.
+
+    A second occurrence of an already-matched pattern on the same line is its own hit, not
+    a repeat of the first: the tier-2 ratchet counts occurrences, and a `search`-once loop
+    made a line's second match invisible to it.
+    """
     for number, line in enumerate(text.split("\n"), start=1):
         for pattern in patterns:
-            found = pattern.search(line)
-            if found:
+            for found in pattern.finditer(line):
                 yield number, line.strip()[:160], found.group(0)
 
 
