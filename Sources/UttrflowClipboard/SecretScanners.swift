@@ -336,15 +336,21 @@ struct NamedSecretScan {
     private mutating func closingQuote(from open: TextPosition, quote: UInt8) -> String.Index? {
         if let cached = quotedRun, cached.open == open.index { return cached.end }
         var index = text.index(after: open.index)
+        var backslashes = 0
         var close: String.Index?
         while index < text.endIndex {
             read += 1
             let character = text[index]
-            if character.loneASCII == quote {
+            if character.loneASCII == quote, backslashes.isMultiple(of: 2) {
                 close = index > text.index(after: open.index) ? index : nil
                 break
             }
             if character == "\n" { break }
+            if character.loneASCII == UInt8(ascii: "\\") {
+                backslashes += 1
+            } else {
+                backslashes = 0
+            }
             index = text.index(after: index)
         }
         quotedRun = (open.index, close)

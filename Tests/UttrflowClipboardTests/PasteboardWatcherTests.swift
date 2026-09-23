@@ -103,6 +103,24 @@ struct PasteboardWatcherTests {
         #expect(clip?.copiedAt == noon)
     }
 
+    @Test("records an escaped-quote named secret as hidden without changing the text")
+    func escapedQuoteNamedSecretIsHidden() async {
+        let clipboard = FakeClipboard()
+        let watcher = watcher(clipboard)
+        let text = #"""
+            {
+              "password": "abc123\"def456",
+              "enabled": true
+            }
+            """#
+        clipboard.write(text, from: "Code")
+
+        let clip = await watcher.newClip(at: noon)?.clip
+
+        #expect(clip?.text == text)
+        #expect(clip?.kind == .secret)
+    }
+
     /// Whatever is on the clipboard at launch was copied before Uttrflow was watching.
     @Test("adopts whatever was already there rather than claiming it")
     func firstTickTakesABaseline() async {
