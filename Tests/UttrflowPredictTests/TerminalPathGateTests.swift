@@ -136,6 +136,27 @@ struct TerminalPathGateTests {
         #expect(standing == ["git push origin main"])
     }
 
+    @Test("A remembered quoted destructive executable is refused before display.")
+    func quotedDestructive() async throws {
+        let folder = try Folder()
+        try folder.directory("build")
+        let lines = [#""rm" -rf build"#, "'rm' -rf build", #"sudo "rm" -rf build"#, #""ls" build"#]
+
+        #expect(await kept(lines, in: shell(in: folder.path)) == [#""ls" build"#])
+
+        let verifier = Verifier(index: EnvironmentIndex(reader: StubEnvironment([:])))
+        for source in CandidateSource.allCases {
+            let candidates = lines.map { Candidate(text: $0, source: source) }
+            let verified = await verifier.verified(
+                candidates, in: shell(in: folder.path), typed: "", now: moment)
+            #expect(verified.map(\.text) == [#""ls" build"#])
+        }
+        let generated = await verifier.standing(
+            [#""rm" -rf build"#, #"echo $(rm -rf build)"#, #""ls" build"#], after: "",
+            in: shell(in: folder.path), now: moment)
+        #expect(generated == [#""ls" build"#])
+    }
+
     @Test("A line in a remote session is not suggested, and this Mac's disk is not asked about it.")
     func remoteSessionIsNotThisDisk() async throws {
         let disk = FakeDisk(

@@ -216,8 +216,9 @@ public actor Verifier {
 
     /// Whether a whole line may be shown at all: never when it destroys, and in a terminal only when everything it names exists from there. See `Docs/predict-terminal-paths.md`.
     private func admits(_ line: String, in surface: Surface, now: Date) async -> Bool {
-        guard !DestructiveCommand.matches(line) else { return false }
-        guard TerminalApplications.contains(surface.bundleIdentifier) else { return true }
+        let terminal = TerminalApplications.contains(surface.bundleIdentifier)
+        guard !DestructiveCommand.matches(line, failClosedOnUnresolved: terminal) else { return false }
+        guard terminal else { return true }
         // A remote session's files are on another machine, so nothing this disk could say stands behind the line.
         guard !RemoteSession.names(surface.scope) else { return false }
         // Aliases are read from the shell's configuration as text; until they are, an alias is not a command.

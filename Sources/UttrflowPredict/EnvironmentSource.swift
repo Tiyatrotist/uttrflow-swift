@@ -163,7 +163,8 @@ public struct EnvironmentSource: Sendable {
         return offered.map {
             let text = completing.leading + $0
             return Candidate(
-                text: text, source: .environment, isIrreversible: DestructiveCommand.matches(text))
+                text: text, source: .environment,
+                isIrreversible: DestructiveCommand.matches(text, failClosedOnUnresolved: true))
         }
     }
 
