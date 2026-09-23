@@ -319,6 +319,18 @@ struct CorrectedWordsTests {
         #expect(RecordedChanges(corrections: [made(range: 4..<6)], spokenWords: 2).correctedWords == 0)
     }
 
+    /// A malformed file can carry a range past the end by an arbitrary amount; work is bounded by the spoken count. Regression for #1307.
+    @Test("a huge decoded range stays bounded by the spoken word count")
+    func hugeRangeStaysBounded() {
+        let changes = RecordedChanges(
+            corrections: [made(range: 0..<5_000_000)], spokenWords: 2)
+        let started = Date()
+        let count = changes.correctedWords
+        let elapsed = Date().timeIntervalSince(started)
+        #expect(count == 2, "the two in-range positions are still counted")
+        #expect(elapsed < 0.1, "a five-million-element range must not slow the count")
+    }
+
     /// With no utterance counted there is nothing for these to be positions in.
     @Test("changes recorded before the utterance was counted count nothing")
     func withoutAnUtterance() {
