@@ -34,6 +34,10 @@ lint: ## Fail on any style or documentation violation.
 offline-audit: ## Prove the dictation path still cannot reach the network.
 	./Scripts/offline_audit.sh
 
+.PHONY: offline-audit-tokenizer-test
+offline-audit-tokenizer-test: ## Prove the offline audit fails, not notes, a missing tokenizerFolder pin. Needs no build.
+	./Scripts/offline_audit_tokenizer_test.sh
+
 .PHONY: comment-audit
 comment-audit: ## Prove no file gained a multi-line comment. Needs no build.
 	@python3 Scripts/comment_audit.py
@@ -162,7 +166,7 @@ disclosure-history: ## Scan every commit on every ref. Run before a repo goes pu
 # whose failure cannot be fixed after the fact. A competitor's name in a commit is
 # published the moment the commit is, and no later edit reaches a clone or a cache.
 .PHONY: verify
-verify: pii-audit disclosure-audit issue-template-audit docs-audit comment-audit match-audit ratchet-test range-test hits-test pre-push-test update-feed-test entitlement-gate-test issue-template-test uitest-arguments uitest-result-path log-audit store-permissions pasteboard-audit bundle-requirement-test release-tag-test release-order-test e2e-predict-cleanup-test perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, issue template prompts, docs, comments, word matches, log privacy, clipboard, bundle signing, release tags, release stage order, energy and memory budget, lint, build, tests, coverage floor, offline audit.
+verify: pii-audit disclosure-audit issue-template-audit docs-audit comment-audit match-audit ratchet-test range-test hits-test pre-push-test update-feed-test entitlement-gate-test issue-template-test uitest-arguments uitest-result-path log-audit store-permissions pasteboard-audit bundle-requirement-test release-tag-test release-order-test e2e-predict-cleanup-test offline-audit-tokenizer-test perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, issue template prompts, docs, comments, word matches, log privacy, clipboard, bundle signing, release tags, release stage order, offline tokenizer gate, energy and memory budget, lint, build, tests, coverage floor, offline audit.
 
 # Hooks are not cloned — .git/hooks is local to a checkout — so this points git at a
 # directory that is. One command per clone, and the gate cannot be forgotten after that.

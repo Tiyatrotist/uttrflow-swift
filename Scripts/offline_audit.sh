@@ -170,15 +170,21 @@ fi
 #
 # The store now installs the tokenizer and the backend pins the folder, so this check has
 # flipped from reporting the gap to guarding the fix, and the fix cannot be undone quietly.
+#
+# Matched the same way as `download: false` above — a labeled argument at the start of its
+# line — so a `//` comment mentioning the name, or the name appearing anywhere else in the
+# file, proves nothing. `nil` is rejected explicitly: it is the one value that passes this
+# shape while putting WhisperKit right back on the hub fallback this check exists to catch.
 printf '\nTokenizer\n'
 
-if grep -q 'tokenizerFolder' "$BACKEND" 2>/dev/null; then
+if grep -qE '^\s*tokenizerFolder:\s*[A-Za-z_][A-Za-z0-9_.]*\s*,?\s*$' "$BACKEND" 2>/dev/null \
+    && ! grep -qE '^\s*tokenizerFolder:\s*nil\b' "$BACKEND" 2>/dev/null; then
     pass "a tokenizer folder is pinned, so loading cannot fall back to the hub"
 else
-    note "KNOWN GAP: no tokenizerFolder is pinned in $BACKEND."
-    note "  WhisperKit downloads the tokenizer at model-load time when it cannot find"
-    note "  one on disk, which puts a network call on the dictation path for any Mac"
-    note "  that has not transcribed while online. See Docs/offline.md § Tokenizer."
+    fail "$BACKEND does not pin a tokenizerFolder" \
+        "WhisperKit downloads the tokenizer at model-load time when it cannot find" \
+        "one on disk, which puts a network call on the dictation path for any Mac" \
+        "that has not transcribed while online. See Docs/offline.md § Tokenizer."
 fi
 
 # ---------------------------------------------------------------------------
