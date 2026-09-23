@@ -26,9 +26,12 @@ pressed.
 
 ## Recording a shortcut
 
-Keystrokes are taken through a local `NSEvent` monitor rather than SwiftUI's focus machinery,
+Keystrokes are taken through `SystemKeyboard` rather than SwiftUI's focus machinery,
 because the combinations worth recording — ⌘Q, ⌥Space — are the ones the menus and the responder
-chain would otherwise eat before any view saw them. The monitor is installed only while recording.
+chain would otherwise eat before any view saw them. The source is started only while recording,
+with `consumeKeyDown: true` so the session tap is a `.defaultTap` and returns `nil` for every
+key-down the recorder accepts; modifiers and key-ups still pass through, so the host's modifier
+state never gets stuck mid-choice.
 
 ### `.flagsChanged` as well as `.keyDown`
 
@@ -60,3 +63,10 @@ after the user let go.
 
 Only four modifiers are recognised — command, option, control, shift. Caps Lock, Fn and the
 numeric-keypad bit are noise the window server sets on its own.
+
+### The field owns the recording only while it is the key interaction surface
+
+`SettingsWindowController.windowDidResignKey` cancels the recording, because a keystroke meant
+for the next application must not be saved as Uttrflow's shortcut. The session tap stops, the
+key-down swallow goes with it, and another ⌘Q reaches the foreground app normally. The window's
+`windowWillClose` does the same when the user closes Settings.

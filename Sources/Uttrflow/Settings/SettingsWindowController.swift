@@ -88,6 +88,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         onClose?()
     }
 
+    /// Recording owns the key-down only while Settings is the active/key interaction surface, so a keystroke meant for the next app cannot be saved as Uttrflow's shortcut. See `Docs/app-settings-controls.md`.
+    func windowDidResignKey(_ notification: Notification) {
+        model.cancelRecordingShortcut()
+    }
+
     /// The window has gone; nothing was necessarily altered, but what the interface shows has.
     var onClose: (() -> Void)?
 

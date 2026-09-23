@@ -246,9 +246,10 @@ struct SettingsShortcutField: View {
         listening = true
         // One source, and the recorder decides what each stroke means. Nothing here judges a key.
         do {
-            try keyboard.start { stroke in
-                Task { @MainActor in model.receive(stroke) }
-            }
+            try keyboard.start(
+                { stroke in
+                    Task { @MainActor in model.receive(stroke) }
+                }, consumeKeyDown: true)
         } catch {
             model.shortcutSourceRefused()
         }

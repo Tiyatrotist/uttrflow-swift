@@ -37,14 +37,15 @@ public final class ActivationMonitor: HotkeyMonitoring {
         recogniser.withLock { $0 = HotkeyRecogniser(binding: binding) }
         let continuation = continuation
         do {
-            try source.start { [weak self] stroke in
-                guard let self else { return }
-                // Yielded under the lock, so a stop's owed release cannot overtake the press it ends.
-                recogniser.withLock { current in
-                    if let happened = current?.receive(stroke) { continuation.yield(happened) }
-                }
-                strokeLeftLock()
-            }
+            try source.start(
+                { [weak self] stroke in
+                    guard let self else { return }
+                    // Yielded under the lock, so a stop's owed release cannot overtake the press it ends.
+                    recogniser.withLock { current in
+                        if let happened = current?.receive(stroke) { continuation.yield(happened) }
+                    }
+                    strokeLeftLock()
+                }, consumeKeyDown: false)
         } catch {
             throw .observationNotPermitted
         }

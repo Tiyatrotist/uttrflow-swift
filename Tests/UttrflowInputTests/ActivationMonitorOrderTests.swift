@@ -15,7 +15,10 @@ private final class HandFedSource: KeyboardEventSource {
 
     private let sink = Mutex<Sink?>(nil)
 
-    func start(_ deliver: @escaping @Sendable (KeyStroke) -> Void) throws(KeyboardSourceError) {
+    func start(
+        _ deliver: @escaping @Sendable (KeyStroke) -> Void,
+        consumeKeyDown: Bool = false
+    ) throws(KeyboardSourceError) {
         sink.withLock { $0 = Sink(call: deliver) }
     }
 
