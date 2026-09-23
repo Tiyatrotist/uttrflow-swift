@@ -28,6 +28,11 @@ func store(_ corpus: borrowing Corpus) throws -> PredictStore {
     try PredictStore(path: corpus.path)
 }
 
+private func isExcludedFromBackup(_ url: URL) throws -> Bool {
+    let values = try url.resourceValues(forKeys: [.isExcludedFromBackupKey])
+    return values.isExcludedFromBackup == true
+}
+
 private let terminal = Surface(bundleIdentifier: "com.example.terminal", role: "AXTextArea")
 private let moment = Date(timeIntervalSince1970: 1_800_000_000)
 
@@ -41,6 +46,15 @@ struct RecordingTests {
         let found = try await store.candidates(for: terminal, matching: "git c")
         #expect(found.map(\.text) == ["git commit -m"])
         #expect(found.first?.evidence?.count == 1)
+    }
+
+    @Test("the corpus database is kept out of backups")
+    func databaseIsExcludedFromBackup() async throws {
+        let corpus = Corpus()
+        let store = try store(corpus)
+        try await store.record("git commit -m", in: terminal, at: moment)
+
+        #expect(try isExcludedFromBackup(URL(fileURLWithPath: corpus.path)))
     }
 
     @Test("Entering the same thing twice counts twice rather than storing it twice.")

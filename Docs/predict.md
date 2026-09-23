@@ -11,6 +11,14 @@ the local model writes for the situation (`Sources/UttrflowPredict/CandidateGene
 It shares the product's one claim: the corpus is a SQLite file under Application Support,
 it is never uploaded, and the network is still reachable from `UttrflowAccount` alone.
 
+The corpus and consent file are local working memory, not backup material. `PredictStore` marks
+`predict.v1.sqlite` and any SQLite sidecars `isExcludedFromBackup`, and `CapturePreferencesFile`
+writes consent through `PrivateFile`, so backup tools that honour Finder's exclusion flag should
+skip learned lines and application consent. The files are still owner-only local files rather than
+an encrypted store; the at-rest boundary is the user's login, FileVault and any encrypted backup
+volume. The speech model directory is also excluded from backup because it is public downloaded
+data that can be fetched again.
+
 ## The pieces
 
 | Piece | Where | What it owns |
