@@ -134,12 +134,15 @@ private final class GatedSpeechEngine: SpeechEngine, Sendable {
 /// An ``AudioCaptureEngine`` that can be caught mid-`start`, and knows whether the microphone is live.
 private actor GatedCaptureEngine: AudioCaptureEngine {
     private let gate: Gate
+    // Consumed on the first throw, so a retry after a scripted failure opens normally.
+    private var startError: AudioCaptureError?
     private var currentState: AudioCaptureState = .idle
     private(set) var starts = 0
     private(set) var cancels = 0
 
-    init(gate: Gate) {
+    init(gate: Gate, startError: AudioCaptureError? = nil) {
         self.gate = gate
+        self.startError = startError
     }
 
     var state: AudioCaptureState { currentState }
@@ -147,6 +150,10 @@ private actor GatedCaptureEngine: AudioCaptureEngine {
     func start() async throws(AudioCaptureError) {
         starts += 1
         await gate.pass()
+        if let startError {
+            self.startError = nil
+            throw startError
+        }
         guard currentState == .idle else { throw .alreadyRecording }
         currentState = .recording
     }
@@ -656,6 +663,43 @@ struct DictationPipelineStateTests {
         #expect(
             await capture.state == .idle,
             "a dictation abandoned while starting must not leave the microphone live")
+    }
+
+    @Test("a microphone error after a cancel does not replace idle with a stale failure")
+    func failedOpenAfterCancelRests() async {
+        let gate = Gate()
+        let capture = GatedCaptureEngine(gate: gate, startError: .engineFailed(description: "denied"))
+        let pipeline = makePipeline(capture: capture)
+
+        let start = Task { await pipeline.startRecording() }
+        await gate.waitUntilReached()
+        await pipeline.cancel()
+        await gate.open()
+        await start.value
+
+        #expect(
+            await pipeline.currentState == .idle,
+            "the cancel already settled the pipeline; the abandoned attempt's error must not overwrite it")
+
+        // The scripted error is consumed by the first throw, so this call opens for real.
+        await pipeline.startRecording()
+        #expect(
+            await pipeline.currentState == .recording,
+            "a later dictation must still be able to start after the cancelled attempt settled")
+    }
+
+    @Test("the same open failure is still reported when nobody cancelled")
+    func openFailureWithoutACancelStillFails() async {
+        let capture = FakeAudioCaptureEngine(
+            startOutcome: .failure(.engineFailed(description: "denied")))
+        let pipeline = makePipeline(capture: capture)
+
+        await pipeline.startRecording()
+
+        #expect(
+            await pipeline.currentState
+                == .failed(DictationFailure(AudioCaptureError.engineFailed(description: "denied"))),
+            "a genuine microphone-open error must still be reported when nobody cancelled")
     }
 
     @Test("hands a watcher that arrives late the state it is in now")
