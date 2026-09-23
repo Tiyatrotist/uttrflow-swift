@@ -163,6 +163,24 @@ struct ManualClockTests {
         #expect(ManualClock.Instant(offset: .zero).duration(to: clock.now) == .zero)
     }
 
+    @Test(
+        "two concurrently parked advances are each cancelled, and neither strands the other",
+        .timeLimit(.minutes(1)))
+    func concurrentParkedAdvancesAreEachCancellable() async {
+        let clock = ManualClock()
+        let first = Task { await clock.advanceWhenSomethingIsWaiting(by: .seconds(1)) }
+        while clock.parkedAdvanceCount < 1 { await Task.yield() }
+        let second = Task { await clock.advanceWhenSomethingIsWaiting(by: .seconds(2)) }
+        while clock.parkedAdvanceCount < 2 { await Task.yield() }
+
+        first.cancel()
+        second.cancel()
+        await first.value
+        await second.value
+
+        #expect(ManualClock.Instant(offset: .zero).duration(to: clock.now) == .zero)
+    }
+
     @Test("returns at once when the deadline has already passed")
     func sleepDoesNotRewind() async throws {
         let clock = ManualClock()
