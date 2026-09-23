@@ -61,6 +61,11 @@ final class SettingsViewModel {
         }
     }
 
+    /// A local recorder owns only the Settings window; leaving that surface ends the attempt.
+    func shortcutRecordingSurfaceDidLoseFocus() {
+        cancelRecordingShortcut()
+    }
+
     /// Applies an authoritative change made outside the Settings window without replacing its UI state.
     func synchronize(settings: UttrflowSettings.Settings) {
         session.synchronize(settings: settings)

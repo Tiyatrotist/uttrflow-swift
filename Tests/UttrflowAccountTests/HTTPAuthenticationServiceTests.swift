@@ -22,7 +22,7 @@ struct HTTPAuthenticationServiceTests {
 
     /// The service under test, with every collaborator stubbed and the clock fixed at noon.
     private func service(
-        transport: StubTransport,
+        transport: any BackendTransport,
         tokens: any TokenStore = InMemoryTokenStore(),
         device: (any DeviceIdentifying)? = nil,
         listener: StubLoopbackListener? = nil,
@@ -383,6 +383,25 @@ struct HTTPAuthenticationServiceTests {
         #expect(tokens.refreshToken() == "still-good")
     }
 
+    @Test("recovers a refresh whose rotated response was lost")
+    func aLostRefreshResponseCanBeRecovered() async throws {
+        let tokens = InMemoryTokenStore(refreshToken: "old-refresh")
+        let transport = AmbiguousRefreshServer(profile: signedIn)
+        let service = service(transport: transport, tokens: tokens)
+
+        await #expect(throws: AccountError.serverUnreachable) {
+            try await service.currentProfile(ifChangedFrom: nil)
+        }
+        #expect(tokens.refreshToken() == "old-refresh")
+
+        let recovered = try await service.currentProfile(ifChangedFrom: nil)
+
+        #expect(recovered.updatedProfile?.account == signedIn.account)
+        #expect(tokens.refreshToken() == "rotated-refresh")
+        #expect(transport.refreshAttempts.count == 2)
+        #expect(Set(transport.refreshAttempts.map(\.idempotencyKey)).count == 1)
+    }
+
     @Test("keeps the rotated refresh token, because the old one is already dead")
     func rotationIsKept() async throws {
         let tokens = InMemoryTokenStore(refreshToken: "first")
@@ -606,6 +625,75 @@ struct DeviceGrantTests {
 }
 
 // MARK: - Callers that need a token at the same moment
+
+/// A server that rotates once, loses that response, and accepts only the same recovery key.
+private final class AmbiguousRefreshServer: BackendTransport {
+    /// One refresh request as the server saw it.
+    struct RefreshRequest: Equatable {
+        /// The token spent.
+        let token: String
+        /// The idempotency key sent beside it.
+        let idempotencyKey: String
+    }
+
+    /// The server's durable view of the refresh.
+    private struct State {
+        /// The refresh token still accepted for a first spend.
+        var live = "old-refresh"
+        /// The issued session cached under the idempotency key.
+        var issued: Stub.IssuedSession?
+        /// The key that owns `issued`.
+        var acceptedKey: String?
+        /// Every refresh received.
+        var refreshes: [RefreshRequest] = []
+    }
+
+    /// The profile `/me` answers with.
+    private let profile: Profile
+    /// The server's state.
+    private let state = Mutex(State())
+
+    /// A server answering `/me` with `profile`.
+    init(profile: Profile) {
+        self.profile = profile
+    }
+
+    /// Every refresh request in arrival order.
+    var refreshAttempts: [RefreshRequest] { state.withLock { $0.refreshes } }
+
+    /// Loses the first rotated response, replays it for the same idempotency key, and rejects new keys.
+    func perform(_ request: BackendRequest) async throws(BackendUnreachable) -> BackendResponse {
+        let path = request.url.path()
+        if path.hasSuffix("/refresh") {
+            let token = request.jsonBody["refreshToken"] as? String ?? ""
+            let key = request.jsonBody["idempotencyKey"] as? String ?? ""
+            let response = state.withLock { state -> BackendResponse? in
+                state.refreshes.append(RefreshRequest(token: token, idempotencyKey: key))
+                if let issued = state.issued, state.acceptedKey == key, token == "old-refresh" {
+                    return Stub.json(issued)
+                }
+                guard token == state.live, state.issued == nil else {
+                    return BackendResponse(status: 401)
+                }
+                state.live = "rotated-refresh"
+                state.acceptedKey = key
+                var issued = Stub.IssuedSession()
+                issued.accessToken = "access-after-recovery"
+                issued.refreshToken = state.live
+                state.issued = issued
+                return nil
+            }
+            guard let response else {
+                throw BackendUnreachable(url: request.url, reason: "response lost after rotation")
+            }
+            return response
+        }
+        guard request.headers["Authorization"] == "Bearer access-after-recovery" else {
+            return BackendResponse(status: 401)
+        }
+        return path.hasSuffix("/me") ? Stub.json(profile, etag: "\"v1\"") : BackendResponse(status: 404)
+    }
+}
 
 /// A server that rotates the refresh token, refuses a spent one, and holds every refresh until released.
 private final class RotatingServer: BackendTransport {

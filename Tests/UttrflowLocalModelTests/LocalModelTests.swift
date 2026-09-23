@@ -8,7 +8,8 @@ extension LocalModel {
     /// A minimal model for tests that only care about one field.
     fileprivate static func stub(identifier: String, isMultilingual: Bool = true) -> LocalModel {
         LocalModel(
-            identifier: identifier, family: "Stub", version: "1", parameterBillions: 1,
+            identifier: identifier, revision: String(repeating: "0", count: 40), family: "Stub",
+            version: "1", parameterBillions: 1,
             quantisation: .fourBit, downloadBytes: 1, isMultilingual: isMultilingual
         )
     }
@@ -16,6 +17,17 @@ extension LocalModel {
 
 @Suite("LocalModel")
 struct LocalModelTests {
+    /// A branch moves under an install; a commit does not, so every candidate names one (#666).
+    @Test("every suggestion model pins its weights to a commit, not to a branch")
+    func everyModelIsPinnedToACommit() {
+        for model in LocalModel.candidates {
+            let revision = model.revision
+            #expect(
+                revision.count == 40 && revision.allSatisfy { $0.isHexDigit },
+                "\(model.identifier) pins \(revision), which is not a commit")
+        }
+    }
+
     @Test("lists candidates smallest first, so the ladder is readable")
     func candidatesAreOrdered() {
         let sizes = LocalModel.candidates.map(\.downloadBytes)
@@ -59,7 +71,8 @@ struct LocalModelTests {
     )
     func parameterLabels(billions: Double, expected: String) {
         let model = LocalModel(
-            identifier: "x", family: "F", version: "1", parameterBillions: billions,
+            identifier: "x", revision: String(repeating: "0", count: 40), family: "F",
+            version: "1", parameterBillions: billions,
             quantisation: .fourBit, downloadBytes: 1, isMultilingual: true)
         #expect(model.parameterLabel == expected)
     }

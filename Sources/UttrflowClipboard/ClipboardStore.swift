@@ -41,10 +41,12 @@ public actor ClipboardStore {
     /// The history and the saved clips as one list, or `nil` before the files have been read.
     private var wholeList: [Clip]?
 
-    /// Whether this process has already reconciled the pictures folder; see ``sweepOnce(against:)``.
+    /// Whether this process has already reconciled the pictures folder; see ``sweepOnce()``.
     private var hasSwept = false
     /// Pictures of deleted clips an undo can still bring back, left on disk until ``forgetHeldPictures()``.
     private var heldPictures: Set<String> = []
+    /// Pictures written for a clip no index names yet, which only the write that follows can account for.
+    private var unnamedPictures: Set<String> = []
 
     /// Whether a file this process read was there and could not be read, so its pictures are unknown.
     private var hasUnreadableIndex = false
@@ -252,6 +254,9 @@ public actor ClipboardStore {
         guard let picture = noticed.picture else {
             return try record(noticed.clip, keeping: retention)
         }
+        guard Self.isPersistable(noticed.clip) else {
+            return try record(noticed.clip, keeping: retention)
+        }
         // Hashed before it is written, so a screenshot copied twice costs a counter, not another file.
         let sha = ClipboardStore.digest(of: picture.data)
         var image = alreadyKept(sha, in: noticed.clip.origin)
@@ -303,6 +308,7 @@ public actor ClipboardStore {
         } catch {
             throw .couldNotWrite
         }
+        unnamedPictures.insert(name)
         return ClipImage(
             file: name, width: width, height: height, bytes: data.count,
             sha: sha ?? ClipboardStore.digest(of: data))
@@ -321,12 +327,9 @@ public actor ClipboardStore {
 
     /// Releases the pictures held for an undo, deleting each one no clip has taken back.
     public func forgetHeldPictures() {
-        let wanted = Set(loaded().compactMap(\.image?.file))
-        for name in heldPictures.subtracting(wanted) {
-            try? FileManager.default.removeItem(
-                at: imagesFolder.appending(path: name, directoryHint: .notDirectory))
-        }
+        let released = heldPictures.subtracting(loaded().compactMap(\.image?.file))
         heldPictures = []
+        removePictures(released)
     }
 
     /// Deletes pictures no clip refers to any more; best-effort, so a stuck file cannot cost a write.
@@ -336,9 +339,17 @@ public actor ClipboardStore {
         let onDisk =
             (try? FileManager.default.contentsOfDirectory(
                 at: imagesFolder, includingPropertiesForKeys: nil)) ?? []
-        for file in onDisk
-        where !wanted.contains(file.lastPathComponent) && !heldPictures.contains(file.lastPathComponent) {
-            try? FileManager.default.removeItem(at: file)
+        // A picture waiting for the write that will name it is not an orphan yet.
+        removePictures(
+            Set(onDisk.map(\.lastPathComponent)).subtracting(wanted)
+                .subtracting(heldPictures).subtracting(unnamedPictures))
+    }
+
+    /// Deletes pictures by name; best-effort, so a stuck file cannot cost the write that asked.
+    private func removePictures(_ names: Set<String>) {
+        for name in names {
+            try? FileManager.default.removeItem(
+                at: imagesFolder.appending(path: name, directoryHint: .notDirectory))
         }
     }
 
@@ -477,6 +488,9 @@ public actor ClipboardStore {
         clips.reduce(0) { $0 + weight(of: $1) }
     }
 
+    /// Whether this clip may cross a launch boundary; secrets stay in this process only.
+    private static func isPersistable(_ clip: Clip) -> Bool { clip.kind != .secret }
+
     /// Drops the least recently used clips of a text pool until it fits its memory quota.
     private func withinMemory(_ clips: [Clip]) -> [Clip] {
         var dropped: Set<UUID> = []
@@ -532,15 +546,17 @@ public actor ClipboardStore {
     private func loaded() -> [Clip] {
         if let wholeList { return wholeList }
         // A clipboard written before the split keeps its saved clips in the history file.
-        let fromSavedFile = read(savedFile)
+        let fromSavedFile = read(savedFile).filter(Self.isPersistable)
         savedOnDisk = fromSavedFile
         // A move interrupted between the two writes leaves a clip in both files, and the saved copy wins.
         let savedIDs = Set(fromSavedFile.map(\.id))
-        let stored = fromSavedFile + read(file).filter { !savedIDs.contains($0.id) }
+        let stored =
+            fromSavedFile
+            + read(file).filter { Self.isPersistable($0) && !savedIDs.contains($0.id) }
         let list = Self.interleaving(
             saved: stored.filter(\.isKept), history: stored.filter { !$0.isKept })
         wholeList = list
-        sweepOnce(against: list)
+        sweepOnce()
         return list
     }
 
@@ -565,9 +581,9 @@ public actor ClipboardStore {
     }
 
     /// Reconciles the pictures folder once a launch, catching orphans no write of ours can notice.
-    private func sweepOnce(against clips: [Clip]) {
-        // An empty list is what a bad read looks like too, so sweeping on one would delete everything.
-        guard !hasSwept, !clips.isEmpty, indexesAreTrustworthy else { return }
+    private func sweepOnce() {
+        // A list left empty by a failed read is what `indexesAreTrustworthy` refuses, so emptiness is honest.
+        guard !hasSwept, indexesAreTrustworthy else { return }
         hasSwept = true
         forgetOrphanedImages()
     }
@@ -589,10 +605,17 @@ public actor ClipboardStore {
 
     /// Writes the list to memory and then to disk, filing each clip by what ``Clip/isKept`` says.
     private func save(_ clips: [Clip]) throws(ClipboardStoreError) {
+        // First, so the launch sweep this read can trigger still sees what is waiting to be named.
         let before = Set(loaded().compactMap(\.image?.file))
+        let named = Set(clips.compactMap(\.image?.file))
+        // A picture written for a clip this list drops is ours to remove, whether the writes below land or not.
+        let unnamed = unnamedPictures.subtracting(named).subtracting(heldPictures)
+        unnamedPictures = []
+        defer { removePictures(unnamed) }
         let wasSaved = savedOnDisk ?? []
-        let nowSaved = clips.filter(\.isKept)
-        let nowHistory = clips.filter { !$0.isKept }
+        let persistable = clips.filter(Self.isPersistable)
+        let nowSaved = persistable.filter(\.isKept)
+        let nowHistory = persistable.filter { !$0.isKept }
 
         // Memory first and unconditionally, so a refusing disk does not also cost the change itself.
         wholeList = clips
@@ -614,10 +637,7 @@ public actor ClipboardStore {
         }
 
         // Only the files that stopped being referenced, so a picture no read could vouch for is never touched.
-        for name in before.subtracting(Set(clips.compactMap(\.image?.file))).subtracting(heldPictures) {
-            try? FileManager.default.removeItem(
-                at: imagesFolder.appending(path: name, directoryHint: .notDirectory))
-        }
+        removePictures(before.subtracting(named).subtracting(heldPictures))
     }
 
     /// What the saved file holds while clips move: the new saved list, plus the old copy of any leaving it.

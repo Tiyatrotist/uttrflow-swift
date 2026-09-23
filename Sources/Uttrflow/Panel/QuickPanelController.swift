@@ -101,10 +101,18 @@ final class QuickPanelController: NSObject, NSWindowDelegate {
     /// A row action the panel cannot answer itself, with the application that owned the caret when the panel opened.
     var onIntent: ((PanelIntent, NSRunningApplication?) -> Void)?
 
+    /// Posts a visible notice for VoiceOver after the panel opens.
+    var announce: (String) -> Void = { line in
+        var spoken = AttributedString(line)
+        spoken.accessibilitySpeechAnnouncementPriority = .high
+        AccessibilityNotification.Announcement(spoken).post()
+    }
+
     private let panel: QuickPanel
     private let hostingView: QuickPanelHostingView<QuickPanelView>
     private var presentation: PanelPresentation
     private var openCount = 0
+    private var lastAnnouncements: [String] = []
 
     /// Whose caret this is. Captured on the way in, reported on the way out.
     private var caretOwner: NSRunningApplication?
@@ -156,6 +164,8 @@ final class QuickPanelController: NSObject, NSWindowDelegate {
         panel.setFrame(frame, display: false)
         panel.orderFrontRegardless()
         panel.makeKey()
+        lastAnnouncements = []
+        postNewAnnouncements(presentation.announcements)
         watchForLeaving()
     }
 
@@ -163,6 +173,7 @@ final class QuickPanelController: NSObject, NSWindowDelegate {
     func update(_ presentation: PanelPresentation) {
         self.presentation = presentation
         draw()
+        if panel.isVisible { postNewAnnouncements(presentation.announcements) }
     }
 
     /// Takes the panel away without activating anything, because nothing was activated on the way in.
@@ -174,6 +185,9 @@ final class QuickPanelController: NSObject, NSWindowDelegate {
 
     var isVisible: Bool { panel.isVisible }
 
+    /// How many times the panel has been shown, so the app can tell one open's answers from the next.
+    var opens: Int { openCount }
+
     // MARK: - Drawing
 
     private func draw() {
@@ -182,6 +196,12 @@ final class QuickPanelController: NSObject, NSWindowDelegate {
             onKey: { [weak self] key in self?.relay(key) },
             onIntent: { [weak self] intent in self?.onIntent?(intent, self?.caretOwner) },
             openCount: openCount)
+    }
+
+    private func postNewAnnouncements(_ lines: [String]) {
+        let previous = lastAnnouncements
+        lastAnnouncements = lines
+        for line in lines where !previous.contains(line) { announce(line) }
     }
 
     /// Reports keys to the app; the resolved panel outcome decides whether Escape closes the window.
@@ -301,6 +321,7 @@ final class QuickPanelController: NSObject, NSWindowDelegate {
         panel.acceptsMouseMovedEvents = true
         // Three keystrokes cannot feel instant from behind a fade.
         panel.animationBehavior = .none
+        PrivateWindowSharing.apply(to: panel)
         panel.contentView = hostingView
     }
 }
