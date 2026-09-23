@@ -47,6 +47,12 @@ public actor PasteboardWatcher {
     /// Set while a read is outstanding, so a blocked one cannot be started again by the next tick.
     private var isReading = false
 
+    /// How many reads may be waiting on `readQueue` at once, past which a tick skips rather than starting another.
+    static let maxOutstandingReads = 4
+
+    /// Reads dispatched to `readQueue` that have not yet returned, whether or not their caller is still waiting.
+    private(set) var outstandingReads = 0
+
     public init(
         source: any ClipboardSource,
         interval: Duration = PasteboardWatcher.pollInterval,
@@ -164,6 +170,12 @@ public actor PasteboardWatcher {
 
     /// One clipboard read, given up on once ``readLimit`` has passed, since the writing app answers it.
     private func bounded<Value: Sendable>(_ read: @escaping @Sendable () -> Value) async -> Value? {
+        // A writer that never answers must not be allowed to accumulate one blocked worker per copy.
+        guard outstandingReads < Self.maxOutstandingReads else {
+            Self.log.notice("too many clipboard reads are already outstanding; this copy is skipped")
+            return nil
+        }
+        outstandingReads += 1
         let race = Mutex<ClipboardRead<Value>>(.waiting)
         // Whichever arrives first answers; the loser finds the answer already given.
         let settle: @Sendable (Value?) -> Void = { value in
@@ -173,7 +185,12 @@ public actor PasteboardWatcher {
             }
         }
         // On its own thread, never the cooperative pool: a promised read blocks until the writer answers.
-        Self.readQueue.async { settle(read()) }
+        Self.readQueue.async { [weak self] in
+            let value = read()
+            settle(value)
+            // Freed only once the worker itself returns, however late that is against the caller's limit.
+            Task { await self?.releaseOutstandingRead() }
+        }
         // The limit is a dispatch timer for the same reason: a busy pool must not delay giving up.
         Self.readQueue.asyncAfter(deadline: .now() + readLimit.inSeconds) { settle(nil) }
         let value = await withCheckedContinuation { (continuation: CheckedContinuation<Value?, Never>) in
@@ -184,6 +201,11 @@ public actor PasteboardWatcher {
         }
         if value == nil { Self.log.notice("a clipboard read passed its limit; this copy is skipped") }
         return value
+    }
+
+    /// Frees the slot a worker held once it returns, letting a later tick start a new read.
+    private func releaseOutstandingRead() {
+        outstandingReads -= 1
     }
 
     /// Whether a clip is small enough to keep, counting both flavours as `ClipboardStore.weight(of:)` does.
