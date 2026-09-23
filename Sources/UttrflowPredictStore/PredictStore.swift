@@ -411,7 +411,9 @@ public actor PredictStore: PredictionStore {
 
     /// Forgets everything learned in one application.
     public func forget(bundleIdentifier: String) throws(PredictStoreError) {
-        try database.run("DELETE FROM surface WHERE bundle_id = ?") { $0.bind(1, bundleIdentifier) }
+        try database.run("DELETE FROM surface WHERE bundle_id = ?") {
+            $0.bind(1, ApplicationKey.of(bundleIdentifier))
+        }
         try leaveNothingBehind()
     }
 

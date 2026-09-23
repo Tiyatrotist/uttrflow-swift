@@ -171,35 +171,63 @@ struct OnboardingPresenterTests {
         #expect(refused.note?.tone == .warning)
     }
 
-    /// Neither permission can be skipped, so a page says what is blocked only once it has been refused.
+    /// A page argues only with somebody who has refused it, and a first visit has refused nothing.
     @Test("says what is blocked only once the user has met the question")
     func whatIsBlockedIsSaidAfterAsking() {
         for step in [OnboardingStep.microphone, .accessibility] {
             let unasked = page(OnboardingState(step: step, detail: .permission(.notDetermined)))
             #expect(unasked.note == nil, "\(step) argues before it has been asked")
 
-            let refused = page(OnboardingState(step: step, detail: .permission(.denied)))
-            #expect(refused.note?.tone == .warning, "\(step) is quiet about being blocked")
+            let waiting = page(OnboardingState(step: step, detail: .awaitingSystemSettings))
+            #expect(waiting.note?.tone == .warning, "\(step) is quiet about being blocked")
         }
+
+        let refused = page(OnboardingState(step: .microphone, detail: .permission(.denied)))
+        #expect(refused.note?.tone == .warning, "the microphone is denied only after a no")
     }
 
-    @Test("offers no way past either permission")
-    func neitherPermissionCanBeSkipped() {
+    /// `AXIsProcessTrusted` answers false before anyone has been asked, so this page opens at `.denied`.
+    @Test("the Accessibility page opens without its warning, since nobody has refused yet")
+    func accessibilityIsQuietOnItsFirstVisit() {
+        let first = page(OnboardingState(step: .accessibility, detail: .permission(.denied)))
+
+        #expect(first.note == nil)
+        #expect(first.buttons.first?.intent == .requestPermission(.accessibility))
+    }
+
+    /// The rule the whole flow is built on: no page is a dead end. See `Docs/ux-onboarding.md`.
+    @Test("offers a way past either permission, whatever the user has refused")
+    func eitherPermissionCanBeLeft() {
         for step in [OnboardingStep.microphone, .accessibility] {
             for status in [PermissionStatus.notDetermined, .denied] {
                 let page = page(OnboardingState(step: step, detail: .permission(status)))
                 #expect(
-                    !page.buttons.contains { $0.intent == .advance },
-                    "\(step) at \(status) lets the user walk past a requirement")
+                    page.buttons.contains { $0.intent == .advance },
+                    "\(step) at \(status) is a dead end")
             }
             let waiting = page(OnboardingState(step: step, detail: .awaitingSystemSettings))
-            #expect(!waiting.buttons.contains { $0.intent == .advance })
+            #expect(waiting.buttons.contains { $0.intent == .advance })
         }
     }
 
-    /// The one exception: a device policy is not the user's choice, and a page they cannot leave is a trap.
-    @Test("lets a policy-blocked Mac through, and only a policy-blocked one")
-    func onlyAPolicyLetsSomebodyPast() {
+    /// Going on is never the prominent answer where the user could still say yes.
+    @Test("keeps granting the prominent answer, and going without it the quiet one")
+    func grantingStaysTheProminentAnswer() {
+        for step in [OnboardingStep.microphone, .accessibility] {
+            for detail in [
+                OnboardingDetail.permission(.notDetermined), .permission(.denied),
+                .awaitingSystemSettings,
+            ] {
+                let page = page(OnboardingState(step: step, detail: detail))
+                let without = page.buttons.first { $0.intent == .advance }
+                #expect(without?.isProminent == false, "\(step) at \(detail) pushes the user past")
+            }
+        }
+    }
+
+    /// A device policy is not the user's choice, so going on is the only thing left that is true.
+    @Test("leaves a policy-blocked Mac nothing but the way on")
+    func aPolicyLeavesOnlyTheWayOn() {
         for step in [OnboardingStep.microphone, .accessibility] {
             let blocked = page(OnboardingState(step: step, detail: .permission(.restricted)))
             #expect(blocked.buttons.map(\.intent) == [.advance])
@@ -210,10 +238,10 @@ struct OnboardingPresenterTests {
     func promptsOnlyWhereAPromptWouldAppear() {
         let unasked = page(
             OnboardingState(step: .microphone, detail: .permission(.notDetermined)))
-        #expect(unasked.buttons.last?.intent == .requestPermission(.microphone))
+        #expect(unasked.buttons.first?.intent == .requestPermission(.microphone))
 
         let refused = page(OnboardingState(step: .microphone, detail: .permission(.denied)))
-        #expect(refused.buttons.last?.intent == .recover(.openSystemSettings(.microphone)))
+        #expect(refused.buttons.first?.intent == .recover(.openSystemSettings(.microphone)))
 
         let blocked = page(OnboardingState(step: .microphone, detail: .permission(.restricted)))
         #expect(blocked.buttons.map(\.intent) == [.advance])
@@ -222,8 +250,12 @@ struct OnboardingPresenterTests {
     @Test("sends each permission to its own pane")
     func eachPermissionHasItsOwnPane() {
         let accessibility = page(
-            OnboardingState(step: .accessibility, detail: .permission(.denied)))
-        #expect(accessibility.buttons.last?.intent == .recover(.openSystemSettings(.accessibility)))
+            OnboardingState(step: .accessibility, detail: .awaitingSystemSettings))
+        #expect(
+            accessibility.buttons.first?.intent == .recover(.openSystemSettings(.accessibility)))
+
+        let microphone = page(OnboardingState(step: .microphone, detail: .permission(.denied)))
+        #expect(microphone.buttons.first?.intent == .recover(.openSystemSettings(.microphone)))
     }
 
     @Test("keeps Continue in view while the download runs, and keeps it unpressable")

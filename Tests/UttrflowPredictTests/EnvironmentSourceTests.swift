@@ -3,11 +3,14 @@ import Testing
 
 @testable import UttrflowPredict
 
+/// A terminal the environment source answers for; the shared fixture is not one, since the answer gates on the bundle identifier.
+let realTerminal = Surface(bundleIdentifier: "com.apple.Terminal", role: "AXTextArea", scope: "/repo")
+
 /// The candidates a warmed source offers, which takes two passes because the first only asks.
 func offered(
     _ answers: [EnvironmentKind: [String]],
     typing typed: String,
-    in surface: Surface = terminal,
+    in surface: Surface = realTerminal,
     at now: Date = moment
 ) async -> [String] {
     let index = EnvironmentIndex(reader: StubEnvironment(answers))
@@ -32,10 +35,17 @@ struct EnvironmentSourceTests {
         #expect(await offered([.file: ["example.md"]], typing: "ex", in: browser).isEmpty)
     }
 
+    @Test("A terminal in a remote session is offered nothing, because this machine holds none of its files.")
+    func remoteSessionIsNotADirectory() async {
+        let remote = Surface(
+            bundleIdentifier: "com.example.terminal", role: "AXTextArea", scope: RemoteSession.scope)
+        #expect(await offered([.file: ["notes.md"]], typing: "cat no", in: remote).isEmpty)
+    }
+
     @Test("A directory written with a tilde is still a directory.")
     func tildeIsADirectory() async {
         let home = Surface(
-            bundleIdentifier: "com.example.terminal", role: "AXTextArea", scope: "~/work")
+            bundleIdentifier: "com.apple.Terminal", role: "AXTextArea", scope: "~/work")
         #expect(await offered([.file: ["report.md"]], typing: "cat re", in: home) == ["cat report.md"])
     }
 
@@ -145,9 +155,9 @@ struct EnvironmentSourceTests {
     func candidatesAreEnvironmental() async {
         let index = EnvironmentIndex(reader: StubEnvironment([.branch: ["main"]]))
         let source = EnvironmentSource(index: index)
-        _ = await source.candidates(for: terminal, matching: "git switch m", now: moment)
+        _ = await source.candidates(for: realTerminal, matching: "git switch m", now: moment)
         await index.settle()
-        let candidates = await source.candidates(for: terminal, matching: "git switch m", now: moment)
+        let candidates = await source.candidates(for: realTerminal, matching: "git switch m", now: moment)
         #expect(candidates.map(\.source) == [.environment])
         #expect(candidates.allSatisfy { $0.evidence == nil && !$0.isIrreversible })
     }
@@ -155,6 +165,36 @@ struct EnvironmentSourceTests {
     @Test("A machine that answers nothing offers nothing.")
     func emptyMachineIsQuiet() async {
         #expect(await offered([:], typing: "git switch m").isEmpty)
+    }
+
+    @Test(
+        "A terminal whose scope is an absolute folder still receives every kind of environment candidate."
+    )
+    func terminalDocumentScopeAnswers() async {
+        let answers: [EnvironmentKind: [String]] = [
+            .executable: ["swift"], .branch: ["main"], .file: ["main.swift"], .directory: ["Sources"],
+        ]
+        let shell = Surface(
+            bundleIdentifier: "com.apple.Terminal", role: "AXTextArea", scope: "/project")
+        #expect(await offered(answers, typing: "sw", in: shell) == ["swift"])
+        #expect(await offered(answers, typing: "git checkout ma", in: shell) == ["git checkout main"])
+        #expect(await offered(answers, typing: "ls main", in: shell) == ["ls main.swift"])
+    }
+
+    @Test(
+        "The non-terminal gate refuses executables, branches, files and directories alike, since none belong in a document scope."
+    )
+    func nonTerminalGateRefusesEveryKind() async {
+        let answers: [EnvironmentKind: [String]] = [
+            .executable: ["swift"], .alias: ["gs"], .branch: ["main"],
+            .file: ["main.swift"], .directory: ["Sources"],
+        ]
+        let editor = Surface(
+            bundleIdentifier: "com.apple.dt.Xcode", role: "AXTextArea", scope: "/project")
+        #expect(await offered(answers, typing: "sw", in: editor).isEmpty)
+        #expect(await offered(answers, typing: "git checkout ma", in: editor).isEmpty)
+        #expect(await offered(answers, typing: "cd So", in: editor).isEmpty)
+        #expect(await offered(answers, typing: "ls main", in: editor).isEmpty)
     }
 }
 

@@ -132,7 +132,11 @@ struct LatinOnlyEngineTests {
         "keeps the romanised draft when the model translates, the worked example comes back, or the model declines"
     )
     func routerFallsBackToRomanisedRules() async throws {
-        for answer in ["Meeting is at four o'clock, no no, five o'clock.", "मीटिंग पाँच बजे है।"] {
+        for answer in [
+            "Meeting is at four o'clock, no no, five o'clock.",
+            "Main aaj ke standup mein deployment ke baare mein baat karunga.",
+            "मीटिंग पाँच बजे है।",
+        ] {
             let model = GenerativeTextTransformer(
                 kind: .foundationModels, model: FakeCleanupModel { _ in answer })
             let router = TransformerRouter(

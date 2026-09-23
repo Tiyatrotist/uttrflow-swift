@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 
 extension PanelThumbnailSource {
     /// Decoded to the drawn size by `CGImageSourceCreateThumbnailAtIndex`, so the full picture is never held.
-    @MainActor static let system = PanelThumbnailSource { file, maxPixel in
+    static let system = PanelThumbnailSource { file, maxPixel in
         guard let source = CGImageSourceCreateWithURL(file as CFURL, nil) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,

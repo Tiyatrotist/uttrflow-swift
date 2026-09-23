@@ -103,6 +103,45 @@ struct ApplyingCorrectionsTests {
         #expect(result.corrections.count == 1)
     }
 
+    /// The recogniser hangs a comma on the word before it, and the sentence still needs that comma.
+    @Test("Keeps the punctuation the replaced word was wearing")
+    func keepsTheWordsPunctuation() {
+        let result = DictationCorrection.applying(
+            [correction(heard: "tarvock,", wrote: "Tarvok", at: 2..<3)],
+            to: "Open the tarvock, then check tarvock.")
+
+        #expect(result.text == "Open the Tarvok, then check tarvock.")
+    }
+
+    /// A word behind a quote or a bracket keeps both sides, since neither was the word.
+    @Test("Keeps punctuation on both sides of the replaced word")
+    func keepsPunctuationOnBothSides() {
+        let result = DictationCorrection.applying(
+            [correction(heard: "(tarvock).", wrote: "Tarvok", at: 1..<2)], to: "ask (tarvock). again")
+
+        #expect(result.text == "ask (Tarvok). again")
+    }
+
+    /// A run is replaced whole, so only what sits outside the run survives it.
+    @Test("Keeps the punctuation outside a run of several words, not the punctuation within it")
+    func keepsPunctuationAroundARun() {
+        let result = DictationCorrection.applying(
+            [correction(heard: "payment, sheet.", wrote: "PaymentSheet", at: 2..<4)],
+            to: "open the payment, sheet. again")
+
+        #expect(result.text == "open the PaymentSheet. again")
+    }
+
+    /// Undo splices back what a correction says it wrote, so that has to be what reached the transcript.
+    @Test("Reports what it wrote including the punctuation it kept")
+    func reportsWhatItWrote() {
+        let result = DictationCorrection.applying(
+            [correction(heard: "tarvock,", wrote: "Tarvok", at: 2..<3)], to: "open the tarvock, then")
+
+        #expect(result.corrections.map(\.wrote) == ["Tarvok,"])
+        #expect(result.corrections.map(\.heard) == ["tarvock,"], "what was heard is not rewritten")
+    }
+
     /// A change offered for undo that never happened would be as dishonest as one made and never shown.
     @Test("Reports only the changes that actually landed")
     func reportsOnlyWhatLanded() {

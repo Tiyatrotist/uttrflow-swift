@@ -72,7 +72,7 @@ ROWS = [
       ("Main-Dictionary-Empty-Dark.dc.html", *MAIN, None)]),
 
     ("corrections",
-     "Corrections\nThe screen no competitor has. Everything Uttrflow changed: what it heard, what it wrote, why, which dictation, and an undo. A product that quietly rewrites your words owes you this page. Empty here is the good outcome, and says so.",
+     "Corrections\nDictionary-backed substitutions: what Uttrflow heard, what it wrote, why, which dictation, and an undo. Cleanup edits such as filler removal and punctuation are not listed here. Empty here is the good outcome, and says so.",
      [("Main-Corrections.dc.html", *MAIN, None), ("Main-Corrections-Dark.dc.html", *MAIN, None),
       ("Main-Corrections-Empty.dc.html", *MAIN, None),
       ("Main-Corrections-Empty-Dark.dc.html", *MAIN, None)]),
