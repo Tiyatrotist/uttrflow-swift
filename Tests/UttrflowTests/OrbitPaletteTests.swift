@@ -94,6 +94,21 @@ struct OrbitPaletteTests {
         #expect(text?.blueComponent ?? 0 > ground?.blueComponent ?? 1)
     }
 
+    /// #1290: `warningInk` followed Light appearance even though the stage it sits on never does.
+    @Test("the not-ready status ink clears 4.5:1 on the stage's fixed panel and ground")
+    func stageWarningInkContrast() {
+        let panel = BrandPalette.Surface.card.dark
+        let ground = BrandPalette.Surface.ground.dark
+        let warning = BrandPalette.Semantic.warning
+
+        #expect(contrastRatio(warning, panel) >= 4.5)
+        #expect(contrastRatio(warning, ground) >= 4.5)
+
+        let dark = components(NSColor(.stageWarningInk), in: .darkAqua)
+        let light = components(NSColor(.stageWarningInk), in: .aqua)
+        #expect(dark == light, "the stage stays dark in Light appearance, so its warning ink must not move")
+    }
+
     @Test("the rail is darker than the page, and a card lighter")
     func surfacesStack() {
         func luminance(_ colour: Color) -> CGFloat {
