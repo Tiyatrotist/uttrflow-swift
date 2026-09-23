@@ -41,6 +41,40 @@ Each released version is a git tag and a build at
   learned and the folder they all sit in were created readable by anything else running on the
   Mac, and are now the owner's alone. Existing files are tightened the next time they are
   written (#656).
+- **Typing over an AI suggestion no longer waits half a second per key.** The ghost panel hides
+  without AppKit's fade, which held the main thread until it finished; Tab inserts at once (#954).
+- **The clipboard panel no longer closes under you after "Copied — press ⌘V".** Any key or click
+  after a notice keeps it open, and an open sheet is never closed by the notice (#868).
+- **A copy another app has not delivered yet no longer keeps the clipboard panel shut.** ⇧⌘V opens
+  from what is already stored, a promised or Universal Clipboard read is given up on after 2 s, and
+  the clip appears when it arrives (#895).
+- **An AI suggestion pass no longer walks the other app's window twice for one line.** The
+  alternatives pass reuses the context the first pass built, and an unchanged window is walked at
+  most once a second (#879).
+- **Typing a new line in a field with a lot of learned history is no longer slower with every
+  keystroke.** Lines too short to match are ruled out in SQL, and only a line that matches is built
+  up and checked for being destructive (#870).
+- **The recent-lines read for AI suggestions no longer groups every learned line of every folder or
+  conversation.** Each scope is read through its index and the few lines shown are chosen in Swift (#880).
+- **An AI suggestion appears sooner after a pause.** The 120 ms quiet is now counted from the last
+  key rather than from the work that follows it, and the two context reads run side by side (#878).
+- **AI suggestions no longer read the focused field in applications where they are off or paused.**
+  The per-application switch and the pause are checked before any Accessibility call (#903).
+- **AI suggestions step aside while you dictate.** No suggestion model pass starts while a dictation
+  records, recognises, tidies or inserts, and a drawn ghost is withdrawn when recording begins (#881).
+- **The speech log now says what a piece cost beyond one decode** — temperature fallbacks, their
+  seconds, encoder runs, and whether the empty-result retry ran — so a slow dictation can name its
+  cause (#871).
+- **AI suggestions in a terminal stop re-scanning PATH and re-listing a program's verbs in every
+  directory.** Those answers are now cached once for the machine, and a listing that keeps timing
+  out is left alone for longer each time, up to ten minutes (#890).
+- **A field read that a turn gave up on no longer delays the next one.** Reads queued behind a stall
+  are dropped when a newer one arrives, and a read past its deadline stops sending messages (#888).
+- **The first dictation after an idle spell is tidied by a session warmed during that dictation.**
+  A prepared session older than a minute is replaced at key-down instead of being used cold (#876).
+- **`uttrflow-dev bench` can idle between jobs** with `--idle-before`, so a cold tidier session is
+  reproducible, and each `clean` line names the steps that changed something and any refused
+  answer (#916).
 
 ### Changed
 - **Suggestions is now called AI suggestions.** The Settings tab and its heading, the menu
@@ -54,13 +88,6 @@ Each released version is a git tag and a build at
   folder past the limit it declares. Pictures left behind by an earlier version are removed
   the next time Uttrflow starts; no clip refers to them, so nothing you can still see goes
   with them (#777).
-
-## [2026.9.14] — 2026-09-14
-
-The first release named by its date. Nothing about updating changes: an installed copy of
-0.5.0 is offered this release like any other.
-
-### Fixed
 - **Hiding an AI suggestion that is already hidden no longer redraws the panel.** Each keystroke
   with nothing drawn used to rebuild the view and look up the screens two or three times on the
   main thread (#889).
@@ -88,40 +115,13 @@ The first release named by its date. Nothing about updating changes: an installe
   listed.** The six-rows-per-group cap no longer hides a match that typing more could not reach (#898).
 - **Copying one enormous decorated character no longer hangs clipboard history.** Text with tens
   of KB of combining marks or joined emoji in a single character is classified in milliseconds (#896).
-- **AI suggestions no longer read the focused field in applications where they are off or paused.**
-  The per-application switch and the pause are checked before any Accessibility call (#903).
-- **AI suggestions step aside while you dictate.** No suggestion model pass starts while a dictation
-  records, recognises, tidies or inserts, and a drawn ghost is withdrawn when recording begins (#881).
-- **The speech log now says what a piece cost beyond one decode** — temperature fallbacks, their
-  seconds, encoder runs, and whether the empty-result retry ran — so a slow dictation can name its
-  cause (#871).
-- **AI suggestions in a terminal stop re-scanning PATH and re-listing a program's verbs in every
-  directory.** Those answers are now cached once for the machine, and a listing that keeps timing
-  out is left alone for longer each time, up to ten minutes (#890).
-- **A field read that a turn gave up on no longer delays the next one.** Reads queued behind a stall
-  are dropped when a newer one arrives, and a read past its deadline stops sending messages (#888).
-- **The first dictation after an idle spell is tidied by a session warmed during that dictation.**
-  A prepared session older than a minute is replaced at key-down instead of being used cold (#876).
-- **`uttrflow-dev bench` can idle between jobs** with `--idle-before`, so a cold tidier session is
-  reproducible, and each `clean` line names the steps that changed something and any refused
-  answer (#916).
-- **Typing over an AI suggestion no longer waits half a second per key.** The ghost panel hides
-  without AppKit's fade, which held the main thread until it finished; Tab inserts at once (#954).
-- **The clipboard panel no longer closes under you after "Copied — press ⌘V".** Any key or click
-  after a notice keeps it open, and an open sheet is never closed by the notice (#868).
-- **A copy another app has not delivered yet no longer keeps the clipboard panel shut.** ⇧⌘V opens
-  from what is already stored, a promised or Universal Clipboard read is given up on after 2 s, and
-  the clip appears when it arrives (#895).
-- **An AI suggestion pass no longer walks the other app's window twice for one line.** The
-  alternatives pass reuses the context the first pass built, and an unchanged window is walked at
-  most once a second (#879).
-- **Typing a new line in a field with a lot of learned history is no longer slower with every
-  keystroke.** Lines too short to match are ruled out in SQL, and only a line that matches is built
-  up and checked for being destructive (#870).
-- **The recent-lines read for AI suggestions no longer groups every learned line of every folder or
-  conversation.** Each scope is read through its index and the few lines shown are chosen in Swift (#880).
-- **An AI suggestion appears sooner after a pause.** The 120 ms quiet is now counted from the last
-  key rather than from the work that follows it, and the two context reads run side by side (#878).
+
+## [2026.9.14] — 2026-09-14
+
+The first release named by its date. Nothing about updating changes: an installed copy of
+0.5.0 is offered this release like any other.
+
+### Fixed
 - **Uttrflow crashed after a few thousand key presses.** Every keystroke the app passed on
   left the stack a little deeper, so after about 2,500 presses — and again when the
   keyboard monitor stopped — it ran out. A keystroke now costs the same at the five
