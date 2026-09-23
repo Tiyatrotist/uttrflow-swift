@@ -294,6 +294,46 @@ fi
 pass "$DOC_COUNT Markdown files (tracked, plus written-but-not-yet-staged)"
 
 # ---------------------------------------------------------------------------
+# 0a. The documented pull-request lifecycle must match the live main ruleset.
+# ---------------------------------------------------------------------------
+#
+# Issue #1120 was not a typo but a blocked lifecycle: AGENTS.md said a green PR could be
+# self-merged while the live ruleset required independent review. The ruleset itself is
+# outside this tree, so this check keeps the local policy on the review-required side of
+# that boundary until the ruleset is deliberately changed.
+printf '\nPull request lifecycle\n'
+
+if grep -Fq "**An agent may merge its own pull request once it is green**" AGENTS.md; then
+    fail "AGENTS.md still documents the removed self-merge rule" \
+        "The live main ruleset requires an approving review, code-owner review and" \
+        "last-pusher approval. A local policy that says agents may merge themselves" \
+        "sends finished pull requests into a gate they cannot satisfy."
+fi
+
+missing_policy=()
+for required in \
+    "release-policy:v4" \
+    "requires one approving review" \
+    "code-owner review" \
+    "approval by someone other than the last pusher" \
+    "strict_required_status_checks_policy" \
+    "Keep the worktree and branch while the PR is open"
+do
+    if ! grep -Fq "$required" AGENTS.md; then
+        missing_policy+=("$required")
+    fi
+done
+
+if ((${#missing_policy[@]})); then
+    fail "AGENTS.md no longer records the review-required main ruleset" \
+        "The policy must tell agents that implementation stops at a green pull request," \
+        "and must name the live ruleset gates that enforce that boundary." \
+        "" $'\n'"$(printf '    %s\n' "${missing_policy[@]}")"
+else
+    pass "AGENTS.md says agents stop at a green PR and names the review gates"
+fi
+
+# ---------------------------------------------------------------------------
 # 1. Every backticked path that claims to be a file in this repository exists.
 # ---------------------------------------------------------------------------
 #
