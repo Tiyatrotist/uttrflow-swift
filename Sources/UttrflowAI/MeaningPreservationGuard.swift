@@ -643,7 +643,7 @@ public struct MeaningPreservationGuard: Sendable {
         return nil
     }
 
-    /// A number whose symbol the rewrite dropped, changed or invented; the digits alone are `inventedNumber`'s job.
+    /// A number whose sign or symbol the rewrite dropped, changed or invented; the digits alone are `inventedNumber`'s job.
     static func changedQuantity(original: String, rewritten: String) -> String? {
         let spoken = Quantities.read(in: original)
         let written = Quantities.read(in: rewritten)
@@ -654,7 +654,7 @@ public struct MeaningPreservationGuard: Sendable {
                 continue
             }
             let found = remaining.remove(at: place)
-            if found.symbol != quantity.symbol { return quantity.written }
+            if found.sign != quantity.sign || found.symbol != quantity.symbol { return quantity.written }
         }
         return nil
     }
