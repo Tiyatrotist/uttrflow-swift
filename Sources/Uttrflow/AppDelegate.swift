@@ -1546,6 +1546,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             updateProgress: updates.progress,
             features: MenuBarFeatures(settings),
             shortcuts: settings.shortcuts,
+            unarmedShortcuts: unarmedShortcuts,
             shortcutUnheard: shortcutUnheard,
             suggestionModel: suggestionModel
         )

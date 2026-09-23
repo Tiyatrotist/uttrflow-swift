@@ -132,6 +132,9 @@ public struct MenuBarState: Sendable, Equatable {
     /// What the user actually bound, so the menu never advertises a key that does nothing.
     public var shortcuts: ShortcutSet
 
+    /// Shortcuts the app could not claim, so the menu never advertises a key that does nothing.
+    public var unarmedShortcuts: Set<ShortcutAction>
+
     /// Why the dictation shortcut cannot be heard right now, or nil when it can.
     public var shortcutUnheard: String?
     /// How far along the AI suggestion model is, so a switch that is on but waiting says so.
@@ -147,6 +150,7 @@ public struct MenuBarState: Sendable, Equatable {
         updateProgress: UpdateProgress = .idle,
         features: MenuBarFeatures = MenuBarFeatures(),
         shortcuts: ShortcutSet = .default,
+        unarmedShortcuts: Set<ShortcutAction> = [],
         shortcutUnheard: String? = nil,
         suggestionModel: SuggestionModelReadiness = .notAsked
     ) {
@@ -159,6 +163,7 @@ public struct MenuBarState: Sendable, Equatable {
         self.updateProgress = updateProgress
         self.features = features
         self.shortcuts = shortcuts
+        self.unarmedShortcuts = unarmedShortcuts
         self.shortcutUnheard = shortcutUnheard
         self.suggestionModel = suggestionModel
     }
@@ -468,7 +473,9 @@ public enum MenuBarPresenter {
             .command(
                 MenuBarCommand(
                     title: "Clipboard", intent: .openClipboard,
-                    shortcut: MenuBarShortcut.forBinding(state.shortcuts.first(for: .clipboard)),
+                    shortcut: state.unarmedShortcuts.contains(.clipboard)
+                        ? nil
+                        : MenuBarShortcut.forBinding(state.shortcuts.first(for: .clipboard)),
                     isEnabled: state.features.clipboard)))
 
         items.append(contentsOf: recentItems(for: state))
