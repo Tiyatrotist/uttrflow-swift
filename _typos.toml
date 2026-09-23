@@ -17,6 +17,12 @@
 # and the rest of `Tests/` is checked, and `teh` written anywhere outside a fixture still
 # fails the build.
 #
+# `gud` is there for the same reason, from a fifth kind of fixture the four above do not
+# cover. `ClipKindDetectorTests` asserts that prose which *opens with a command name* is
+# still prose — `tar and feathers`, `cargo ship arrives Monday`, `bun with butter please`,
+# `git gud` — because one signal is never enough to call a clip code. The phrase has to be
+# a real one for the test to mean anything, and a real one is what the checker objects to.
+#
 # Two apostrophe-less contractions are listed as words rather than as excluded files.
 # `youre` and `theyre` are the *input* to the contraction repair — `ContractionsPass` maps
 # them to `you're` and `they're`, and `FunctionWords` and `MeaningPreservationGuard` both
