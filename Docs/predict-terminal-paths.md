@@ -48,7 +48,7 @@ Then, per simple command, after leading assignments and wrappers (`sudo`, `env`,
 | `cp`, `mv` | every source; the destination may be new |
 | `chmod`, `chown`, `chgrp` | every operand after the mode |
 | `python3`, `node`, `ruby`, `sh`, … | the script, when no flag comes first |
-| `grep`, `rg`, … | every operand after the pattern |
+| `grep`, `rg`, … | every operand after the pattern; a file named by `-f` or `--file` must exist as a file |
 | `git checkout` | a branch, tag, remote branch or `HEAD` relative that the refs hold, or paths that exist; a new branch's start point |
 | `git switch` | a local branch, or a remote branch of that name; with `-c` or `--detach`, a commit the refs hold |
 | `git add`, `restore`, `rm`, `mv` | paths that exist |
