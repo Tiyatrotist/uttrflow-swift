@@ -31,6 +31,11 @@ struct Profile: AsyncParsableCommand {
     @Flag(name: .long, help: "Time transcription alone, without the clean-up pass.")
     var transcribeOnly = false
 
+    func validate() throws {
+        guard repetitions >= 1 else { throw ValidationError("--repetitions must be 1 or more.") }
+        guard dictations >= 1 else { throw ValidationError("--dictations must be 1 or more.") }
+    }
+
     func run() async throws {
         let store = FileSystemSpeechModelStore.whisperKit()
         let model = SpeechModel.default

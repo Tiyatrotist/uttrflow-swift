@@ -98,6 +98,37 @@ struct TerminalLineCheckTests {
         #expect(!check.allows(line, in: api), "\(line) names something that is not here")
     }
 
+    @Test(
+        "Search pattern files must exist before a terminal line is offered.",
+        arguments: [
+            "grep -f missing.patterns Package.swift", "rg --file missing.patterns Package.swift",
+            "grep -fmissing.patterns Package.swift", "rg --file=missing.patterns Package.swift",
+            "grep -f docs Package.swift", "rg --file=$PATTERNS Package.swift",
+        ])
+    func missingPatternFile(_ line: String) {
+        #expect(!check.allows(line, in: api), "\(line) names a missing pattern file")
+    }
+
+    @Test(
+        "A real pattern file passes, and regexp flags remain literal patterns.",
+        arguments: [
+            "grep -f .env Package.swift", "rg --file .env Package.swift",
+            "grep -f.env Package.swift", "rg --file=.env Package.swift",
+            "grep -e missing.patterns Package.swift", "rg --regexp=missing.patterns Package.swift",
+            "grep -emissing.patterns Package.swift", "grep -f .env -e missing.patterns Package.swift",
+            "grep -- -f Package.swift",
+        ])
+    func searchPatternValues(_ line: String) {
+        #expect(check.allows(line, in: api), "\(line) can run with files present")
+    }
+
+    @Test("A pattern option without its value is refused.")
+    func missingSearchOptionValue() {
+        #expect(!check.allows("grep -f", in: api))
+        #expect(!check.allows("rg --file", in: api))
+        #expect(!check.allows("grep -e", in: api))
+    }
+
     @Test("Without a directory that exists, relative paths are refused and absolute ones are still checked.")
     func unknownDirectory() {
         for scope in [nil, "", "api", "~/api (-zsh)", "/Users/someone/nowhere"] {

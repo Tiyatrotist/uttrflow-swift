@@ -83,8 +83,9 @@ EXCLUDED_FILES = {
         "rest are not"
     ),
     "Uttrflow/Updates/UpdateController.swift": (
-        "owns Sparkle's updater and the one socket outside UttrflowAccount; the only rule "
-        "it holds — when an update may install — is UpdateGate, which is tested"
+        "owns Sparkle's updater and the one socket outside UttrflowAccount; it holds no rule "
+        "of its own — when an update may install is UpdateGate, and which feed may be read is "
+        "UpdateFeed, both tested"
     ),
     "Uttrflow/Onboarding/OnboardingAccountLayer.swift": "wiring only; pairs the backend with the store that believes its key",
     "Uttrflow/Onboarding/NetworkReachability+System.swift": "watches the real network path",

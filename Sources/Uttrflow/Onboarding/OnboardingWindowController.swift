@@ -54,9 +54,15 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         model = OnboardingModel(flow: flow)
         super.init()
         flow.onFinish = { [weak self] readiness in
-            self?.close()
-            self?.onFinish?(readiness)
+            guard let self else { return }
+            self.finish(readiness) { self.close() }
         }
+    }
+
+    func finish(_ readiness: OnboardingReadiness, closing close: () -> Void) {
+        let onFinish = onFinish
+        close()
+        onFinish?(readiness)
     }
 
     /// Whether the window is on screen, which a closed or minimised one is not.

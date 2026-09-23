@@ -23,11 +23,34 @@ public enum SecureField {
         return declared || (value().map(looksMasked) ?? false)
     }
 
-    /// Whether a name betrays a password field that did not publish the secure role, as web fields do.
+    /// Whether a name betrays a field whose value must never be learned, as web fields do.
     static func namesASecret(_ text: String) -> Bool {
         let lower = text.lowercased()
-        return lower.contains("password") || lower.contains("passwd")
-            || lower.contains("passcode")
+        let words = lower.split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        let wordSet = Set(words)
+        let phrase = words.joined(separator: " ")
+        let compact = words.joined()
+
+        let sensitiveCompacts = [
+            "password", "passwd", "passcode", "currentpassword", "newpassword",
+            "onetimecode", "verificationcode", "authcode", "authenticationcode", "2facode",
+            "mfacode", "totpcode", "securitycode", "cardsecuritycode", "cardverificationcode",
+            "cardnumber", "ccnumber", "creditcard", "creditcardnumber", "cccsc",
+            "securityanswer", "securityquestion", "socialsecurity", "socialsecuritynumber",
+            "accountnumber", "routingnumber", "dateofbirth",
+        ]
+        if sensitiveCompacts.contains(where: compact.contains) { return true }
+
+        let sensitivePhrases = [
+            "one time code", "verification code", "auth code", "authentication code",
+            "2fa code", "mfa code", "totp code", "security code", "card security",
+            "card verification", "card number", "credit card", "security answer",
+            "security question", "social security", "account number", "routing number",
+            "date of birth",
+        ]
+        if sensitivePhrases.contains(where: phrase.contains) { return true }
+
+        return ["otp", "cvv", "cvc", "csc", "pin", "ssn"].contains(where: wordSet.contains)
     }
 
     /// Whether a value reads back as mask characters alone, which a field showing dots but not declaring itself does.

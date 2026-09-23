@@ -81,10 +81,9 @@ struct TelemetryReportTests {
     func clampsToTheServersRanges() throws {
         let report = try #require(
             Telemetry.report(
-                osVersionMajor: 10_000, dictationCount: .max, cancelledCount: .max,
+                dictationCount: .max, cancelledCount: .max,
                 failureCount: -1, audioTotalMs: .max, processingTotalMs: -9, charactersInserted: -3))
 
-        #expect(report.osVersionMajor == 999)
         #expect(report.dictationCount == 2_147_483_647)
         #expect(report.cancelledCount == report.dictationCount)
         #expect(report.failureCount == 0)
@@ -93,10 +92,40 @@ struct TelemetryReportTests {
         #expect(report.charactersInserted == 0)
     }
 
-    @Test("clamps every part of the app version")
-    func clampsTheVersion() {
-        let version = TelemetryReport.AppVersion(major: -1, minor: 1_000, patch: 12)
-        #expect(version == TelemetryReport.AppVersion(major: 0, minor: 999, patch: 12))
+    /// Releases are `YEAR.MONTH.DAY`, so the first part is a four-digit year and is reported as one.
+    @Test("reports a calendar version's year rather than a rounded one")
+    func reportsACalendarVersion() throws {
+        #expect(TelemetryReport.AppVersion(major: 2026, minor: 9, patch: 14).major == 2026)
+
+        let report = try #require(Telemetry.report(appVersion: .init(major: 2026, minor: 9, patch: 14)))
+        let version = try #require(Telemetry.encodedObject(report)["appVersion"] as? [String: Any])
+
+        #expect(version["major"] as? Int == 2026)
+        #expect(version["minor"] as? Int == 9)
+        #expect(version["patch"] as? Int == 14)
+    }
+
+    /// The first part holds four digits, so a release in 2100 still says which year it shipped in.
+    @Test("reports a version from the next century as it is")
+    func reportsAVersionFromTheNextCentury() throws {
+        let report = try #require(Telemetry.report(appVersion: .init(major: 2100, minor: 12, patch: 31)))
+        #expect(report.appVersion == TelemetryReport.AppVersion(major: 2100, minor: 12, patch: 31))
+    }
+
+    /// A version rounded into range is a different release's version, and it would be believed.
+    @Test("refuses a version the contract cannot hold rather than rounding it")
+    func refusesAnUnrepresentableVersion() {
+        #expect(Telemetry.report(appVersion: .init(major: 10_000, minor: 9, patch: 14)) == nil)
+        #expect(Telemetry.report(appVersion: .init(major: -1, minor: 9, patch: 14)) == nil)
+        #expect(Telemetry.report(appVersion: .init(major: 2026, minor: 1_000, patch: 14)) == nil)
+        #expect(Telemetry.report(appVersion: .init(major: 2026, minor: 9, patch: 1_000)) == nil)
+    }
+
+    /// The macOS major version is reported through the same range, so it is refused the same way.
+    @Test("refuses an OS version the contract cannot hold")
+    func refusesAnUnrepresentableOSVersion() {
+        #expect(Telemetry.report(osVersionMajor: 1_000) == nil)
+        #expect(Telemetry.report(osVersionMajor: -1) == nil)
     }
 
     /// The table refuses percentiles that go backwards; raising them into order keeps the report arriving.

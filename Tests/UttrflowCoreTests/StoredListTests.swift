@@ -17,6 +17,11 @@ struct StoredListTests {
 
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
+    private func isExcludedFromBackup(_ url: URL) throws -> Bool {
+        let values = try url.resourceValues(forKeys: [.isExcludedFromBackupKey])
+        return values.isExcludedFromBackup == true
+    }
+
     @Test("A file that is not there reads as missing, not unreadable.")
     func missing() throws {
         let file = try folder().appending(path: "list.json")
@@ -51,6 +56,7 @@ struct StoredListTests {
         #expect(try Data(contentsOf: aside) == Data("{ not json".utf8))
         #expect(!FileManager.default.fileExists(atPath: file.path))
         #expect(LocalStore.hasSetAside(file))
+        #expect(try isExcludedFromBackup(aside))
     }
 
     @Test("A second unreadable file in the same second never replaces the first one set aside.")

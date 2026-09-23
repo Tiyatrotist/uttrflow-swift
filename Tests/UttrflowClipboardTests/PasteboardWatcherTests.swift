@@ -103,6 +103,24 @@ struct PasteboardWatcherTests {
         #expect(clip?.copiedAt == noon)
     }
 
+    @Test("records an escaped-quote named secret as hidden without changing the text")
+    func escapedQuoteNamedSecretIsHidden() async {
+        let clipboard = FakeClipboard()
+        let watcher = watcher(clipboard)
+        let text = #"""
+            {
+              "password": "abc123\"def456",
+              "enabled": true
+            }
+            """#
+        clipboard.write(text, from: "Code")
+
+        let clip = await watcher.newClip(at: noon)?.clip
+
+        #expect(clip?.text == text)
+        #expect(clip?.kind == .secret)
+    }
+
     /// Whatever is on the clipboard at launch was copied before Uttrflow was watching.
     @Test("adopts whatever was already there rather than claiming it")
     func firstTickTakesABaseline() async {
@@ -332,6 +350,18 @@ struct PasteboardWatcherTests {
         clipboard.write(nil, picture: (data: Data([0x47, 0x49, 0x46]), width: 1, height: 1))
 
         #expect(await watcher.newClip(at: noon)?.clip.kind == .image)
+    }
+
+    @Test("does not keep a concealed picture")
+    func concealedPictureIsSkipped() async {
+        let clipboard = FakeClipboard()
+        let watcher = watcher(clipboard)
+
+        clipboard.write(
+            nil, picture: (data: Data([0x89, 0x50, 0x4E, 0x47]), width: 2, height: 2),
+            marked: .concealed)
+
+        #expect(await watcher.newClip(at: noon) == nil)
     }
 
     @Test("still ignores its own write when the copy arrives first")

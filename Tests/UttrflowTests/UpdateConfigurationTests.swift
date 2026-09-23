@@ -2,6 +2,7 @@
 
 import Foundation
 import Testing
+@testable import Uttrflow
 
 /// Reads `Resources/Uttrflow-Info.plist` as it ships, so removing a key fails here and not in a release.
 @Suite("The updater's configuration")
