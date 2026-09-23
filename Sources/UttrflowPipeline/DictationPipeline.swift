@@ -220,6 +220,8 @@ public actor DictationPipeline {
             transition(to: .recording)
             beginWorkingAhead(mine)
         } catch {
+            // A cancel during the open leaves the pipeline at rest, so no failure is published over it.
+            guard !wasCancelled(mine) else { return }
             transition(to: .failed(DictationFailure(error)))
         }
     }
