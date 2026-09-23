@@ -338,6 +338,23 @@ struct AVAudioCaptureEngineCueTests {
 
         #expect(cue.starts == 0)
     }
+
+    /// A head trim would convert a measured-acceptable bleed into deterministic word loss for users who press and speak.
+    @Test("hands back the whole capture, cue samples and all, rather than trimming a fixed lead-in")
+    func recordingKeepsTheCueAtItsHead() async throws {
+        let source = FakeMicrophoneSource()
+        let cue = MicrophoneWatchingCue(source: source)
+        let engine = AVAudioCaptureEngine(source: source, cue: cue)
+        try await engine.start()
+        let cueSamples = Array(repeating: Float(0.7), count: 200)
+        let speechSamples = Array(repeating: Float(0.3), count: 1_000)
+        source.emit(cueSamples)
+        source.emit(speechSamples)
+
+        let audio = try await engine.stop()
+
+        #expect(audio.samples == cueSamples + speechSamples, "no fixed-window head trim")
+    }
 }
 
 /// A cue that notes, for every stop it plays, whether the microphone was still delivering.

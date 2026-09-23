@@ -9,6 +9,38 @@ import CoreGraphics
 // a button that draws correctly and does nothing — the failure this whole product has
 // repeatedly had.
 
+// MARK: - Arguments
+
+/// How many times the whole suite runs, read before the harness has touched anything.
+///
+/// First, deliberately. The app element below exits when Uttrflow is not running, the screen and
+/// window checks come after it, and the round loop is last of all — so a rounds argument read
+/// where it is used is one refused only after every expensive part of the setup has been paid
+/// for, and refused by a range trap with no message rather than by a line saying what was wrong.
+///
+/// Zero is refused rather than run as nothing. It is tempting to read it as "do nothing and
+/// succeed", but this is a test harness: exiting 0 having checked nothing reports a pass it never
+/// earned, and a caller computing the count — a script multiplying it, a flag left unset — wants
+/// to be told it asked for no testing rather than handed a green run. Refusing is also the only
+/// answer that keeps a clamp out of it. Silently running one round when one was not asked for is
+/// the same lie in the other direction.
+func roundsAsked(from arguments: [String]) -> Int {
+    let usage = "usage: run.sh [rounds]   rounds is a whole number, 1 or more; the default is 1"
+    func refuse(_ reason: String) -> Never {
+        FileHandle.standardError.write("\(reason)\n\(usage)\n".data(using: .utf8)!)
+        exit(4)
+    }
+    guard arguments.count <= 1 else {
+        refuse("expected the number of rounds and nothing else, not: \(arguments.joined(separator: " "))")
+    }
+    guard let text = arguments.first else { return 1 }
+    guard let asked = Int(text) else { refuse("rounds '\(text)' is not a whole number.") }
+    guard asked >= 1 else { refuse("rounds must be 1 or more, not \(asked).") }
+    return asked
+}
+
+let rounds = roundsAsked(from: Array(CommandLine.arguments.dropFirst()))
+
 // MARK: - Accessibility
 
 func attr(_ e: AXUIElement, _ a: String) -> String? {
@@ -644,7 +676,6 @@ func screenIsUsable() -> String? {
 
 // MARK: - Run
 
-let rounds = Int(CommandLine.arguments.dropFirst().first ?? "1") ?? 1
 /// Distinct per run, so one run's leftovers cannot be mistaken for this run's work — and
 /// so a word this run adds is genuinely new, rather than meeting the store's refusal of a
 /// duplicate left behind last time.

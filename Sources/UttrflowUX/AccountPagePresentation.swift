@@ -133,6 +133,13 @@ public enum AccountPagePresenter {
         exactly where it is. Audio is never one of them: it is discarded as it becomes text.
         """
 
+    /// The network account of a signed-in app: honest about background checks, narrow about dictation.
+    public static let networkUseFootnote = """
+        Sign-in, profile refreshes and update checks may reach the network, and model setup or \
+        repair may download speech assets. Dictation itself runs on this Mac once the model is \
+        installed, so losing Wi-Fi does not stop you from speaking.
+        """
+
     /// Draws the Account page from a snapshot.
     public static func page(
         for snapshot: AccountPageSnapshot, locale: Locale = .autoupdatingCurrent
@@ -153,8 +160,8 @@ public enum AccountPagePresenter {
                     symbolName: "person.crop.circle",
                     title: "Not signed in",
                     message: """
-                        Uttrflow needs the network once, to know who you are. After that it never \
-                        needs it again — dictation runs on this Mac whether you are online or not.
+                        Signing in needs the network, but dictation runs on this Mac once setup is \
+                        complete. You can keep speaking when Wi-Fi is gone.
                         """,
                     action: MainAction(title: "Sign In", intent: .signIn)),
                 footnote: nil)
@@ -167,10 +174,7 @@ public enum AccountPagePresenter {
             notice: notice(for: snapshot.access),
             callout: callout,
             emptyState: nil,
-            footnote: """
-                Uttrflow reaches the network to sign you in, and for nothing else. Turn Wi-Fi off \
-                afterwards and dictation carries on working.
-                """)
+            footnote: networkUseFootnote)
     }
 
     // MARK: - Working without an account
@@ -216,8 +220,8 @@ public enum AccountPagePresenter {
             AccountDetail(
                 label: "Sign in",
                 explanation: """
-                    Needs the network once. It replaces this Mac account with a real one and \
-                    leaves everything on this Mac exactly where it is.
+                    Needs the network for sign-in. It replaces this Mac account with a real one \
+                    and leaves everything on this Mac exactly where it is.
                     """,
                 action: MainAction(title: "Sign In", intent: .signIn)),
         ]

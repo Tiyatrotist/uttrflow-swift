@@ -12,6 +12,11 @@ struct QuantityTests {
             ("revenue grew 5%", [Quantity(digits: "5", symbol: "%")]),
             ("the invoice is $500", [Quantity(digits: "500", symbol: "$")]),
             ("the gap is 20\u{00B0}", [Quantity(digits: "20", symbol: "\u{00B0}")]),
+            ("temperature fell to -5 degrees", [Quantity(digits: "5", sign: "-", symbol: "")]),
+            ("the balance is +500 dollars", [Quantity(digits: "500", sign: "+", symbol: "")]),
+            ("the error was -3.5%", [Quantity(digits: "3.5", sign: "-", symbol: "%")]),
+            ("the refund is -$12.50", [Quantity(digits: "12.50", sign: "-", symbol: "$")]),
+            ("the credit is $+500", [Quantity(digits: "500", sign: "+", symbol: "$")]),
             ("i need 20 chairs", [Quantity(digits: "20", symbol: "")]),
             // One space is tolerated, since a model writing "5 %" means the percentage.
             ("revenue grew 5 %", [Quantity(digits: "5", symbol: "%")]),
@@ -27,6 +32,22 @@ struct QuantityTests {
         #expect(Quantities.read(in: "we sold 12,000 units") == [Quantity(digits: "12000", symbol: "")])
         #expect(
             Quantities.read(in: "it cost $12,000") == [Quantity(digits: "12000", symbol: "$")])
+        #expect(
+            Quantities.read(in: "the delta was -1,234.50")
+                == [Quantity(digits: "1234.50", sign: "-", symbol: "")])
+    }
+
+    @Test("does not read binary subtraction or hyphenated prose as signed quantities")
+    func leavesBinaryAndHyphenatedNumbersUnsigned() {
+        #expect(
+            Quantities.read(in: "subtract 5-3") == [
+                Quantity(digits: "5", symbol: ""), Quantity(digits: "3", symbol: ""),
+            ])
+        #expect(
+            Quantities.read(in: "subtract 5 -3") == [
+                Quantity(digits: "5", symbol: ""), Quantity(digits: "3", symbol: ""),
+            ])
+        #expect(Quantities.read(in: "ticket-5 is ready") == [Quantity(digits: "5", symbol: "")])
     }
 
     @Test("reads every amount in the order the text states them")
@@ -48,6 +69,8 @@ struct QuantityTests {
     func namesItAsWritten() {
         #expect(Quantity(digits: "5", symbol: "%").written == "5%")
         #expect(Quantity(digits: "500", symbol: "$").written == "$500")
+        #expect(Quantity(digits: "500", sign: "-", symbol: "$").written == "-$500")
+        #expect(Quantity(digits: "3.5", sign: "-", symbol: "%").written == "-3.5%")
         #expect(Quantity(digits: "20", symbol: "").written == "20")
     }
 }
@@ -60,6 +83,11 @@ struct QuantityGuardTests {
             ("revenue grew 5%", "Revenue grew 5."),
             ("the invoice is $500", "The invoice is 500."),
             ("the gap is 20\u{00B0}", "The gap is 20."),
+            ("temperature fell to -5 degrees", "Temperature fell to 5 degrees."),
+            ("temperature fell to 5 degrees", "Temperature fell to -5 degrees."),
+            ("the balance is +500 dollars", "The balance is 500 dollars."),
+            ("the error was -3.5%", "The error was 3.5%."),
+            ("the refund is -$12.50", "The refund is $12.50."),
             // Moved from one number to another, which the digit check cannot see either.
             ("5% of 20 rooms", "5 of 20% rooms."),
         ]
@@ -80,6 +108,9 @@ struct QuantityGuardTests {
         arguments: [
             ("revenue grew 5%", "Revenue grew 5%."),
             ("the invoice is $500", "The invoice is $500."),
+            ("temperature fell to -5 degrees", "Temperature fell to -5 degrees."),
+            ("the balance is +500 dollars", "The balance is +500 dollars."),
+            ("the refund is -$12.50", "The refund is -$12.50."),
             ("we sold 12,000 units", "We sold 12,000 units."),
             // The separator is a spelling, and the passes may write either.
             ("we sold 12,000 units", "We sold 12000 units."),

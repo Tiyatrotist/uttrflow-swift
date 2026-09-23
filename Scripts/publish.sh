@@ -101,6 +101,9 @@ MOUNTED="$(printf '%s\n' "$MOUNT_OUTPUT" | grep -o '/tmp/[^[:space:]]*' | head -
 APP="$(find "$MOUNTED" -maxdepth 1 -name '*.app' | head -1)"
 [[ -n "$APP" ]] || fail "there is no application inside $IMAGE"
 
+FEED_CHECK="$(python3 "$SCRIPT_DIR/update_feed_gate.py" check-plist "$APP/Contents/Info.plist" --forbid-local 2>&1)" \
+    || fail "$FEED_CHECK"
+
 VERSION="$(plutil -extract CFBundleShortVersionString raw -o - "$APP/Contents/Info.plist")"
 # Sparkle compares CFBundleVersion and displays the short string. An appcast with
 # only one of the two either cannot decide what is newer or cannot say what it is.
@@ -115,29 +118,6 @@ BUILD_COMMIT="$(plutil -extract UttrflowBuildCommit raw -o - "$APP/Contents/Info
     )"
 [[ "$BUILD_COMMIT" == *-dirty ]] \
     && fail "the image was built from a dirty checkout ($BUILD_COMMIT); commit first"
-
-# Re-reads SUFeedURL from the image and refuses a publication whose feed is loopback.
-# The bundle gate would have refused to build one, but this script does not trust the
-# image's provenance: a misconfigured build would strand every installed copy from
-# future automatic updates. The classifier is shared with `Scripts/bundle.sh` so the
-# two gates cannot disagree on what counts as local.
-IMAGE_FEED_URL="$(plutil -extract SUFeedURL raw -o - "$APP/Contents/Info.plist" 2>/dev/null || true)"
-if [[ -n "$IMAGE_FEED_URL" ]]; then
-    IMAGE_FEED_KIND="$(python3 "$SCRIPT_DIR/feed_url_classify.py" "$IMAGE_FEED_URL")" \
-        || fail "$(
-            printf 'the image carries an SUFeedURL the bundle gate would have refused:\n'
-            printf '  %s\n' "$IMAGE_FEED_URL"
-            printf '  Rebuild with a feed this gate would accept; see Docs/app-updates.md.'
-        )"
-    if [[ "$IMAGE_FEED_KIND" == "loopback" ]]; then
-        fail "$(
-            printf 'refusing to publish an image whose SUFeedURL is loopback:\n'
-            printf '  %s\n' "$IMAGE_FEED_URL"
-            printf '  A published loopback feed strands every installed copy on this Mac\n'
-            printf '  from future automatic updates. Build with an https feed, then publish.'
-        )"
-    fi
-fi
 
 # Notarised or not is a property of the file, not a matter of intent. Asked of the image,
 # because the image is what somebody downloads and what Gatekeeper is shown first.

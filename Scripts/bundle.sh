@@ -94,6 +94,7 @@ fi
 PACKAGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PACKAGE_ROOT"
+SCRIPT_DIR="$PACKAGE_ROOT/Scripts"
 
 PRODUCT="Uttrflow"
 SCHEME="Uttrflow"
@@ -521,25 +522,15 @@ FEED_URL="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$APP/Contents/Info.pl
 PUBLIC_KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP/Contents/Info.plist" 2>/dev/null || true)"
 if [[ -n "$FEED_URL" ]]; then
     # https, or http to this machine — the loopback address is what makes an update
-    # rehearsable end to end on one Mac. See UpdateController.isAcceptable.
-    #
-    # The classifier is shared with `Scripts/publish.sh` so the two gates cannot
-    # disagree on what counts as local, and matches `UpdateController.isAcceptable`
-    # host-for-host rather than by shell prefix.
-    FEED_KIND="$(python3 "$SCRIPT_DIR/feed_url_classify.py" "$FEED_URL")" \
-        || fail "SUFeedURL is neither https nor a local address: $FEED_URL"
-    if [[ "$FEED_KIND" == "loopback" ]]; then
-        # A loopback feed is for rehearsal, not for shipping: every installed copy
-        # would strand itself from future automatic updates the moment the URL stops
-        # answering. A distribution build is the one that would be published, so it
-        # is the one that has to refuse.
-        [[ "$REAL_CERTIFICATE" == "yes" ]] && fail "$(
-            printf 'a distribution build may not point SUFeedURL at a loopback host:\n'
-            printf '  %s\n' "$FEED_URL"
-            printf '  Rebuild as local/rehearsal with an http loopback feed, or as\n'
-            printf '  distribution with an https feed. See Docs/app-updates.md.'
+    # rehearsable end to end on one Mac. Distribution builds may not ship that address.
+    FEED_KIND="$(python3 "$SCRIPT_DIR/update_feed_gate.py" classify "$FEED_URL" 2>&1)" \
+        || fail "$FEED_KIND"
+    if [[ "$FEED_KIND" == "local" && "$MODE" == "distribution" ]]; then
+        fail "$(
+            printf 'distribution builds must not use a local update feed: %s\n' "$FEED_URL"
+            printf '  Local feeds are for rehearsing updates on one Mac; a public build\n'
+            printf '  would strand installed copies on an address only the release Mac can serve.'
         )"
-        LOCAL_FEED="yes"
     fi
     [[ -n "$PUBLIC_KEY" && "$PUBLIC_KEY" != *" "* ]] || fail "$(
         printf 'SUFeedURL is set and SUPublicEDKey is not a key.\n'

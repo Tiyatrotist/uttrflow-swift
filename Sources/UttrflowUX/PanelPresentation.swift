@@ -95,16 +95,20 @@ public struct PanelAction: Sendable, Equatable, Identifiable {
     public let intent: PanelIntent
     /// Whether this action takes something away, decided here. See `Docs/panel.md`.
     public let isDestructive: Bool
+    /// The chord that performs it without the pointer, shown in the menu so it can be found.
+    public let shortcut: PanelChord?
 
     public var id: String { title }
 
     public init(
-        title: String, symbolName: String, intent: PanelIntent, isDestructive: Bool = false
+        title: String, symbolName: String, intent: PanelIntent, isDestructive: Bool = false,
+        shortcut: PanelChord? = nil
     ) {
         self.title = title
         self.symbolName = symbolName
         self.intent = intent
         self.isDestructive = isDestructive
+        self.shortcut = shortcut
     }
 }
 
@@ -260,7 +264,7 @@ public struct PanelPresentation: Sendable, Equatable {
     public let microphone: PanelMicrophone
     /// H7 — what the list is scoped to when that differs from the chip last pressed.
     public let scope: String?
-    /// What VoiceOver is told, each line once when it first appears, since the panel may close before focus reaches it.
+    /// What VoiceOver is told when each line appears in the open panel.
     public let announcements: [String]
     /// What VoiceOver says choosing a row will do, which is a copy when the panel cannot paste.
     public let rowHint: String
@@ -311,7 +315,7 @@ public enum PanelPresenter {
     public static let searchPlaceholder = "Search, or type an alias"
 
     /// The gesture, drawn under a full list, because the panel is most people's only lesson in it.
-    public static let hint = "↑↓ to choose · ⏎ to paste · esc to close"
+    public static let hint = "↑↓ to choose · ⏎ to paste · ⌘⏎ plain · ⌘Z undo · esc to close"
     public static let emptyHint = "esc to close"
     /// A sheet's own keys, which differ from the list's. See `Docs/panel.md`.
     public static let sheetHint = "⏎ to save · esc to go back"
@@ -325,7 +329,7 @@ public enum PanelPresenter {
     /// What choosing a row does when the panel can only copy.
     public static let copyRowHint = "Copies to the clipboard, to paste yourself with Command-V"
 
-    /// The notice and the undo offer, as spoken; the view posts each one once. See `Docs/app-quick-panel.md`.
+    /// The notice and the undo offer, as spoken; the controller posts each appearance. See `Docs/app-quick-panel.md`.
     static func announcements(for snapshot: PanelSnapshot) -> [String] {
         [snapshot.notice?.message, snapshot.canUndoDelete ? undoAnnouncement : nil].compactMap { $0 }
     }
@@ -350,6 +354,8 @@ public enum PanelPresenter {
         let rows = results.rows.enumerated().map { position, result in
             row(for: result, in: snapshot, isSelected: position == results.selectedIndex)
         }
+        // An unread list is an unknown, not a nothing, so neither sentence below is said yet.
+        let saysNothing = rows.isEmpty && !snapshot.isAwaitingList
 
         return PanelPresentation(
             rows: rows,
@@ -363,12 +369,12 @@ public enum PanelPresenter {
             categories: categories(for: snapshot),
             query: snapshot.query,
             searchPlaceholder: searchPlaceholder,
-            emptyState: rows.isEmpty ? emptyState(for: snapshot) : nil,
+            emptyState: saysNothing ? emptyState(for: snapshot) : nil,
             // A sheet has its own keys, so the list's line would be teaching the wrong ones.
             hint: hint(for: snapshot, isEmpty: rows.isEmpty),
             sheet: sheet(for: snapshot),
             groups: groups(for: rows, omitted: results.omitted, isSearching: snapshot.isSearching),
-            emptyAction: rows.isEmpty ? emptyAction(for: snapshot) : nil,
+            emptyAction: saysNothing ? emptyAction(for: snapshot) : nil,
             notice: snapshot.notice,
             microphone: microphone(for: snapshot.dictation),
             scope: scope(for: snapshot),
@@ -458,42 +464,57 @@ public enum PanelPresenter {
             PanelAction(title: "Insert", symbolName: "arrow.down.doc", intent: .insert(clip.id))
         ]
         if isMasked {
-            actions.append(PanelAction(title: "Reveal", symbolName: "eye", intent: .reveal(clip.id)))
+            actions.append(
+                PanelAction(
+                    title: "Reveal", symbolName: "eye", intent: .reveal(clip.id),
+                    shortcut: PanelRowAction.reveal.chord))
         }
-        actions.append(PanelAction(title: "Copy", symbolName: "doc.on.doc", intent: .copy(clip.id)))
+        actions.append(
+            PanelAction(
+                title: "Copy", symbolName: "doc.on.doc", intent: .copy(clip.id),
+                shortcut: PanelRowAction.copy.chord))
         actions.append(
             clip.isPinned
-                ? PanelAction(title: "Unpin", symbolName: "pin.slash", intent: .unpin(clip.id))
-                : PanelAction(title: "Pin", symbolName: "pin", intent: .pin(clip.id)))
+                ? PanelAction(
+                    title: "Unpin", symbolName: "pin.slash", intent: .unpin(clip.id),
+                    shortcut: PanelRowAction.pin.chord)
+                : PanelAction(
+                    title: "Pin", symbolName: "pin", intent: .pin(clip.id),
+                    shortcut: PanelRowAction.pin.chord))
         // Rename when there is a name, or the user expects a second alias.
         actions.append(
             PanelAction(
                 title: clip.alias == nil ? "Name" : "Rename", symbolName: "tag",
-                intent: .alias(clip.id)))
-        actions.append(PanelAction(title: "Move", symbolName: "folder", intent: .move(clip.id)))
+                intent: .alias(clip.id), shortcut: PanelRowAction.alias.chord))
+        actions.append(
+            PanelAction(
+                title: "Move", symbolName: "folder", intent: .move(clip.id),
+                shortcut: PanelRowAction.move.chord))
         // D4, D5 — offered only where it would do something and a formatter exists.
         if let language = clip.language, snapshot.formattableLanguages.contains(language) {
             actions.append(
                 PanelAction(
-                    title: "Format", symbolName: "wand.and.stars", intent: .format(clip.id)))
+                    title: "Format", symbolName: "wand.and.stars", intent: .format(clip.id),
+                    shortcut: PanelRowAction.format.chord))
         }
         if snapshot.reindentOffers.offers(clip) {
             actions.append(
                 PanelAction(
-                    title: "Re-indent", symbolName: "text.alignleft", intent: .reindent(clip.id)))
+                    title: "Re-indent", symbolName: "text.alignleft",
+                    intent: .reindent(clip.id), shortcut: PanelRowAction.reindent.chord))
         }
         // E6 — never on a note already, or promoting replaces what the user wrote, and never on a picture, which has no text.
         if clip.richText == nil, clip.image == nil {
             actions.append(
                 PanelAction(
                     title: "Make a note", symbolName: "square.and.pencil",
-                    intent: .makeNote(clip.id)))
+                    intent: .makeNote(clip.id), shortcut: PanelRowAction.makeNote.chord))
         }
         // Last, and the only one that repeating does not undo.
         actions.append(
             PanelAction(
                 title: "Delete", symbolName: "trash", intent: .delete(clip.id),
-                isDestructive: true))
+                isDestructive: true, shortcut: PanelRowAction.delete.chord))
         return actions
     }
 

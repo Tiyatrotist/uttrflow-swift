@@ -78,6 +78,7 @@ public final class RecordingWriter: Sendable {
         guard descriptor >= 0 else {
             throw .engineFailed(description: "could not create \(url.lastPathComponent)")
         }
+        try? PrivateFile.excludeFromBackup(at: url)
         let header = WAVEncoder.header(frames: 0, sampleRate: AudioSamples.canonicalSampleRate)
         guard Self.write(header, to: descriptor) else {
             close(descriptor)

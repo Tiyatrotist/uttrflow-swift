@@ -64,6 +64,14 @@ A value that matches a name and carries no user text goes on the audit's allow-l
 reason, and the list is printed on every run. A call to a builder in a `Log.swift` file is
 trusted at the call site because the builder's own file is scanned whole.
 
+Both lists are keyed on the exact interpolation a log message carries, and the audit refuses to
+report anything at all while an entry names a file that is gone, or an interpolation that file no
+longer carries. An exception it cannot check is not one it has checked, and printing it beside a
+clean scan would claim a privacy decision nobody made; it would also let the same expression come
+back later and inherit the old exemption. So delete the entry with the log call, or point it at
+the interpolation the message carries now and decide afresh. The match is parser-aware: the same
+text in a comment or in an ordinary string does not keep an entry alive.
+
 The audit reads names, not types, so it is a tripwire rather than a proof: a value called
 something innocent can still carry text. Keep user text out of names like `message` and pass
 it to a builder instead.

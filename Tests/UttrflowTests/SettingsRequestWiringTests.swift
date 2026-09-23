@@ -1,5 +1,6 @@
 // A settings row that asks for something to happen must reach the app, not be saved and lost.
 
+import AppKit
 import Foundation
 import Testing
 import UttrflowCore
@@ -106,6 +107,59 @@ struct SettingsRequestWiringTests {
         model.cancelRecordingShortcut()
 
         #expect(callbacks.isEmpty)
+    }
+
+    @Test("losing the Settings shortcut surface restores the live shortcut")
+    func losingShortcutSurfaceFocusRestoresOnce() {
+        var callbacks: [Bool] = []
+        let model = model(RecordingStore(), onShortcutRecording: { callbacks.append($0) })
+
+        model.beginRecordingShortcut(.dictate)
+        model.shortcutRecordingSurfaceDidLoseFocus()
+        model.shortcutRecordingSurfaceDidLoseFocus()
+
+        #expect(callbacks == [true, false])
+        #expect(!model.session.recorder.isRecording)
+    }
+
+    @Test("a command candidate is recorded and consumed before the menu sees it")
+    func commandCandidateIsConsumed() throws {
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: [.command], timestamp: 0,
+                windowNumber: 0, context: nil, characters: "q", charactersIgnoringModifiers: "q",
+                isARepeat: false, keyCode: 12))
+
+        let route = SettingsShortcutField.route(event)
+
+        guard case .recordAndConsume(let stroke) = route else {
+            Issue.record("expected a consumed key-down route, got \(route)")
+            return
+        }
+        #expect(stroke.keyCode == 12)
+        #expect(stroke.modifiers == [.command])
+        #expect(stroke.phase == .down)
+        #expect(stroke.isKeyDown)
+    }
+
+    @Test("modifier changes are recorded but still pass through")
+    func modifierChangesPassThrough() throws {
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .flagsChanged, location: .zero, modifierFlags: [.command], timestamp: 0,
+                windowNumber: 0, context: nil, characters: "", charactersIgnoringModifiers: "",
+                isARepeat: false, keyCode: 55))
+
+        let route = SettingsShortcutField.route(event)
+
+        guard case .recordAndPass(let stroke) = route else {
+            Issue.record("expected a pass-through modifier route, got \(route)")
+            return
+        }
+        #expect(stroke.keyCode == 55)
+        #expect(stroke.modifiers == [.command])
+        #expect(stroke.phase == .modifiersChanged)
+        #expect(stroke.isKeyDown)
     }
 
     @Test("an ordinary change still saves and still reports, and asks for nothing")

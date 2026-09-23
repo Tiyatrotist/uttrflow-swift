@@ -33,6 +33,7 @@ place to start; if you want to change it, [CONTRIBUTING](../CONTRIBUTING.md) and
 | [input-synthetic-keystrokes.md](input-synthetic-keystrokes.md) | The key events this app posts, and what the system does with them |
 | [input-paste-eligibility.md](input-paste-eligibility.md) | When the paste strategy volunteers |
 | [context-accessibility.md](context-accessibility.md) | What applications actually answer |
+| [compatibility.md](compatibility.md) | What each kind of application actually does with the words |
 | [context-budget.md](context-budget.md) | The context read's budget |
 | [stuck-recording.md](stuck-recording.md) | The recording that never stops |
 | [recordings.md](recordings.md) | Recordings kept for retry |
