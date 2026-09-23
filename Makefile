@@ -124,6 +124,10 @@ release-tag-test: ## Prove release tags come from main. Needs no build.
 release-order-test: ## Prove `make release` keeps its stages in order under -j. Dry-run only.
 	./Scripts/release_order_test.sh
 
+.PHONY: e2e-predict-cleanup-test
+e2e-predict-cleanup-test: ## Prove the live prediction harness removes its scratch directory and helper on exit. Needs no build.
+	./Scripts/e2e_predict_cleanup_test.sh
+
 .PHONY: bundle-requirement-test
 bundle-requirement-test: ## Prove every bundle-signing mode has a designated requirement. Needs no build.
 	./Scripts/bundle.sh --requirement-self-test
@@ -154,7 +158,7 @@ disclosure-history: ## Scan every commit on every ref. Run before a repo goes pu
 # whose failure cannot be fixed after the fact. A competitor's name in a commit is
 # published the moment the commit is, and no later edit reaches a clone or a cache.
 .PHONY: verify
-verify: pii-audit disclosure-audit issue-template-audit docs-audit comment-audit match-audit ratchet-test range-test hits-test pre-push-test update-feed-test issue-template-test uitest-arguments uitest-result-path log-audit store-permissions pasteboard-audit bundle-requirement-test release-tag-test release-order-test perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, issue template prompts, docs, comments, word matches, log privacy, clipboard, bundle signing, release tags, release stage order, energy and memory budget, lint, build, tests, coverage floor, offline audit.
+verify: pii-audit disclosure-audit issue-template-audit docs-audit comment-audit match-audit ratchet-test range-test hits-test pre-push-test update-feed-test issue-template-test uitest-arguments uitest-result-path log-audit store-permissions pasteboard-audit bundle-requirement-test release-tag-test release-order-test e2e-predict-cleanup-test perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, issue template prompts, docs, comments, word matches, log privacy, clipboard, bundle signing, release tags, release stage order, energy and memory budget, lint, build, tests, coverage floor, offline audit.
 
 # Hooks are not cloned — .git/hooks is local to a checkout — so this points git at a
 # directory that is. One command per clone, and the gate cannot be forgotten after that.
