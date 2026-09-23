@@ -146,7 +146,8 @@ struct TokenChoice {
         guard !written.isEmpty else { return false }
         return choices.contains { choice in
             choice.starts(with: written)
-                || (written.starts(with: choice) && TokenHealing.Vocabulary.isSpace(written[choice.count]))
+                || (written.count > choice.count && written.starts(with: choice)
+                    && TokenHealing.Vocabulary.isSpace(written[choice.count]))
         }
     }
 
