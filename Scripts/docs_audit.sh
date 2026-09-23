@@ -412,7 +412,40 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 4. CLAUDE.md, if it exists, delegates to AGENTS.md by import or symlink.
+# 4. Every artboard text row clears WCAG AA contrast against its translucent backing.
+# ---------------------------------------------------------------------------
+#
+# The artboard generators draw a translucent menu over a gradient, and a backdrop blur
+# cannot lift the backing above the gradient's brightest source stop — so the contrast
+# against the brightest stop is the best case anywhere on the surface, and the darkest
+# stop is the worst. The audit script reads the gradient stops and menu fill from the
+# generator, walks the inline text-color declarations, and fails any row that drops below
+# 4.5:1 over any composited background.
+printf '\nDesign artboard contrast\n'
+
+if [[ ! -x "$PACKAGE_ROOT/Scripts/design_contrast_audit.py" ]]; then
+    fail "Scripts/design_contrast_audit.py is missing or not executable" \
+        "The audit pins the menu-bar artboard's text contrast; without it the generator" \
+        "could regress to the colours that production already moved off."
+else
+    if "$PACKAGE_ROOT/Scripts/design_contrast_audit.py" --self-test; then
+        if "$PACKAGE_ROOT/Scripts/design_contrast_audit.py" >&2; then
+            pass "every attention text row clears 4.5:1 against its composited backgrounds"
+        else
+            fail "an artboard text row fails WCAG AA contrast against its composited backing" \
+                "The audit prints which generator rule and which colour broke. The backing" \
+                "is translucent over a gradient, so the worst case is the gradient's darkest" \
+                "stop, not the average — backdrop blur cannot brighten past the brightest stop."
+        fi
+    else
+        fail "Scripts/design_contrast_audit.py --self-test failed" \
+            "The audit's own self-test (a known pass and a known fail) is no longer both" \
+            "passing, so the ratio predicate is broken. Fix the audit, not the artboard."
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 5. CLAUDE.md, if it exists, delegates to AGENTS.md by import or symlink.
 # ---------------------------------------------------------------------------
 #
 # A tracked CLAUDE.md is a claim about what Claude Code will load as project memory: with

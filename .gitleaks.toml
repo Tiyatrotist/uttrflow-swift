@@ -1,6 +1,6 @@
 # What gitleaks is allowed to find and not fail on.
 #
-# Three files in this tree contain things shaped exactly like credentials, on purpose:
+# Four files in this tree contain things shaped exactly like credentials, on purpose:
 #
 #   SecretDetectionTests.swift    the fixtures for the clipboard's secret detector. Its
 #                                 whole job is to recognise an AWS key, a GitHub token, a
