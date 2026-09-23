@@ -451,7 +451,7 @@ private struct LevelMeterView: View {
     }
 }
 
-/// Working: the row settles level and folds to a tick, once, and stops scrolling.
+/// Working: three dots keep walking while work remains.
 private struct WorkingDots: View {
     /// When the row appeared, so every dot walks off one clock.
     @State private var began = Date.now
@@ -587,8 +587,6 @@ extension DockMetrics {
     static let meterArrivalInterval: TimeInterval = 0.05
     /// How strongly a quiet bar is drawn; opacity carries the loud threshold. See Docs/app-dock.md.
     static let meterQuietOpacity: CGFloat = 0.62
-    /// Where the row settles when the microphone closes; not zero, or the meter reads as broken.
-    static let settledLevel: CGFloat = 0.18
     static let markTickHeight: CGFloat = 14
 
     /// The working dots: three, because that is the shape everybody already reads as "still going".
@@ -596,7 +594,7 @@ extension DockMetrics {
     static let dotSize: CGFloat = 5
     static let dotSpacing: CGFloat = 6
 
-    /// Draws the row for both the live meter and the working animation, so the two cannot drift apart.
+    /// Draws the live microphone meter as a scrolling row of capsules.
     static func drawBars(
         _ levels: [CGFloat], in context: GraphicsContext, size: CGSize,
         phase: Double, towardsLeading: Bool
