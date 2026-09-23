@@ -62,3 +62,10 @@ swallowing one would leave the rest of the app believing a key is still held aft
 
 Only four modifiers are recognised — command, option, control, shift. Caps Lock, Fn and the
 numeric-keypad bit are noise the window server sets on its own.
+
+### The field owns the recording only while it is the key interaction surface
+
+`SettingsWindowController.windowDidResignKey` cancels the recording, because a keystroke meant
+for the next application must not be saved as Uttrflow's shortcut. The session tap stops, the
+key-down swallow goes with it, and another ⌘Q reaches the foreground app normally. The window's
+`windowWillClose` does the same when the user closes Settings.
