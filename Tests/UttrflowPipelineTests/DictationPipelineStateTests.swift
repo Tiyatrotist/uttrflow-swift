@@ -300,6 +300,23 @@ struct DictationPipelineStateTests {
         #expect(await pipeline.currentState == .recording, "a failed start must be retryable")
     }
 
+    @Test("refuses a dictation the microphone is not granted for, and says where to grant it")
+    func startWithoutMicrophoneAccessOffersTheMicrophonePane() async {
+        let capture = FakeAudioCaptureEngine(startOutcome: .failure(.microphoneDenied))
+        let pipeline = makePipeline(capture: capture)
+
+        await pipeline.startRecording()
+
+        guard case .failed(let refusal) = await pipeline.currentState else {
+            Issue.record("expected the dictation to fail, got \(await pipeline.currentState)")
+            return
+        }
+        // The same sentence onboarding shows, so a refusal reads the same wherever it is met.
+        #expect(refusal.message == PermissionError.microphoneDenied.userMessage)
+        #expect(refusal.recovery == .openSystemSettings(.microphone))
+        #expect(refusal.severity == .blocking)
+    }
+
     @Test("does nothing when asked to finish while it is not recording")
     func finishWhenNotRecordingIsIgnored() async {
         let capture = FakeAudioCaptureEngine()
