@@ -154,7 +154,7 @@ public struct ExpandedTranscript: Sendable, Equatable {
     public static func unchanged(_ text: String) -> Self { Self(text: text) }
 }
 
-/// Everything Uttrflow changed about what the user said, shown, offered for undo, and learnt from together.
+/// The dictionary corrections and snippet firings shown, offered for undo, and learnt from together.
 public struct AppliedChanges: Sendable, Equatable {
     public let corrections: [DictationCorrection]
     public let snippets: [SnippetUse]

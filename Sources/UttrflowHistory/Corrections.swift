@@ -100,7 +100,7 @@ public struct RecordedSnippet: Sendable, Equatable, Codable {
     }
 }
 
-/// Everything Uttrflow changed about one dictation; present and empty means "nothing was changed".
+/// Undoable dictionary substitutions and snippet firings for one dictation.
 public struct RecordedChanges: Sendable, Equatable, Codable {
     /// In the order the words were spoken.
     public var corrections: [RecordedCorrection]

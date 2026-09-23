@@ -140,7 +140,7 @@ struct CorrectionsScopeTests {
 
     @Test("each scope is named")
     func titles() {
-        #expect(CorrectionsScope.all.title == "All changes")
+        #expect(CorrectionsScope.all.title == "All corrections")
         #expect(CorrectionsScope.applied.title == "Still applied")
         #expect(CorrectionsScope.undone.title == "Undone")
     }
