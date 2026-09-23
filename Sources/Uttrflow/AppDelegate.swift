@@ -265,7 +265,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Writes the words this build ships knowing, which happens once and never blocks the launch.
     private func seedTheDictionary() {
-        Task { [dictionary] in try? await dictionary.seedShippedWords(at: Date()) }
+        Task { [dictionary] in
+            do {
+                try await dictionary.seedShippedWords(at: Date())
+            } catch {
+                Self.log.error(
+                    "dictionary seeding failed: \(SuggestionLog.failure(error), privacy: .public)")
+            }
+        }
     }
 
     /// Everything Settings can count and forget, over the stores this app opens in this container.

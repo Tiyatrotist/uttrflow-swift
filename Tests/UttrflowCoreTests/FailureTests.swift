@@ -20,8 +20,8 @@ struct FailureCatalogueTests {
         #expect(TransformationError.everyCase.count == 3)
         #expect(TextInsertionError.everyCase.count == 4)
         #expect(HotkeyError.everyCase.count == 2)
-        #expect(DictionaryStoreError.everyCase.count == 3)
-        #expect(allFailures.count == 37)
+        #expect(DictionaryStoreError.everyCase.count == 4)
+        #expect(allFailures.count == 38)
     }
 
     /// A backwards link loops and a repeated case hides the one it displaces; both show as a duplicate.
