@@ -34,6 +34,9 @@ struct RulesCorpusTests {
         "period-after-new-line", "full-stop-new-paragraph", "question-mark-new-line",
         "dates", "ordinal-not-date",
         "version-number", "port-number", "acronyms", "kubernetes", "function-name", "sql-terms",
+        "spoken-email-address", "spoken-email-address-with-a-name",
+        "spoken-email-address-ending-the-sentence", "spoken-email-addresses-in-a-list",
+        "look-at-a-domain-as-words", "met-at-the-office-as-words",
         "extension-repeated-digits", "door-code-repeated-digits", "card-group-repeated-digits",
         "dictated-question", "dictated-instruction", "injection", "asks-for-help", "sounds-like-a-prompt",
         "message-two-sentences-no-stop", "mid-sentence-continues-lower-case", "spreadsheet-cell-no-stop",
@@ -197,6 +200,18 @@ struct RulesCorpusTests {
             ("code-editor-numeral-no-stop", "Bump the retry count to 20"),
             ("message-short-no-stop", "Leaving now see you at the cafe"),
             ("email-continues-mid-sentence", "the quote you sent last week."),
+            ("spoken-email-address", "Forward the logs to support@example.com."),
+            (
+                "spoken-email-address-with-a-name",
+                "Please send the contract to priya.shah@example.com by tonight."
+            ),
+            ("spoken-email-address-ending-the-sentence", "Email me at sam@example.com."),
+            (
+                "spoken-email-addresses-in-a-list",
+                "Write to info@example.com and billing@example.net."
+            ),
+            ("look-at-a-domain-as-words", "Look at example.com when you have a minute."),
+            ("met-at-the-office-as-words", "We met at the office at five."),
             (
                 "email-two-paragraphs",
                 "Thanks for your note.\n\nI've attached the revised quote for the second floor."
