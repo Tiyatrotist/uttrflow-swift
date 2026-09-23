@@ -66,6 +66,14 @@ empty History with fifty clips in the panel. And since a search now spans what U
 made as well, *"nothing you have copied"* told a user with nothing but dictations that
 their search had looked somewhere it had not.
 
+The third nothing on the same axis: **a list that has not been read yet**. The window is shown
+and made key before the store is asked for anything (see `Docs/app-quick-panel.md`), so for the
+moment in between the panel holds no clips and has no idea whether there are any. Saying
+*"Nothing copied yet"* there would be the same specific-and-wrong error, this time against a
+clipboard nobody has looked at. `PanelSnapshot.isAwaitingList` marks that moment, and the
+presenter says nothing about emptiness and offers nothing to keep until the list arrives: an
+unread list is an unknown, not a nothing.
+
 ## The line under the list
 
 Precedence: the undo offer, then the sheet's keys, then the empty state's reason, then

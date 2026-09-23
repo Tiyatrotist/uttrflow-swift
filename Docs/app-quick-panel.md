@@ -127,6 +127,58 @@ active), level `.statusBar` with `.canJoinAllSpaces` and `.fullScreenAuxiliary`,
 `animationBehavior` `.none` (three keystrokes cannot feel instant from behind a fade), and no
 `.resizable` in the style mask, so the hosting view is the border's one owner.
 
+## What the open waits for: nothing
+
+The shortcut shows the window and makes it key with no `await` in between, and everything the
+panel needs is asked for afterwards. The order was the other way round until #860, and it cost
+the user their keystrokes: the panel is not key until it is on screen, so the letters typed
+straight after ⇧⌘V — the usual gesture is ⇧⌘V and then an alias — were inserted into whatever
+document was in front, and the panel's search began without them.
+
+What was being waited on had nothing to do with drawing a window: the store's list, one whole
+file read per picture in that list (#576), the Accessibility and frontmost checks, and the
+microphone check. Measured against a real `ClipboardStore` over a history of 220 clips of which
+20 are 5120 × 2880 screenshots, warm, three rounds:
+
+| On the old path to `show` | CPU |
+| --- | --- |
+| The list, the pictures folder, and one read per picture | 4.3–4.7 ms |
+| Recording one fresh 5K screenshot, which a read arriving behind it waits for | 6.4–7.2 ms |
+
+Single-digit milliseconds is the *quiet* case, and it is not what the order cost. A read of the
+list has no upper bound, because it queues behind whatever write the store is doing — the
+`markUsed` rewrite from the last paste (#578), or the record of the copy just made. Two of the
+waits behind that record have no bound at all: `NSPasteboard` reads of promised data wait for
+the application that copied, which has been seen to take 70 s (#895), and a long grapheme
+cluster keeps classification busy for minutes (#896).
+
+So the open now does this, and in this order:
+
+1. `PanelSnapshot.opening(now:resuming:)` — a panel with no list, marked `isAwaitingList`.
+2. `QuickPanelController.show(_:)` — `orderFrontRegardless` then `makeKey`, synchronously.
+3. The catch-up, started and not awaited, so the copy just made is never on this path.
+4. Accessibility, the microphone and the pictures folder.
+5. The list, by `refreshPanelIfOpen()` — the same path a copy arriving takes.
+
+Two things follow from step 5 being shared. The caught-up clip is not dropped any more: it
+arrives through a refresh that finds the window already visible, where before it was thrown
+away by the `isVisible` guard while the panel was still being built. And because two reads of
+the store can now be in flight at once, the app counts them (`panelReads`) and a read that
+started earlier never installs its list over a newer one — otherwise the copy the refresh had
+just shown would disappear again.
+
+A second press of the shortcut needs no flag of its own: the window is visible from step 2, so
+the guard at the top of `toggleQuickPanel()` closes it. Nothing an open awaits is written into
+a panel it no longer owns, which `QuickPanelController.opens` decides.
+
+What the panel shows between step 2 and step 5 is an empty list with nothing said about it. See
+`Docs/panel.md` on why it says nothing rather than "Nothing copied yet", and why the place the
+user left is restored by the list arriving rather than by the window appearing.
+
+The gap that is left is one turn of the main queue: Carbon delivers the shortcut on the main
+run loop, and `toggleQuickPanel()` runs when the task awaiting the monitor's stream is
+resumed. Closing that too would mean showing the window from inside the Carbon handler.
+
 ## Dismissal
 
 `windowDidResignKey` is deliberately empty. Losing key is not the user going somewhere: a

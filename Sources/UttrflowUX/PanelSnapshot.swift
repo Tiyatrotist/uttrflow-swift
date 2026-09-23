@@ -123,6 +123,11 @@ public struct PanelSnapshot: Sendable, Equatable {
     /// Whether a delete can still be taken back; set by the app, which alone still holds the clip.
     public var canUndoDelete: Bool = false
 
+    /// Whether the store has yet to answer, so an empty list is unknown rather than nothing. See `Docs/panel.md`.
+    public var isAwaitingList: Bool = false
+    /// The place the user left, held until the list it has to exist in arrives; ``install`` applies it.
+    var pendingResume: PanelResume?
+
     /// Whether choosing a clip places it at the caret or only copies it; set by the app when the panel opens.
     public var insertion: PanelInsertion = .atCaret
 
@@ -220,5 +225,11 @@ extension PanelSnapshot {
         self.clips = clips
         self.missingImages = missingImages
         self.formattableLanguages = formattableLanguages
+        isAwaitingList = false
+        // A3, A7 — the place the user left, restorable only now the list it has to exist in is here.
+        if let resume = pendingResume {
+            pendingResume = nil
+            restore(resume)
+        }
     }
 }
