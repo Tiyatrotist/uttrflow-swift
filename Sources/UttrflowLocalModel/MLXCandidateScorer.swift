@@ -59,7 +59,7 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
 
     /// Loads the weights from disk when they are whole there, downloading them only when they are not.
     public func prepare(onProgress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
-        try await load(downloader: { #hubDownloader() }, onProgress: onProgress)
+        try await load(downloader: { #hubDownloader(AnonymousHub.client()) }, onProgress: onProgress)
     }
 
     /// Loads the weights from disk only, throwing ``WeightsNotOnDisk`` rather than fetching what is missing.
