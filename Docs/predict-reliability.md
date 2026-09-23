@@ -69,14 +69,14 @@ moment the person returns, because it shares their keyboard.
   (the hidden textarea parked at the caret is taken for the caret) and a system-wide focused element
   that is the word under the caret while typing (the application's focused element is asked). Live
   confirmation in Chrome is pending.
-- **Idle drafts in a chat composer.** Capture commits a line after an 8 s pause so that a document
-  without a Return still teaches; in a composer that sends on Return the same pause records an
-  abandoned or half-typed message as a line this person wrote. The current line is now kept out of
-  the prompt, but abandoned drafts stay in the corpus. A composer and a document cannot yet be told
-  apart without naming applications; the field emptying in one step — a send — is the signal to build on.
-- **The address bar.** 35 of the 79 remaining wrong answers: with the register's hint and the kind named at
-  the line, the model still continues `git` into a shell command. The corpus of visited addresses is the
-  better source there; a per-register ranking of remembered lines over generation is the next lever.
+- **Idle drafts in a chat composer.** Fixed: `CommitPolicy.whereReturnSends` (used by the
+  coordinator, see `Sources/Uttrflow/Suggestion/SuggestionCoordinator.swift:118-123`) rejects
+  idle, focus-loss and deactivation commits for messaging apps, so an abandoned or half-typed
+  message no longer gets committed as a line this person wrote
+  (`Sources/UttrflowPredictCapture/CommitPolicy.swift:23-34`, covered by
+  `Tests/UttrflowPredictCaptureTests/CommitPolicyTests.swift:15-41`). Implemented in merged PR #332,
+  which closed #56. The 35/79 wrong-answer count above is a run-10 historical measurement, kept as
+  context rather than current behavior.
 - **A whole word typed without a space.** `git l` → `git l -S`, `npm i` → `npm i -D`: healing allows both the
   exact token and a longer one, and the model's own guess decides. Only the model can know whether the word
   is finished; a second candidate that lengthens the word would let the person choose.
