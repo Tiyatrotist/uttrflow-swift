@@ -1225,7 +1225,11 @@ What the rows say, read against the clips rather than the percentages:
   recogniser chose to join them; "src" is heard as "source".
 - **Noise barely registers** at these levels on synthetic speech. One exception is a pattern
   rather than a rate: "Ship it" at 10 dB SNR came back "Shit is." in one run and as nothing in
-  the next, on the same audio.
+  the next, on the same audio. Run 50 times it splits 16 to 34, and 23 to 27 on a second 50. The
+  words are the model's own greedy reading of that clip and the split is the temperature ladder
+  deciding whether it is shown — `Docs/speech-engines.md` has the measurement, the mechanism and
+  why no guard over the transcript separates it from a correct one. `score` now names every clip
+  run more than once that answered differently.
 - **The tidier changed the words of 2 of 120 English clips.** It removed a stray quotation mark
   the recogniser left, and turned "thick" into "theek" in a noisy clip. A third clip differed
   because the recogniser heard it differently on the two runs (the "Ship it" above). Every other
@@ -1387,6 +1391,16 @@ python3 Scripts/dictation_bench.py score .build/bench/run.out
 
 ```
 .build/release/uttrflow-dev bench .build/bench/jobs.tsv --idle-before 300 > .build/bench/run-cold.out
+```
+
+One clip many times over, which is what says whether the recogniser answers the same audio the
+same way — `score` prints each repeated clip that did not:
+
+```
+python3 Scripts/dictation_bench.py jobs --repeat 50 --cleaners rules --categories reply \
+    | grep snr10 > .build/bench/jobs-repeat.tsv
+.build/release/uttrflow-dev bench .build/bench/jobs-repeat.tsv > .build/bench/run-repeat.out
+python3 Scripts/dictation_bench.py score .build/bench/run-repeat.out
 ```
 
 `--idle-before` waits that many seconds before each job and emits an `idle` event, so the tidier's
