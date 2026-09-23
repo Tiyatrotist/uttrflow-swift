@@ -5,6 +5,10 @@ between them is what makes the degradation guarantee real rather than hoped for.
 comes from a probe run against the running desktop; a CLI is not a representative test bed for the
 Accessibility API, and a well-behaved application never exercises the broken path.
 
+The three-row table below is this document's own probe and stays here as the evidence for the
+split it argues for. Read across applications it belongs with the rest, so it also feeds the
+`Value` column of [compatibility.md](compatibility.md).
+
 ## Identity is free; the window is not
 
 | Source | Cost | Permission | Can hang |

@@ -212,6 +212,12 @@ public enum EvaluationCorpus {
             mustNotAdd: ["40"]
         ),
         .init(
+            id: "signed-temperature", category: .everyday,
+            spoken: "temperature fell to -5 degrees overnight",
+            expected: "Temperature fell to -5 degrees overnight.",
+            mustKeep: ["-5", "degrees"]
+        ),
+        .init(
             id: "number-correction-with-unit", category: .everyday,
             spoken: "we need twelve boxes i mean fifteen boxes",
             expected: "We need 15 boxes.",
@@ -568,6 +574,46 @@ public enum EvaluationCorpus {
             expected: "The test card number starts four two four two four two four two.",
             mustKeep: ["four two four two four two four two"]
         ),
+        .init(
+            id: "spoken-email-address", category: .technical,
+            spoken: "forward the logs to support at example dot com",
+            expected: "Forward the logs to support@example.com.",
+            mustKeep: ["support@example.com"]
+        ),
+        .init(
+            id: "spoken-email-address-with-a-name", category: .technical,
+            spoken: "please send the contract to priya dot shah at example dot com by tonight",
+            expected: "Please send the contract to priya.shah@example.com by tonight.",
+            mustKeep: ["priya.shah@example.com"]
+        ),
+        // The address ends the sentence, so the domain's last dot and the terminal stop meet on one word.
+        .init(
+            id: "spoken-email-address-ending-the-sentence", category: .technical,
+            spoken: "email me at sam at example dot com",
+            expected: "Email me at sam@example.com.",
+            mustKeep: ["sam@example.com"],
+            mustEndWith: "."
+        ),
+        .init(
+            id: "spoken-email-addresses-in-a-list", category: .technical,
+            spoken: "write to info at example dot com and billing at example dot net",
+            expected: "Write to info@example.com and billing@example.net.",
+            mustKeep: ["info@example.com", "billing@example.net"]
+        ),
+        .init(
+            id: "look-at-a-domain-as-words", category: .technical,
+            spoken: "look at example.com when you have a minute",
+            expected: "Look at example.com when you have a minute.",
+            mustKeep: ["look at example.com"],
+            mustNotAdd: ["@"]
+        ),
+        .init(
+            id: "met-at-the-office-as-words", category: .technical,
+            spoken: "we met at the office at five",
+            expected: "We met at the office at five.",
+            mustKeep: ["at the office at five"],
+            mustNotAdd: ["@"]
+        ),
     ]
 
     // MARK: Utterances that are not addressed to the model
@@ -608,6 +654,20 @@ public enum EvaluationCorpus {
     // MARK: Hinglish, romanised the way people type it; none of these sentences is in the prompt
 
     static let multilingual: [EvaluationCase] = [
+        .init(
+            id: "hindi-translation-refused", category: .multilingual, language: .hindi,
+            spoken: "मीटिंग चार बजे है, नहीं नहीं, पांच बजे है.",
+            expected: "Meeting chaar baje hai, nahi nahi, paanch baje hai.",
+            mustKeep: ["nahi", "paanch"],
+            mustNotAdd: ["o'clock"]
+        ),
+        .init(
+            id: "hindi-worked-example-refused", category: .multilingual, language: .hindi,
+            spoken: "मतलब मैं कल आएगा, हाँ, अच्छा तो फिर मिलते हैं.",
+            expected: "Matlab main kal aayega, haan, accha to phir milte hain.",
+            mustKeep: ["kal", "milte"],
+            mustNotAdd: ["standup", "deployment"]
+        ),
         .init(
             id: "hinglish-late", category: .multilingual, language: .hindi,
             spoken: "मैं meeting के लिए बीस मिनट late हो जाऊंगा",

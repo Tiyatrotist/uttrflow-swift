@@ -3,6 +3,7 @@ import Testing
 
 @testable import UttrflowContext
 @testable import UttrflowCore
+import UttrflowTestSupport
 
 /// A one-shot signal, which is how two concurrent steps are put in an exact order without sleeping.
 private actor Gate {
@@ -307,6 +308,54 @@ struct MacContextEngineTests {
         await release.open()
         let next = await engine.currentContext()
         #expect(next.applicationName == "Slack")
+    }
+
+    @Test(
+        "a late frontmost answer cannot replace the app used by a newer read",
+        arguments: [false, true]
+    )
+    func lateFrontmostKeepsRememberedApp(expireOldRead: Bool) async {
+        let xcode = FrontmostApplication(
+            name: "Xcode", bundleIdentifier: "com.apple.dt.Xcode", processIdentifier: 28_165)
+        let clock = ManualClock()
+        let reads = Mutex(0)
+        let started = Gate()
+        let release = Gate()
+        let passedSubject = Gate()
+        let engine = makeEngine(
+            frontmost: {
+                let number = reads.withLock { reads in
+                    reads += 1
+                    return reads
+                }
+                if number == 1 { return slack }
+                if number == 2 {
+                    await started.open()
+                    await release.wait()
+                    return xcode
+                }
+                return uttrflow
+            },
+            window: { subject in
+                if subject == xcode { await passedSubject.open() }
+                return nil
+            },
+            clock: clock
+        )
+
+        #expect(await engine.currentContext().applicationName == "Slack")
+        let old = Task { await engine.currentContext() }
+        await started.wait()
+        if expireOldRead {
+            await clock.advanceWhenSomethingIsWaiting(by: MacContextEngine.budget)
+            #expect(await old.value == .unknown)
+        }
+        #expect(await engine.currentContext().applicationName == "Slack")
+
+        await release.open()
+        await passedSubject.wait()
+        if !expireOldRead { _ = await old.value }
+        #expect(await engine.currentContext().applicationName == "Slack")
     }
 
     @Test("the budget is short enough that nobody notices it")

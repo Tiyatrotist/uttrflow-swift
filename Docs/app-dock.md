@@ -36,8 +36,7 @@ fails when one would need a fourth line, and the whole notice is on the pointer 
   Mode or at serious thermal pressure it drops to the 20 Hz data rate and accepts the step, per
   `MotionBudget`; see `Docs/performance.md`.
 - Meter width is fixed at 56 points; how many bars fit is a consequence of the width.
-- `meterAmplitude` 0.9 keeps a loud syllable from touching the glass. `settledLevel` 0.18 is
-  where the row settles when the microphone closes; zero reads as a broken panel.
+- `meterAmplitude` 0.9 keeps a loud syllable from touching the glass.
 - Working is three dots walking left to right, in the meter's own 56 points so the pill keeps
   its width. It runs for as long as there is work left, which includes the wait for the
   application to take the words: transcribing, tidying and inserting are one wait to the

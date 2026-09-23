@@ -51,8 +51,6 @@ public struct FocusedFieldSnapshot: Sendable, Equatable {
     public let currentLine: String
     /// Whether the caret's line ran past `lineReadLimit`, so `currentLine` is only its last stretch and too long to complete.
     public let isLineCut: Bool
-    /// Whether the value holds more than one line.
-    public let holdsNewline: Bool
 
     public init(
         bundleIdentifier: String,
@@ -101,7 +99,6 @@ public struct FocusedFieldSnapshot: Sendable, Equatable {
         let line = Self.caretLine(of: value, at: selection, in: bundleIdentifier)
         self.currentLine = line.text
         self.isLineCut = line.isCut
-        self.holdsNewline = value.map(Self.holdsNewline) ?? false
     }
 }
 
@@ -115,9 +112,12 @@ extension FocusedFieldSnapshot {
     public var capability: SurfaceCapability {
         SurfaceCapability(
             application: applicationName, role: role, locator: locator, reportsValue: value != nil,
-            reportsCaretRect: caret != nil, reportsTextStyle: pointSize != nil, isSecure: isSecure,
+            reportsCaretRect: caret != nil, reportsTextStyle: hasTypeStyle, isSecure: isSecure,
             readMicroseconds: readMicroseconds)
     }
+
+    /// Whether any of the field's type can be matched — size, family or colour — since the ghost defaults the rest.
+    var hasTypeStyle: Bool { pointSize != nil || fontFamily != nil || textColor != nil }
 
     /// Where a suggestion may be drawn for this field, or nothing where none may be.
     public var placement: SuggestionPlacement? { capability.placement }
@@ -160,14 +160,6 @@ extension FocusedFieldSnapshot {
             index = before
         }
         return (index, false)
-    }
-
-    /// Every scalar `Character.isNewline` accepts, each of which is one UTF-16 unit.
-    private static let newlineUnits: Set<UInt16> = [0x0A, 0x0B, 0x0C, 0x0D, 0x85, 0x2028, 0x2029]
-
-    /// Whether a value holds a newline, asked of its UTF-16 units so no character is ever assembled.
-    private static func holdsNewline(_ value: String) -> Bool {
-        value.utf16.contains(where: newlineUnits.contains)
     }
 
     /// The text before the caret's line, at most this long, which is what the line is a continuation of; nothing when the line is too long to read whole.

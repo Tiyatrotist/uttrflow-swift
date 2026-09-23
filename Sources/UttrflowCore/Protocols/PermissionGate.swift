@@ -6,6 +6,14 @@ public enum PermissionKind: String, Sendable, Equatable, CaseIterable, Codable {
     case microphone
     /// Accessibility trust, to insert text into other apps.
     case accessibility
+
+    /// Whether macOS can say this has not been asked for yet; Accessibility reads as refused from the start.
+    public var reportsNotDetermined: Bool {
+        switch self {
+        case .microphone: true
+        case .accessibility: false
+        }
+    }
 }
 
 /// The state of one permission.

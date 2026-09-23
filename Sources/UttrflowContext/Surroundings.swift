@@ -1,4 +1,5 @@
 public import CoreGraphics
+import Synchronization
 import UttrflowPredict
 
 /// One element tree as the collector walks it, so a test can hand it a tree of plain values instead of another app.
@@ -37,6 +38,9 @@ public struct Surroundings: Sendable, Equatable {
 
     /// How many elements one read may visit, since an Electron window can hold thousands.
     public static let maximumElements = 400
+
+    /// Counts the pending-step entries a read builds while this is bound, so a test can bound the wrapping work without a clock.
+    @TaskLocal package static var stepTally: SurroundingsStepTally?
 
     /// How long one read may take before it settles for what it has.
     public static let budgetInMilliseconds = 60
@@ -111,11 +115,17 @@ public struct Surroundings: Sendable, Equatable {
             visited >= maximumElements || room <= 0 || ContinuousClock.now >= deadline
         }
 
+        /// How many more elements a visit could still reach, which bounds how many are worth turning into a `Step`.
+        var remainingVisitBudget: Int { max(0, maximumElements - visited) }
+
         /// Every readable text under the roots, nearest root first, stopping the moment the read is exhausted.
-        mutating func gather<Roots: Sequence>(
+        mutating func gather<Roots: BidirectionalCollection>(
             _ roots: Roots, _ direction: Direction, into runs: inout [String]
         ) where Roots.Element == Tree.Element {
-            var stack: [Step] = roots.reversed().map { .visit($0, under: nil) }
+            // Only the roots a visit could still reach are worth wrapping, however many more the caller has.
+            let reachable = roots.prefix(remainingVisitBudget)
+            var stack: [Step] = reachable.reversed().map { .visit($0, under: nil) }
+            Surroundings.stepTally?.record(stack.count)
             while !isExhausted, let step = stack.popLast() {
                 switch step {
                 case .say(let text): runs.append(take(text, direction))
@@ -142,7 +152,12 @@ public struct Surroundings: Sendable, Equatable {
             if let said, direction == .backward { stack.append(.say(said)) }
             // A text element that says its text is a leaf, since its children only repeat it; one that says nothing is walked.
             if textRoles.contains(role), text != nil { return }
-            let children = tree.children(of: element).map { Step.visit($0, under: text ?? label) }
+            let all = tree.children(of: element)
+            let budget = remainingVisitBudget
+            // Forward keeps the nearest (first) reachable children; backward keeps the nearest (last) ones.
+            let reachable = direction == .forward ? all.prefix(budget) : all.suffix(budget)
+            let children = reachable.map { Step.visit($0, under: text ?? label) }
+            Surroundings.stepTally?.record(children.count)
             stack.append(contentsOf: direction == .forward ? children.reversed() : children)
         }
 
@@ -211,4 +226,16 @@ public struct Surroundings: Sendable, Equatable {
         }
         return String(kept)
     }
+}
+
+/// How many pending-step entries `Surroundings.collect` built while bound to `Surroundings.stepTally`.
+package final class SurroundingsStepTally: Sendable {
+    private let built = Mutex(0)
+
+    package init() {}
+
+    /// The entries built so far.
+    package var count: Int { built.withLock { $0 } }
+
+    func record(_ entries: Int) { built.withLock { $0 += entries } }
 }

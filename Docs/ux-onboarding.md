@@ -9,7 +9,14 @@ changing it needs to keep.
 - Nothing is remembered about the system. A permission is read from its gate at the
   moment it matters, never carried forward from the click that asked for it.
 - No page is a dead end. Whatever the user has refused, there is always a control that
-  moves them on, and what refusing cost them is said plainly on the last page.
+  moves them on, and what refusing cost them is said plainly on the last page. On the two
+  permission pages that control is "Continue Without It", quiet beside the prominent one
+  that grants, in every state but a policy block — where granting is not on offer at all,
+  so going on is the only answer left.
+- A page argues only with somebody who has refused it. `AXIsProcessTrusted` cannot say
+  "not asked yet", so the Accessibility page opens at `.denied` with nobody having refused
+  anything; `PermissionKind.reportsNotDetermined` is what tells the two apart, and it is
+  why that page's first answer is still the ask rather than a trip to System Settings.
 
 ## Offline
 
