@@ -1,7 +1,10 @@
 # Tab-to-complete: the LLM-arbitrated design
 
-The suggestion is not a lookup. The local model has a hand in every suggestion the user
-sees, in one of two ways:
+The suggestion is not a lookup. A remembered or machine-attested candidate can be offered
+without a model pass at all — gate 2 of `Verifier` returns `.attested` before scoring when
+verification is not ready, and the statistical gates alone decide
+(`Sources/UttrflowPredict/Verifier.swift:75-95`). Where the model does run, it has a hand in
+the suggestion in one of two ways:
 
 - **Localization (personalization).** The corpus holds what *this* user types — their commands,
   their phrasings — recalled by prefix and by edit distance, and (later) by meaning. Those local
@@ -25,17 +28,26 @@ one fit or not.
 
 A 1–4B model cannot answer inside a keystroke. For now that is accepted: a suggestion may land
 well under a second after a pause — measured at p50 666 ms and p95 787 ms in a Release build
-over the fixture set, the table in [predict-context.md](predict-context.md) — and the model
-that serves suggestions is the one dictation already uses. What is done so far — a 120 ms
+over the fixture set, the table in [predict-context.md](predict-context.md). Suggestions and
+dictation keep separate models: `UttrflowApp` wires a Gemma 3 `MLXCandidateScorer` for
+suggestions, wrapped in `DiscretionaryGenerator` and `DiscretionaryModel`
+(`Sources/Uttrflow/UttrflowApp.swift:16-38`); dictation uses its own WhisperKit-backed speech
+model in `AppDelegate`. The suggestion weights are fetched only once the feature is first
+asked for, not at launch — `AppDelegate.prepareTheModelIfNeeded`
+(`Sources/Uttrflow/AppDelegate.swift:527-553`) — and the model can later be released while idle
+and reloaded. The thermal, battery and active-dictation guards are already wired, not future
+work: both wrappers gate model work on `EnergyConditions.current().allowsDiscretionaryWork`
+and `!DictationInProgress.shared.isDictating`. What is done so far — a 120 ms
 debounce, one line first, a warm instruction prefix, a 160-token budget for the context around the line, and the
 line itself up to its last word written into the model's own turn so the answer can only
 continue it and no echo is paid for — is also there. In a terminal the machine now speaks before the
 model ([predict-agent.md](predict-agent.md)): where the next word is a directory, a file, a branch
 or a program's verb, the pass is told the values that exist and `TokenChoice` holds the decode to
 one of them, so the model ranks what is there and cannot write what is not; where nothing there
-begins as the word was typed, no pass runs and the turn is quiet for `notOnThisMachine`. A smaller model dedicated to suggestions, speculative decoding and the thermal
-and battery guards are still to come and do not gate a working system. Dictation keeps its
-own model so its quality is never traded for the speed of a suggestion.
+begins as the word was typed, no pass runs and the turn is quiet for `notOnThisMachine`. A smaller
+model dedicated to suggestions and speculative decoding are still to come and do not gate a
+working system. Dictation keeps its own model so its quality is never traded for the speed of
+a suggestion.
 
 ## Apple's on-device model, measured for completion
 
@@ -85,7 +97,8 @@ what follows is what each set out to do.
   so a phrase learned in one folder is found in the next.
 - **B — Model in the app, validating — done.** The model is linked into the `xcodebuild`-built app
   behind the `CandidateScoring` and `CandidateGenerating` protocols the tests already use
-  (`UttrflowApp` builds one `MLXCandidateScorer` and hands it over as both), loaded at launch, and
+  (`UttrflowApp` builds one `MLXCandidateScorer` and hands it over as both), fetched and prepared
+  only once the feature is first asked for (`AppDelegate.prepareTheModelIfNeeded`), and
   wired as gate 2 of the `Verifier`. The turn budget is 8 000 ms and the verification budget
   7 000 ms, so a slow answer is drawn rather than dropped.
 - **C — Generation — done.** When the corpus and the machine are empty the model writes the single
@@ -94,9 +107,10 @@ what follows is what each set out to do.
   thousand entries a surface holds) so a phrase close in meaning is recalled, not only one close in
   spelling. (The earlier decision against embeddings was about the dictation dictionary, a
   different problem; it does not bind here.)
-- **E — Optimisation.** A smaller suggestion model, speculative decoding and the thermal/battery
-  guards — measured against a go/no-go. The debounce, the warm prefix and the prompt budget are
-  already in.
+- **E — Optimisation.** A smaller suggestion model and speculative decoding, measured against a
+  go/no-go. The debounce, the warm prefix and the prompt budget are already in, as are the
+  Low Power Mode, thermal and active-dictation guards (`EnergyConditions`,
+  `DictationInProgress`).
 
 ## The seams (where the code changed)
 
