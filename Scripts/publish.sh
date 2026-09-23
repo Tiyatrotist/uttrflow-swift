@@ -92,7 +92,17 @@ fi
 # Everything about the release is read out of the artefact rather than passed in, so the
 # tag, the version and the notes cannot disagree with the file they describe.
 MOUNTED=""
-cleanup() { [[ -n "$MOUNTED" ]] && hdiutil detach "$MOUNTED" -quiet -force >/dev/null 2>&1 || true; }
+# Every release-sized temporary this script stages, so a trap on EXIT clears them all on
+# success and on every failure path, dry run included — nothing here is a kept artifact.
+ARCHIVE_STAGE=""
+STAGE=""
+CLONE=""
+cleanup() {
+    [[ -n "$MOUNTED" ]] && hdiutil detach "$MOUNTED" -quiet -force >/dev/null 2>&1 || true
+    [[ -n "$ARCHIVE_STAGE" ]] && rm -rf "$ARCHIVE_STAGE" || true
+    [[ -n "$STAGE" ]] && rm -rf "$STAGE" || true
+    [[ -n "$CLONE" ]] && rm -rf "$CLONE" || true
+}
 trap cleanup EXIT
 
 MOUNT_OUTPUT="$(hdiutil attach "$IMAGE" -readonly -noverify -nobrowse -mountrandom /tmp)" \
@@ -399,7 +409,6 @@ else
     git -C "$CLONE" push -q || fail "could not push latest.json"
     echo "  updated"
 fi
-rm -rf "$CLONE"
 
 fi
 
