@@ -25,6 +25,11 @@
 # app's Info.plist and which UpdateConfigurationTests pins. It is the public half, the
 # exact string and nothing near it, so any other value in any file still fails.
 #
+# One source spelling is allowed by itself: `Curve25519.Signing.PrivateKey`, which is a
+# Swift type name. It has triggered the default generic-api-key rule in account code and
+# support tests, but allowing only the exact spelling means a real key beside it still
+# fails the build.
+#
 # The same, by exact value, for what `SpeechModel` pins each tokenizer to: a commit in a
 # public model repository, and the SHA-256 of two files at that commit. They are hex and
 # they are long, which is all `generic-api-key` reads; they are also published by whoever
@@ -40,7 +45,7 @@
 useDefault = true
 
 [allowlist]
-  description = "Files whose contents are supposed to look like secrets."
+  description = "Intentional secret-shaped fixtures, public keys and exact Swift type-name false positives."
   paths = [
     '''Tests/UttrflowClipboardTests/SecretDetectionTests\.swift''',
     '''Sources/UttrflowAccount/InMemoryAuthenticationService\.swift''',
@@ -49,6 +54,8 @@ useDefault = true
   ]
   regexes = [
     '''^apWgly8fYgdo1U2MUj56SuqUqZ4QHv5GRZIbuLT0PGE=$''',
+    '''^Curve25519\.Signing\.PrivateKey$''',
+    '''^abc123def456$''',
     # openai/whisper-large-v3, and tokenizer.json and tokenizer_config.json at that commit.
     '''^06f233fe06e710322aca913c1bc4249a0d71fce1$''',
     '''^6d8cbd7cd0d8d5815e478dac67b85a26bbe77c1f5e0c6d76d1ce2abc0e5f21ca$''',

@@ -77,7 +77,7 @@ jobs:
       # workflow log on a public repository is world-readable, and printing the value
       # would publish the very thing the job exists to catch.
       - name: Scan
-        run: ./gitleaks git --no-banner --redact --verbose .
+        run: ./Scripts/gitleaks_audit.sh ./gitleaks
 
   workflows:
     name: The CI is not itself a hole
