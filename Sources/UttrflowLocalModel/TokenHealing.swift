@@ -6,6 +6,8 @@ struct TokenHealing {
         let bytes: [[UInt8]]
         /// The tokens that end a line or the turn, which a word just finished must not be followed by at once.
         let ending: Set<Int>
+        /// Whether each token, by id, starts something new rather than lengthening the word before it, read once per model beside the bytes.
+        let startsNewWord: [Bool]
 
         init(texts: [String], ending: Set<Int>) {
             self.init(bytes: texts.map { Array($0.utf8) }, ending: ending)
@@ -14,6 +16,7 @@ struct TokenHealing {
         init(bytes: [[UInt8]], ending: Set<Int>) {
             self.bytes = bytes
             self.ending = ending
+            startsNewWord = bytes.map(Self.startsNewWord)
         }
 
         /// What a piece writes: the word-start mark as a space, and a byte-fallback piece such as `<0x0A>` as the one byte it names.
@@ -41,7 +44,16 @@ struct TokenHealing {
 
         /// Whether a byte is a space or a tab, the whitespace a line can hold.
         static func isSpace(_ byte: UInt8) -> Bool { byte == 0x20 || byte == 0x09 }
+
+        /// Whether a token starts something new rather than lengthening the word before it, which anything but a letter or digit at its front does.
+        static func startsNewWord(_ written: [UInt8]) -> Bool {
+            guard let first = String(decoding: written.prefix(4), as: UTF8.self).first else { return false }
+            return !first.isLetter && !first.isNumber
+        }
     }
+
+    /// What a token starting a new word costs in logits at the step after a word the person stopped inside, so the word is lengthened unless the model is this much surer of a break. See `Docs/predict-context.md`, G6.
+    static let newWordPenalty: Float = 3
 
     let vocabulary: Vocabulary
     /// Whether the person finished the word with a space, so it is written exactly and what follows begins with one.
@@ -52,23 +64,30 @@ struct TokenHealing {
     private(set) var owed: [UInt8]
     /// Whether the word is complete and continued, after which every token is the model's own.
     private(set) var isFree = false
+    /// Whether the person stopped inside a word, so a token starting a new word after it would split what they are typing.
+    let isMidWord: Bool
 
     init(vocabulary: Vocabulary, owed: String, wordComplete: Bool, mayEnd: Bool = false) {
         self.vocabulary = vocabulary
         self.owed = Array(owed.utf8)
         self.wordComplete = wordComplete
         self.mayEnd = mayEnd
+        isMidWord = !wordComplete && (owed.last.map { $0.isLetter || $0.isNumber } ?? false)
     }
 
-    /// What a step adds to the logits: nothing for an allowed token, minus infinity for the rest; nothing at all once the model is free or when no token could keep to the word.
+    /// What a step adds to the logits: nothing for an allowed token, minus infinity for the rest, and the new-word penalty where a break would split the typed word; nothing at all once the model is free or when no token could keep to the word.
     func mask(width: Int) -> [Float]? {
         guard !isFree else { return nil }
         let allowed = vocabulary.allowed(owing: owed, wordComplete: wordComplete)
         // With no token able to keep to the word, the model is left free rather than made to choose among nothing.
         guard allowed.contains(true) else { return nil }
+        // The typed word is written out, so this one step is where the model either lengthens it or breaks it.
+        let maySplit = isMidWord && owed.isEmpty
         // The model's head may be wider than the vocabulary; the padding beyond it is never a token to pick.
         var mask = [Float](repeating: -.infinity, count: width)
-        for (id, isAllowed) in allowed.enumerated() where isAllowed && id < width { mask[id] = 0 }
+        for (id, isAllowed) in allowed.enumerated() where isAllowed && id < width {
+            mask[id] = maySplit && vocabulary.startsNewWord[id] ? -Self.newWordPenalty : 0
+        }
         return mask
     }
 
