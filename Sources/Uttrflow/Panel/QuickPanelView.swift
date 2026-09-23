@@ -1090,9 +1090,9 @@ extension Color {
     static let panelCardHigh = Color(rgb: BrandPalette.Surface.raised)
     static let panelLine = Color(rgb: BrandPalette.Line.separator.dark)
     static let panelLabel = Color(rgb: BrandPalette.Text.primary.dark)
-    /// 7.4:1 on the panel.
+    /// 6.1:1 on the panel.
     static let panelLabelSoft = Color(rgb: BrandPalette.Text.muted.dark)
-    /// The dimmest grey in the design, for what the eye reaches only when it goes looking.
+    /// The dimmest grey words are allowed, for what the eye reaches only when it goes looking.
     static let panelLabelDim = Color(rgb: BrandPalette.Text.dim.dark)
     /// Below the dimmest grey, for the row glyph and the ⋯; both lift to ordinary grey when looked at.
     static let panelGhost = Color(rgb: BrandPalette.Text.ghost)
