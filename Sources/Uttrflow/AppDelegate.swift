@@ -152,7 +152,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var claimedHotkeys: [ShortcutAction: CarbonHotkeyMonitor] = [:]
     private var claimedTasks: [ShortcutAction: Task<Void, Never>] = [:]
     /// The last thing dictated, so it can be put back without reopening History.
-    private var lastTranscript: String?
+    private(set) var lastTranscript: String?
+    /// The history record the last transcript came from, so deleting that record forgets it too.
+    private(set) var lastTranscriptID: UUID?
     /// Asked when the panel opens whether a paste can be placed, held so the answer costs one call.
     private let accessibility = AccessibilityPermissionGate()
     private let microphone = MicrophonePermissionGate()
@@ -1414,6 +1416,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                             expansion: $0.expansion)
                     },
                     spokenWords: outcome.changes.spokenWords))
+            lastTranscriptID = record.id
             keep(record)
             // I4 — into the clipboard too, which the watcher never sees because this is not a copy.
             recordAsClip(kept, of: record.id)
@@ -1650,16 +1653,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     /// Forgets what a reset removed before redrawing, so the page cannot repaint the words it took.
-    private func forget(after reset: SettingsReset) {
+    func forget(after reset: SettingsReset) {
         guard reset.forgetsTheLastDictation else {
             refreshMainWindow()
             return
         }
         lastCleaning = nil
+        forgetLastTranscript()
         Task { [weak self] in
             await self?.diagnostics.forget()
             self?.refreshMainWindow()
         }
+    }
+
+    /// Drops the words the paste and copy shortcuts put back, with the record they came from.
+    private func forgetLastTranscript() {
+        lastTranscript = nil
+        lastTranscriptID = nil
     }
 
     /// Redraws from a fresh snapshot, reading everything on one hop so the pages agree.
@@ -1888,6 +1898,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             act { [weak self] in await self?.recordings.discard(id) }
 
         case .forgetDictation(let id):
+            if id == lastTranscriptID { forgetLastTranscript() }
             let retention = Retention(days: settings.transcriptRetentionDays, now: Date())
             act { [weak self] in
                 guard let self else { return }
