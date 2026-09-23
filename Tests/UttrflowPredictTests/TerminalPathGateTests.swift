@@ -24,6 +24,13 @@ private final class Folder {
         try Data(contents.utf8).write(to: URL(filePath: "\(path)/\(name)"))
     }
 
+    /// Makes a symlink under the folder at `name`, pointing to `target`.
+    func symlink(_ name: String, to target: String) throws {
+        try directory((name as NSString).deletingLastPathComponent)
+        try FileManager.default.createSymbolicLink(
+            atPath: "\(path)/\(name)", withDestinationPath: target)
+    }
+
     deinit {
         try? FileManager.default.removeItem(atPath: path)
     }
@@ -134,6 +141,24 @@ struct TerminalPathGateTests {
         let standing = await verifier.standing(
             ["git push --force origin main", "git push origin main"], after: "git p", in: prose, now: moment)
         #expect(standing == ["git push origin main"])
+    }
+
+    @Test("A symlink is followed before `..`, so a file unreachable through the link is refused.")
+    func symlinkFollowedBeforeParentRefuses() async throws {
+        let folder = try Folder()
+        try folder.directory("target/nested")
+        try folder.file("wrong")
+        try folder.symlink("link", to: "target/nested")
+        #expect(await kept(["cat link/../wrong"], in: shell(in: folder.path)) == [])
+    }
+
+    @Test("A symlink followed before `..` reaches a file the lexical path never could, so the line is kept.")
+    func symlinkFollowedBeforeParentKeeps() async throws {
+        let folder = try Folder()
+        try folder.directory("target/nested")
+        try folder.file("target/wrong")
+        try folder.symlink("link", to: "target/nested")
+        #expect(await kept(["cat link/../wrong"], in: shell(in: folder.path)) == ["cat link/../wrong"])
     }
 
     @Test("A model's line with a path that is not here is dropped before the machine has answered.")

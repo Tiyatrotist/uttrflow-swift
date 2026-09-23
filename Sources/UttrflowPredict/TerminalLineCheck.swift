@@ -86,7 +86,7 @@ public struct TerminalLineCheck: Sendable {
         guard !word.isUnresolved, !word.text.isEmpty, word.text.hasPrefix("/") || directory != nil else {
             return false
         }
-        let kind = files.kind(atPath: TerminalPath.resolved(word.text, from: directory ?? "/"))
+        let kind = files.kind(atPath: TerminalPath.probing(word.text, from: directory ?? "/"))
         // A trailing slash asks for a directory whatever the command would otherwise take.
         switch (word.text.hasSuffix("/") ? .directory : requirement, kind) {
         case (.directory, .directory), (.anything, .directory), (.anything, .file), (.file, .file),
