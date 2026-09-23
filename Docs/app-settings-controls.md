@@ -29,6 +29,8 @@ pressed.
 Keystrokes are taken through a local `NSEvent` monitor rather than SwiftUI's focus machinery,
 because the combinations worth recording — ⌘Q, ⌥Space — are the ones the menus and the responder
 chain would otherwise eat before any view saw them. The monitor is installed only while recording.
+Recording is also tied to the Settings window being the key surface: closing it, moving to another
+window, or leaving the app cancels the attempt and restores the live shortcut monitor.
 
 ### `.flagsChanged` as well as `.keyDown`
 
@@ -54,9 +56,16 @@ its own key code before the empty-modifier check would throw the press away as a
 
 ### What is swallowed and what is passed on
 
-A key press is swallowed, so nothing pressed at this field reaches the rest of the app. A modifier
-change is passed on: swallowing one would leave the rest of the app believing a key is still held
-after the user let go.
+A key press is swallowed, so nothing pressed at this field reaches the rest of the app: recording
+⌘Q records or refuses that candidate, but it does not quit Uttrflow. A modifier change is passed on:
+swallowing one would leave the rest of the app believing a key is still held after the user let go.
 
 Only four modifiers are recognised — command, option, control, shift. Caps Lock, Fn and the
 numeric-keypad bit are noise the window server sets on its own.
+
+### The field owns the recording only while it is the key interaction surface
+
+`SettingsWindowController.windowDidResignKey` cancels the recording, because a keystroke meant
+for the next application must not be saved as Uttrflow's shortcut. The session tap stops, the
+key-down swallow goes with it, and another ⌘Q reaches the foreground app normally. The window's
+`windowWillClose` does the same when the user closes Settings.

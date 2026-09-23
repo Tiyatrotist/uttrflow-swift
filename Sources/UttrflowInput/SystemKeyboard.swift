@@ -11,10 +11,15 @@ public final class SystemKeyboard: KeyboardEventSource {
 
     public init() {}
 
-    public func start(_ deliver: @escaping @Sendable (KeyStroke) -> Void) throws(KeyboardSourceError) {
+    public func start(
+        _ deliver: @escaping @Sendable (KeyStroke) -> Void,
+        consumeKeyDown: Bool = false
+    ) throws(KeyboardSourceError) {
         stop()
         delivery.set(deliver)
-        guard let tap = RunningTap.create(delivery: delivery) else { throw .refused }
+        delivery.setConsumeKeyDown(consumeKeyDown)
+        guard let tap = RunningTap.create(delivery: delivery, consume: consumeKeyDown)
+        else { throw .refused }
         tap.run()
         running.withLock { $0 = tap }
     }
@@ -71,6 +76,8 @@ final class Delivery: @unchecked Sendable {
     }
 
     private let sink = Mutex<Sink?>(nil)
+    /// Whether the callback should return `nil` for key-down strokes, so a recorded ⌘Q does not also quit the app.
+    private let consumeKeyDown = Atomic<Bool>(false)
     /// How many disables have counted against the tap inside the current window.
     private let disables = Atomic<Int>(0)
     /// When the last disable arrived, so two close together read as one fault.
@@ -85,7 +92,13 @@ final class Delivery: @unchecked Sendable {
     }
 
     func set(_ value: (@Sendable (KeyStroke) -> Void)?) { sink.withLock { $0 = value.map(Sink.init) } }
-    func send(_ stroke: KeyStroke) { sink.withLock { $0 }?.call(stroke) }
+    func setConsumeKeyDown(_ value: Bool) { consumeKeyDown.store(value, ordering: .relaxed) }
+    /// Hands the stroke to the sink and reports whether the callback should swallow the event.
+    @discardableResult
+    func send(_ stroke: KeyStroke) -> Bool {
+        sink.withLock { $0 }?.call(stroke)
+        return consumeKeyDown.load(ordering: .relaxed) && stroke.phase == .down
+    }
 
     /// Keeps the port the callback re-enables; the tap exists only after its own callback is written.
     func adopt(_ port: CFMachPort) {
@@ -127,15 +140,17 @@ private final class RunningTap: @unchecked Sendable {
     }
 
     /// Listening rather than consuming, so every key keeps doing what it did before Uttrflow ran.
-    static func create(delivery: Delivery) -> RunningTap? {
+    static func create(delivery: Delivery, consume: Bool = false) -> RunningTap? {
         let held = Unmanaged.passRetained(delivery)
         let mask =
             (CGEventMask(1) << CGEventType.flagsChanged.rawValue)
             | (CGEventMask(1) << CGEventType.keyDown.rawValue)
             | (CGEventMask(1) << CGEventType.keyUp.rawValue)
+        // `defaultTap` is the only mode whose return value reaches the window server, so the recorder can swallow a key-down.
+        let options: CGEventTapOptions = consume ? .defaultTap : .listenOnly
         guard
             let tap = CGEvent.tapCreate(
-                tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly,
+                tap: .cgSessionEventTap, place: .headInsertEventTap, options: options,
                 eventsOfInterest: mask, callback: systemKeyboardCallback, userInfo: held.toOpaque()),
             let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
         else {
@@ -190,7 +205,8 @@ private func systemKeyboardCallback(
         }
     if let phase {
         let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-        delivery.send(SystemKeyboard.stroke(keyCode: keyCode, flags: event.flags, phase: phase))
+        let stroke = SystemKeyboard.stroke(keyCode: keyCode, flags: event.flags, phase: phase)
+        if delivery.send(stroke) { return nil }
     }
     return Unmanaged.passUnretained(event)
 }

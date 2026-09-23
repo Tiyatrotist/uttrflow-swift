@@ -58,11 +58,11 @@ public struct BackendResponse: Sendable, Equatable {
 
 /// The only way this module reaches the network; a protocol, so sign-in is tested without a server.
 public protocol BackendTransport: Sendable {
-    /// Throws only when no connection could be made; every status, `404` and `502` included, is an answer.
+    /// Throws when no response was received; state-changing requests may still have reached the server.
     func perform(_ request: BackendRequest) async throws(BackendUnreachable) -> BackendResponse
 }
 
-/// The request did not happen. Anything the server said is a ``BackendResponse``.
+/// No response was received. Anything the server said is a ``BackendResponse``.
 public struct BackendUnreachable: Error, Sendable, Equatable, CustomStringConvertible {
     /// The address that could not be reached.
     public let url: URL

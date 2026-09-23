@@ -51,19 +51,19 @@ public struct Correction: Sendable, Equatable, Identifiable {
     }
 }
 
-/// Which changes are being listed.
+/// Which dictionary-backed corrections are being listed.
 public enum CorrectionsScope: String, Sendable, Equatable, CaseIterable {
-    /// Every change.
+    /// Every correction.
     case all
-    /// Changes still applied.
+    /// Corrections still applied.
     case applied
-    /// Changes the user put back.
+    /// Corrections the user put back.
     case undone
 
     /// What the pop-up calls the scope.
     public var title: String {
         switch self {
-        case .all: "All changes"
+        case .all: "All corrections"
         case .applied: "Still applied"
         case .undone: "Undone"
         }

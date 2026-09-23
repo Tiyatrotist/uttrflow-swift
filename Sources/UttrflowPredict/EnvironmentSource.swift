@@ -144,6 +144,7 @@ public struct EnvironmentSource: Sendable {
 
     /// What exists here that finishes the line, empty for any field that is not a terminal.
     public func candidates(for surface: Surface, matching typed: String, now: Date) async -> [Candidate] {
+        guard TerminalApplications.contains(surface.bundleIdentifier) else { return [] }
         guard let directory = Self.workingDirectory(of: surface),
             let completing = CompletionToken(typed)
         else { return [] }
@@ -162,7 +163,8 @@ public struct EnvironmentSource: Sendable {
         return offered.map {
             let text = completing.leading + $0
             return Candidate(
-                text: text, source: .environment, isIrreversible: DestructiveCommand.matches(text))
+                text: text, source: .environment,
+                isIrreversible: DestructiveCommand.matches(text, failClosedOnUnresolved: true))
         }
     }
 

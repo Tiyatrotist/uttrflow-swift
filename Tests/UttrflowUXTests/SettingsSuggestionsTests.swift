@@ -90,7 +90,7 @@ struct SettingsSuggestionsPaneTests {
     }
 
     @Test(
-        "promises everything stays on this Mac, keeps the password sentence and says where to turn it off and forget"
+        "promises everything stays on this Mac, names sensitive fields and says where to turn it off and forget"
     )
     func thePromiseCoversWhatIsRead() {
         let callout = pane(.default).callout
@@ -99,7 +99,8 @@ struct SettingsSuggestionsPaneTests {
         let message = callout?.message ?? ""
         #expect(message.contains("What it reads stays on this Mac."))
         #expect(message.contains("The lines it remembers are kept in Uttrflow's own folder."))
-        #expect(message.contains("Nothing is uploaded, and a password field is never read."))
+        #expect(message.contains("Nothing is uploaded, and password, one-time-code, PIN, card security"))
+        #expect(message.contains("code and recovery-answer fields are never read."))
         #expect(message.contains("Turn it off for one application, or forget what it learned there"))
     }
 

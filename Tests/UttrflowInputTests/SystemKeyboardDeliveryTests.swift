@@ -1,6 +1,8 @@
-// Tests that handing a keystroke to the keyboard's sink costs the same stack however many came before.
+// Tests that handing a keystroke to the keyboard's sink costs the same stack however many came before, and that the recorder's path signals when an event should be swallowed.
 import CoreGraphics
 import Testing
+
+import UttrflowCore
 
 @testable import UttrflowInput
 
@@ -63,5 +65,55 @@ struct SystemKeyboardDeliveryTests {
         for _ in 0..<count { delivery.send(stroke) }
         delivery.set(nil)
         return depth.address
+    }
+}
+
+/// Settings-shortcut recording owns the key-down that lands during a session, so a recorded ⌘Q does not also quit the app. See `Docs/shortcuts.md`.
+@Suite("Signalling that a keystroke should be swallowed")
+struct SystemKeyboardConsumeTests {
+    private let keyDown =
+        KeyStroke(keyCode: 12, modifiers: [.command], phase: .down)
+    private let keyUp =
+        KeyStroke(keyCode: 12, modifiers: [], phase: .up)
+    private let flagsChanged =
+        KeyStroke(keyCode: 55, modifiers: [.command], phase: .modifiersChanged, isKeyDown: true)
+
+    @Test("a source that does not consume never asks the caller to swallow")
+    func listenOnlyDoesNotSwallow() {
+        let delivery = Delivery()
+        delivery.set { _ in }
+        #expect(delivery.send(keyDown) == false)
+        #expect(delivery.send(keyUp) == false)
+        #expect(delivery.send(flagsChanged) == false)
+    }
+
+    @Test("a source in consume mode asks the caller to swallow a key-down only")
+    func consumingSwallowsOnlyKeyDowns() {
+        let delivery = Delivery()
+        delivery.set { _ in }
+        delivery.setConsumeKeyDown(true)
+        #expect(delivery.send(keyDown) == true)
+        // Modifiers and key-up must pass through, so a held ⌥ is not stuck down on the recording host.
+        #expect(delivery.send(flagsChanged) == false)
+        #expect(delivery.send(keyUp) == false)
+    }
+
+    @Test("consume mode persists across a sink replacement, since the tap outlives the field")
+    func consumeFlagSurvivesSinkReplacement() {
+        let delivery = Delivery()
+        delivery.set { _ in }
+        delivery.setConsumeKeyDown(true)
+        delivery.set { _ in }
+        #expect(delivery.send(keyDown) == true)
+    }
+
+    @Test("turning consume mode off returns the source to pass-through")
+    func turningConsumeOffRestoresPassThrough() {
+        let delivery = Delivery()
+        delivery.set { _ in }
+        delivery.setConsumeKeyDown(true)
+        #expect(delivery.send(keyDown) == true)
+        delivery.setConsumeKeyDown(false)
+        #expect(delivery.send(keyDown) == false)
     }
 }

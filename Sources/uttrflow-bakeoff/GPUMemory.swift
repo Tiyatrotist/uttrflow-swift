@@ -40,6 +40,11 @@ struct GPUMemory: AsyncParsableCommand {
         "Thanks for sending this over, I will ", "Could we move the review to ", "Sounds good, let",
     ]
 
+    func validate() throws {
+        guard passes >= 1 else { throw ValidationError("--passes must be 1 or more.") }
+        guard cancelEvery >= 0 else { throw ValidationError("--cancel-every must be 0 or more.") }
+    }
+
     func run() async throws {
         guard let chosen = LocalModel.named(model) else {
             throw ValidationError("Unknown model '\(model)'.")

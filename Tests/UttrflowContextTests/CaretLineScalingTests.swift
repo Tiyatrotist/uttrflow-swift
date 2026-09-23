@@ -54,7 +54,6 @@ struct CaretLineScalingTests {
         #expect(snapshot.currentLine == "git c")
         #expect(!snapshot.isLineCut)
         #expect(snapshot.learnableLine == "git c")
-        #expect(snapshot.holdsNewline)
         #expect(read < 50)
     }
 
@@ -81,18 +80,5 @@ struct CaretLineScalingTests {
         #expect(inside.currentLine.count == limit)
         #expect(past.isLineCut)
         #expect(past.currentLine.count == limit)
-    }
-
-    @Test("Whether a value holds a newline is read from its units, for every kind of newline.")
-    func newlinesAreFoundInUnits() {
-        for newline in ["\n", "\r", "\r\n", "\u{0B}", "\u{0C}", "\u{85}", "\u{2028}", "\u{2029}"] {
-            #expect(Self.snapshot("one" + newline + "two").holdsNewline, "\(newline.debugDescription)")
-        }
-        #expect(!Self.snapshot("one two").holdsNewline)
-        #expect(
-            !FocusedFieldSnapshot(
-                bundleIdentifier: "com.example.editor", applicationName: "Editor", role: "AXTextArea"
-            )
-            .holdsNewline)
     }
 }

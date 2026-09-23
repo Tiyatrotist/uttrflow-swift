@@ -28,8 +28,23 @@ body:
     validations:
       required: false
 
+  - type: markdown
+    attributes:
+      value: |
+        **Publication note.** What you write here is published as part of the issue.
+        Describe the capability or workflow in your own words — "a separate text-expansion
+        tool", "typing by hand", "a terminal pasteboard utility" — and leave names,
+        screenshots, links, pricing, quotes and any other identifying detail of another
+        product out of it. The repository's disclosure rule applies to issues as well as
+        to commits and pull requests, and a contributor well ahead of the maintainer is the
+        one who reaches the rule.
+
   - type: textarea
     id: alternatives
     attributes:
       label: What you do instead today
-      description: Including other apps. Knowing what already works is useful.
+      description: |
+        The capability or workflow you reach for. Generic descriptions are welcome; naming
+        another product — or quoting, screenshotting, linking or pricing one — is not.
+    validations:
+      required: false

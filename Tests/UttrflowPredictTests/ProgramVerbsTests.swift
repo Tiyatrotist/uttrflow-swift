@@ -139,3 +139,52 @@ struct ProgramVerbsTests {
         #expect(HelpCommands.names(in: "Usage: swift [options] file\n  Compiles the file given.\n").isEmpty)
     }
 }
+
+/// A directory of that many empty, executable files, named `<prefix><n>`, removed when the caller is done with it.
+private func executableDirectory(count: Int, prefix: String) throws -> String {
+    let root = FileManager.default.temporaryDirectory.appending(path: "path-\(UUID().uuidString)")
+        .path(percentEncoded: false)
+    try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
+    for index in 0..<count {
+        let path = "\(root)/\(prefix)\(index)"
+        FileManager.default.createFile(atPath: path, contents: nil)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+    }
+    return root
+}
+
+/// Runs `body` with `PATH` set to `path`, restoring whatever `PATH` named before.
+private func withPath(_ path: String, _ body: () async -> Void) async {
+    let original = ProcessInfo.processInfo.environment["PATH"] ?? ""
+    setenv("PATH", path, 1)
+    defer { setenv("PATH", original, 1) }
+    await body()
+}
+
+// Serialized because every test here mutates the process-wide `PATH`, which a parallel run would race on.
+@Suite("Reading programs off PATH", .serialized)
+struct ExecutableSearchTests {
+    @Test("One PATH directory holding more executables than the cap is not read past it.")
+    func capAppliesWithinOneDirectory() async throws {
+        let overflowing = try executableDirectory(
+            count: SystemEnvironmentReader.executableLimit + 1, prefix: "over-")
+        defer { try? FileManager.default.removeItem(atPath: overflowing) }
+        await withPath(overflowing) {
+            let names = await SystemEnvironmentReader().values(of: .executable, in: "/")
+            #expect(names?.count == SystemEnvironmentReader.executableLimit)
+        }
+    }
+
+    @Test("The cap is shared across every PATH directory, in PATH's own order.")
+    func capIsSharedAcrossDirectories() async throws {
+        let first = try executableDirectory(count: SystemEnvironmentReader.executableLimit, prefix: "a-")
+        defer { try? FileManager.default.removeItem(atPath: first) }
+        let second = try executableDirectory(count: 5, prefix: "b-")
+        defer { try? FileManager.default.removeItem(atPath: second) }
+        await withPath("\(first):\(second)") {
+            let names = await SystemEnvironmentReader().values(of: .executable, in: "/")
+            #expect(names?.count == SystemEnvironmentReader.executableLimit)
+            #expect(names?.contains { $0.hasPrefix("b-") } == false)
+        }
+    }
+}

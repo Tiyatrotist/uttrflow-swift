@@ -20,8 +20,10 @@ that is missing today may exist tomorrow.
 
 Two rules decide what runs where:
 
-1. **A destructive line is never offered, in any field.** `DestructiveCommand.matches` is asked
-   of every line, whatever its evidence. The same test already keeps such a line out of the corpus
+1. **A destructive line is never offered, in any field.** `DestructiveCommand.matches` reads the
+   same parsed commands as the terminal path check and is asked of every line, whatever its evidence.
+   Unresolved shell syntax is refused in terminals; ordinary editor prose is not parsed as a terminal
+   command. The same test already keeps destructive lines out of the corpus
    (`CaptureGate`), so this only closes the lines the model writes and those remembered before the
    capture gate existed.
 2. **The path check runs only in a terminal**, meaning an application `TerminalApplications`
@@ -48,7 +50,7 @@ Then, per simple command, after leading assignments and wrappers (`sudo`, `env`,
 | `cp`, `mv` | every source; the destination may be new |
 | `chmod`, `chown`, `chgrp` | every operand after the mode |
 | `python3`, `node`, `ruby`, `sh`, … | the script, when no flag comes first |
-| `grep`, `rg`, … | every operand after the pattern |
+| `grep`, `rg`, … | every operand after the pattern; a file named by `-f` or `--file` must exist as a file |
 | `git checkout` | a branch, tag, remote branch or `HEAD` relative that the refs hold, or paths that exist; a new branch's start point |
 | `git switch` | a local branch, or a remote branch of that name; with `-c` or `--detach`, a commit the refs hold |
 | `git add`, `restore`, `rm`, `mv` | paths that exist |
@@ -68,6 +70,44 @@ the directory for the commands after it when they surely follow it (`&&`, `;`); 
 `packed-refs`. A repository whose refs live in a reftable, or whose `packed-refs` is over 8 MB, is
 not read, and its branch lines are refused. A commit hash is refused too, since telling one from a
 typo means reading the object store.
+
+## A session on another machine
+
+After `ssh`, the shell that prints the prompt is not on this Mac. Its `AXDocument` is not updated,
+so the terminal goes on publishing the directory the session started in, and everything that reads
+`Surface.scope` then describes this disk while the line runs on another: the check above stats the
+remote command's paths here, the machine index offers local files, branches and programs, and the
+lines are remembered under the local directory's corpus.
+
+So a terminal in a remote session is scoped as that session — `RemoteSession.scope`, which is
+neither a path nor a host — rather than as a directory. Three things follow from the one change:
+`EnvironmentSource.workingDirectory` finds no directory, so nothing here is listed or offered;
+`Verifier.admits` refuses every line in that surface, because no question put to this disk could
+stand behind one; and what is typed there is remembered under the session rather than under the
+directory this Mac was left in. Nothing is stat'ed on the strength of a remote prompt.
+
+**How the session is recognised, and how reliable that is.** Whether a terminal is remote is not
+knowable from outside it, so this reads the one signal the app already holds: the window title,
+which by default carries the name of the foreground process — `ssh`, `mosh`, `mosh-client` — as
+its own word. A word that only reads like one is not it: `~/.ssh`, `.ssh`, `ssh-keygen` and `scp`
+keep the directory.
+
+The two other candidate signals were weighed and left alone:
+
+- **A `user@host` prompt or title that differs from this Mac's name.** It needs this Mac's names to
+  compare against, and it has several — the Bonjour name, the local hostname with and without
+  `.local`, the name the network hands out — so a local prompt reads as remote often enough to
+  lose the feature in ordinary local terminals. That is failing closed in the wrong place.
+- **A process check.** What a terminal is running is the terminal's child, not this app's, and
+  reading it means looking outside what the app is permitted to see. It is not worth a wider
+  permission.
+
+**This detection fails open**, and deliberately: with no positive signal a terminal is read as
+local, so an `ssh` session whose title names no program — one the remote shell has overwritten,
+or a terminal configured not to show the process — is still read against this disk. Failing the
+other way means treating every terminal as possibly remote, which withdraws the feature from every
+local one. So this narrows the bug to the case where no signal exists rather than closing it; a
+session that announces itself is handled, and one that does not is where it stood before.
 
 ## What it never does
 
@@ -122,7 +162,7 @@ right answer as a hit, which is why they counted before.
   name (the launch `PATH`, `/etc/paths`, `/etc/paths.d` and the usual install directories) is
   refused.
 - A glob or a variable in a checked position refuses the line, even where it would match.
-- After `ssh`, the terminal's `AXDocument` still names the local directory, so a remote path is
-  checked against this Mac (#765).
+- A remote session whose window title names no remote program is read as local, and a local
+  directory named `ssh` or `mosh` is read as a remote session and offered nothing.
 - `FieldReading.directory(of:)` drops the last component of a document path with an extension, so
   a terminal in a folder such as `site.example.io` is scoped to its parent (#766).

@@ -28,6 +28,14 @@ public final class HTTPAuthenticationService: AuthenticationService {
         let expiresAt: Date
     }
 
+    /// A refresh request that may have reached the server, named so a retry asks the same question.
+    private struct RefreshAttempt: Sendable, Equatable {
+        /// The refresh token spent by this attempt.
+        let token: String
+        /// The idempotency key sent with it.
+        let id: String
+    }
+
     /// A sign-in waiting to finish; kept off ``SignInChallenge`` so no public value carries a secret.
     private enum Pending {
         /// Waits on a port for the browser to come back, holding the verifier that spends the code.
@@ -78,6 +86,8 @@ public final class HTTPAuthenticationService: AuthenticationService {
         var generation = 0
         /// The one renewal in flight for `generation`, if any.
         var renewal: Task<Result<Authorisation, AccountError>, Never>?
+        /// A refresh whose response was lost after the request may have rotated the server token.
+        var ambiguousRefresh: RefreshAttempt?
         /// How many callers found a renewal already running and waited on it instead of starting one.
         var joined = 0
     }
@@ -423,7 +433,13 @@ public final class HTTPAuthenticationService: AuthenticationService {
             // Read under the lock, so the token spent belongs to the generation the answer is checked against.
             guard let refreshToken = tokens.refreshToken() else { return nil }
             let generation = state.generation
-            let started = Task { await self.performRenewal(spending: refreshToken, of: generation) }
+            let attempt: RefreshAttempt
+            if let ambiguous = state.ambiguousRefresh, ambiguous.token == refreshToken {
+                attempt = ambiguous
+            } else {
+                attempt = RefreshAttempt(token: refreshToken, id: PKCEPair.base64URL(randomBytes(24)))
+            }
+            let started = Task { await self.performRenewal(attempt, of: generation) }
             state.renewal = started
             return started
         }
@@ -435,22 +451,32 @@ public final class HTTPAuthenticationService: AuthenticationService {
         return try outcome.get()
     }
 
-    /// Spends the refresh token once; a 401 signs this Mac out, and an answer for an older session is dropped.
+    /// Spends the refresh token once; a 401 signs this Mac out unless an ambiguous retry owns it.
     private func performRenewal(
-        spending refreshToken: String, of generation: Int
+        _ attempt: RefreshAttempt, of generation: Int
     ) async -> Result<Authorisation, AccountError> {
         let response: BackendResponse
         do {
             response = try await send(
                 post(
-                    "v1/auth/refresh", RefreshBody(refreshToken: refreshToken, device: device?.registration())
+                    "v1/auth/refresh",
+                    RefreshBody(
+                        refreshToken: attempt.token, idempotencyKey: attempt.id,
+                        device: device?.registration())
                 ))
         } catch {
+            if case .serverUnreachable = error {
+                session.withLock { state in
+                    guard state.generation == generation else { return }
+                    state.ambiguousRefresh = attempt
+                }
+            }
             return .failure(error)
         }
 
-        // Revoked, replayed or expired: all three mean this Mac is signed out.
+        let ambiguous = session.withLock { state in state.ambiguousRefresh == attempt }
         if response.status == 401 {
+            if ambiguous { return .failure(.serverUnreachable) }
             let current = session.withLock { state -> Bool in
                 guard state.generation == generation else { return false }
                 endSession(&state)
@@ -465,6 +491,7 @@ public final class HTTPAuthenticationService: AuthenticationService {
             let current = try session.withLock { state throws(AccountError) -> Bool in
                 guard state.generation == generation else { return false }
                 try adopt(issued)
+                if state.ambiguousRefresh == attempt { state.ambiguousRefresh = nil }
                 return true
             }
             return .success(current ? .token(issued.accessToken) : .noCredential)
@@ -491,6 +518,7 @@ public final class HTTPAuthenticationService: AuthenticationService {
         try session.withLock { state throws(AccountError) in
             state.generation += 1
             state.renewal = nil
+            state.ambiguousRefresh = nil
             try adopt(issued)
         }
         return try await readProfile(validator: nil)
@@ -505,6 +533,7 @@ public final class HTTPAuthenticationService: AuthenticationService {
     private func endSession(_ state: inout Session) {
         state.generation += 1
         state.renewal = nil
+        state.ambiguousRefresh = nil
         tokens.clear()
         access.withLock { $0 = nil }
     }
@@ -620,6 +649,7 @@ private struct TokenBody: Encodable {
 /// What the refresh endpoint expects.
 private struct RefreshBody: Encodable {
     let refreshToken: String
+    let idempotencyKey: String
     let device: DeviceRegistration?
 }
 

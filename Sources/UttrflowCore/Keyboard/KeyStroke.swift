@@ -40,8 +40,11 @@ public struct KeyStroke: Sendable, Equatable {
 
 /// Delivers every keystroke in every app; the one place that talks to the window server.
 public protocol KeyboardEventSource: Sendable {
-    /// Starts delivering, or says the system refused, which it does without Accessibility.
-    func start(_ deliver: @escaping @Sendable (KeyStroke) -> Void) throws(KeyboardSourceError)
+    /// Starts delivering, or says the system refused, which it does without Accessibility; `consumeKeyDown: true` asks for a tap that can swallow the caller's key-downs.
+    func start(
+        _ deliver: @escaping @Sendable (KeyStroke) -> Void,
+        consumeKeyDown: Bool
+    ) throws(KeyboardSourceError)
     func stop()
 }
 
