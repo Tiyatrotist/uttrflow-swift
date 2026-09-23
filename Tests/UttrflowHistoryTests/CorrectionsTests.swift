@@ -185,6 +185,16 @@ struct CorrectionUndoTests {
         #expect(undone.record.changes?.corrections.map(\.heard) == ["utter flow"])
     }
 
+    /// A change records the punctuation it kept, so an undo looking for the bare word would find nothing.
+    @Test("a change that kept the word's punctuation is still found and put back")
+    func restoresAPunctuatedWord() throws {
+        let correction = made(heard: "tarvock,", wrote: "Tarvok,", range: 2..<3)
+        let record = said(
+            "Open the Tarvok, then", changes: RecordedChanges(corrections: [correction]))
+        let undone = try #require(record.undoing(correction.id))
+        #expect(undone.record.text == "Open the tarvock, then")
+    }
+
     /// Splicing by character range keeps a dictated code block from arriving on one line.
     @Test("everything between the words is left exactly as it was")
     func keepsTheWhitespace() throws {
