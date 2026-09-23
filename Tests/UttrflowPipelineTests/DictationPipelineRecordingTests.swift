@@ -129,8 +129,9 @@ struct DictationPipelineRecordingTests {
         #expect(await recordings.discarded.isEmpty)
     }
 
-    @Test("an error nobody foresaw also leaves the recording to retry")
-    func unforeseenErrorKeepsTheRecording() async throws {
+    /// The capture finishes the WAV before it refuses the take, so the audio is on disk either way.
+    @Test("a capture refused after the recording was written offers that recording, not the microphone")
+    func refusedCaptureOffersTheRecording() async throws {
         let recordings = FakeRecordingKeeper(current: recording)
         let capture = FakeAudioCaptureEngine()
         let pipeline = DictationPipeline(
@@ -141,7 +142,24 @@ struct DictationPipelineRecordingTests {
         await capture.setStopOutcome(.failure(.engineFailed(description: "gone")))
         await pipeline.finishRecording()
 
-        // The microphone never stopped cleanly, so there was no recording to reason about.
+        // Never `.retry`, which opens the microphone for a new dictation in place of the kept one.
+        #expect(await pipeline.currentState.failure?.recovery == .retryFromRecording)
+        #expect(await recordings.discarded.isEmpty)
+    }
+
+    /// Nothing was written, so there is nothing to offer and the failure keeps the fix it came with.
+    @Test("a capture refused with no recording on disk keeps its own fix")
+    func refusedCaptureWithNoRecording() async throws {
+        let recordings = FakeRecordingKeeper(current: nil)
+        let capture = FakeAudioCaptureEngine()
+        let pipeline = DictationPipeline(
+            capture: capture, speech: FakeSpeechEngine(transcribeOutcome: .success(.fixture(text: said))),
+            cleaner: RecordingFakeCleaner(), context: FakeContextEngine(context: .fixture()),
+            inserter: RecordingFakeInserter(), recordings: recordings)
+        await pipeline.startRecording()
+        await capture.setStopOutcome(.failure(.engineFailed(description: "gone")))
+        await pipeline.finishRecording()
+
         #expect(await pipeline.currentState.failure?.recovery == .retry)
         #expect(await recordings.discarded.isEmpty)
     }

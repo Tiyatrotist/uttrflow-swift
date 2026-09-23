@@ -6,6 +6,12 @@ import Testing
 @testable import UttrflowPipeline
 @testable import UttrflowTestSupport
 
+private func suspendUntilCancelled() async {
+    while !Task.isCancelled {
+        try? await Task.sleep(for: .seconds(3600))
+    }
+}
+
 /// A ``SpeechEngine`` that accepts the audio and never answers.
 private actor NeverAnsweringSpeechEngine: SpeechEngine {
     let kind = SpeechEngineKind.whisperKit
@@ -16,7 +22,7 @@ private actor NeverAnsweringSpeechEngine: SpeechEngine {
         _ audio: AudioSamples, options: TranscriptionOptions
     ) async throws(SpeechEngineError) -> Transcription {
         // Suspends for ever, the way a wedged decoder does. Nothing resumes this.
-        await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in }
+        await suspendUntilCancelled()
         return .fixture()
     }
 }
@@ -47,7 +53,7 @@ private struct NeverAnsweringCleaner: TranscriptCleaning {
     func clean(
         _ request: TransformationRequest
     ) async throws(TransformationError) -> TransformationResult {
-        await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in }
+        await suspendUntilCancelled()
         return TransformationResult(text: request.transcription.text, producedBy: .rules)
     }
 }
@@ -55,7 +61,7 @@ private struct NeverAnsweringCleaner: TranscriptCleaning {
 /// A ``TextInserting`` that takes the text and never answers, the way a hung application does.
 private struct NeverAnsweringInserter: TextInserting {
     func insert(_ text: String) async throws(TextInsertionError) -> InsertionAttempt {
-        await withCheckedContinuation { (_: CheckedContinuation<Void, Never>) in }
+        await suspendUntilCancelled()
         return InsertionAttempt(.accessibility)
     }
 }
@@ -207,5 +213,37 @@ struct DictationStageTimeoutTests {
         #expect(failure.transcript == "Tidied.")
         #expect(await metrics.measurements(for: .insertion).map(\.succeeded) == [false])
         #expect(await metrics.measurements(for: .transcription).map(\.succeeded) == [true])
+
+        // A hung application must not take the next dictation down with the one it never answered.
+        await pipeline.startRecording()
+        #expect(await pipeline.currentState == .recording)
+    }
+
+    /// The words are the only thing left when the application will not take them, so the failure carries them.
+    @Test("the words a hung application never took are still offered, untidied or not")
+    func insertionTimeoutKeepsTheWords() async {
+        let clock = ManualClock()
+        let pipeline = DictationPipeline(
+            capture: FakeAudioCaptureEngine(stopOutcome: .success(.silence(seconds: 2))),
+            speech: FakeSpeechEngine(
+                transcribeOutcome: .success(Transcription(text: "what I said"))),
+            cleaner: NeverAnsweringCleaner(),
+            context: FakeContextEngine(),
+            inserter: NeverAnsweringInserter(),
+            clock: clock)
+
+        await pipeline.startRecording()
+        let finishing = Task { await pipeline.finishRecording() }
+        await expire(StageTimeout.transformation, at: .tidying, of: pipeline, on: clock)
+        await expire(StageTimeout.quick, at: .inserting, of: pipeline, on: clock)
+        await settle(finishing)
+
+        guard case .failed(let failure) = await pipeline.currentState else {
+            Issue.record("expected the dictation to fail, got \(await pipeline.currentState)")
+            return
+        }
+        // Tidying timed out too, so what is offered is what the recogniser heard.
+        #expect(failure.transcript == "what I said")
+        #expect(await pipeline.currentState.isBusy == false)
     }
 }

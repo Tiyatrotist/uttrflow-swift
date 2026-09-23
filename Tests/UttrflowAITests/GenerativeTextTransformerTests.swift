@@ -240,6 +240,33 @@ struct GenerativeTextTransformerTests {
         }
     }
 
+    @Test("refuses a model answer that moves not from telling to calling")
+    func refusesMovedNegation() async {
+        let model = FakeCleanupModel { _ in "I did tell Mary not to call John." }
+        let sut = GenerativeTextTransformer(kind: .foundationModels, model: model)
+
+        do {
+            _ = try await sut.transform(request("I did not tell Mary to call John"))
+            Issue.record("expected the moved negation to be refused")
+        } catch {
+            guard case .outputRejected(_, let kind) = error else {
+                Issue.record("expected outputRejected, got \(error)")
+                return
+            }
+            #expect(kind == .negationMoved)
+        }
+    }
+
+    @Test("accepts a faithful contraction in the same instruction")
+    func acceptsFaithfulNegation() async throws {
+        let model = FakeCleanupModel { _ in "I didn't tell Mary to call John." }
+        let sut = GenerativeTextTransformer(kind: .foundationModels, model: model)
+
+        let result = try await sut.transform(request("I did not tell Mary to call John"))
+        #expect(result.text == "I didn't tell Mary to call John.")
+        #expect(result.producedBy == .foundationModels)
+    }
+
     @Test("says why it refused, so a failure can be understood")
     func explainsRejection() async {
         let model = FakeCleanupModel { _ in "Here is the text: hello" }
@@ -249,7 +276,7 @@ struct GenerativeTextTransformerTests {
             _ = try await sut.transform(request("hello there my friend"))
             Issue.record("expected the rewrite to be refused")
         } catch {
-            guard case .outputRejected(let reason) = error else {
+            guard case .outputRejected(let reason, _) = error else {
                 Issue.record("expected outputRejected, got \(error)")
                 return
             }

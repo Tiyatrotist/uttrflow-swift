@@ -75,13 +75,42 @@ through and be reported as a connection problem the user cannot fix by retrying.
   directly or as an underlying error, raises the same failure. Its message names the space needed
   rather than asking the user to check their connection; every other failure keeps that wording.
 
-## Hoisting the download out of its wrapper
+## Pinned model files
 
-Model repositories nest their output — WhisperKit's lands in
-`<staging>/models/<repo>/<variant>/`. The store's contract is that a model's files sit
-directly in `location(of:)`, so the nesting is undone in `hoist(contentsOf:into:)` rather than
-leaking into every caller that needs a path. The wrapper directory is identified *before*
-anything moves; afterwards there is nothing left to identify it by.
+Both halves of the model are fetched from `huggingface.co/<repository>/resolve/<commit>/<file>`.
+The CoreML weights use `SpeechModel.weightsRevision`, `weightsRepository`, and `weightFiles`; the
+tokenizer uses `tokenizerRevision`, `tokenizerRepository`, and `tokenizerDigests`. Each weight file
+is downloaded to a temporary file, counted, hashed, tightened, and only then moved into staging.
+Each tokenizer file is likewise checked before it is written. A pinned commit says which file to
+fetch; only the size and digest say it is the file that was pinned.
+
+The app does not call `WhisperKit.download` for installs. That downloader has no revision argument
+for these weights and can fall back to the person's own Hugging Face token. Uttrflow fetches public
+files directly instead, with `huggingface.co` and the commit named in source.
+
+**To bump a weight revision**, take the CoreML repository's current commit and the LFS metadata for
+the files in `WeightsAssets.fileNames`:
+
+```bash
+curl -s https://huggingface.co/api/models/argmaxinc/whisperkit-coreml \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["sha"])'
+curl -s "https://huggingface.co/api/models/argmaxinc/whisperkit-coreml/tree/<commit>/<variant>?recursive=1" \
+  | python3 -c 'import sys,json; [print(i["path"], i["size"], i.get("lfs", {}).get("oid")) for i in json.load(sys.stdin)]'
+```
+
+Put the commit in `weightsRevision`, and put each file's `size` and LFS `oid` in `weightFiles`.
+
+**To bump a tokenizer revision**, take the repository's current commit and the files' digests:
+
+```bash
+curl -s https://huggingface.co/openai/whisper-base | head -0   # see the repository
+curl -s https://huggingface.co/api/models/openai/whisper-base | python3 -c 'import sys,json;print(json.load(sys.stdin)["sha"])'
+curl -sL https://huggingface.co/openai/whisper-base/resolve/<commit>/tokenizer.json | shasum -a 256
+```
+
+Put both in `SpeechModel`, and say in the pull request what changed in the tokenizer and why the
+app should follow it. `Scripts/offline_audit.sh` fails on `resolve/main/`, so a revision cannot
+quietly become a branch again.
 
 ## `FileManager`
 

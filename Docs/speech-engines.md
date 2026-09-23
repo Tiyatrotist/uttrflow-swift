@@ -101,6 +101,45 @@ relies on. `Docs/bakeoff.md` compares the engines; `Docs/offline.md` states the 
   12.3% to 18.4%. With both, none of those, every run gives identical text, and overall WER is
   11.8%. English transcripts are unchanged byte for byte.
 
+## Why one noisy clip answers differently every run
+
+- A two-word reply mixed with brown noise at 10 dB SNR (`reply4-daniel-snr10`, "Ship it") was
+  inserted as "Shit is." in 16 of 50 runs and refused as "Didn't catch that." in the other 34, on
+  byte-identical audio; a second 50 split 23 to 27. Sampling in the temperature ladder is the only
+  randomness in a decode, so which of the two a run gives is which draw lands.
+- **The ladder does not invent the words.** With `firstTokenLogProbThreshold` unset, the greedy
+  decode of that clip is the same misreading on every run, at an average log-probability of -0.297
+  and a compression ratio of 0.86 — confident against every threshold the options carry, and 0.02
+  away from the -0.275 the same clip scores when it is read correctly as synthesised. The
+  near-homophone is the model's own first reading of this audio at this level of noise; the
+  clip as synthesised and at 20 dB SNR both read "Ship it." The ladder decides whether the
+  misreading is shown, never what it is.
+- **`firstTokenLogProbThreshold: -1.5` is what makes the outcome a draw.** It ends a window at its
+  first sampled token when that token scores below the threshold, leaving no tokens at all
+  (`Core/TextDecoder.swift:674` and `:686`). In a timestamped decode that first token is the
+  segment's opening timestamp, so noise over a 0.6 s clip fails it on where the speech starts
+  rather than on any word. WhisperKit reads the check ahead of the silence test
+  (`Core/Models.swift:366`, "order matters here"), so such a window never gets a no-speech
+  probability and is retried warmer instead of being discarded as silence. It fired at temperature
+  0 on all 50 runs, and at 1.0 on the 34 that ended empty.
+- The ladder keeps the first draw that passes the thresholds and otherwise the last one
+  (`Core/TranscribeTask.swift:327-405`). Every one of the 16 words came from temperature 0.8;
+  0.2 to 0.6 were rejected every time, and the 34 empties are the abandoned decode at 1.0.
+- **Neither a word list nor a confidence floor separates the misreading from a correct
+  transcript.** Rejecting a fallback result that adds a listed word the greedy result lacks reads,
+  as shipped, against a greedy result with no words in it, so it fires on the accident that the
+  window was abandoned; the moment the first-token check passes, the misreading *is* the greedy
+  result and the comparison sees nothing. The average log-probability the ladder accepts on is
+  0.02 apart for the right and the wrong reading, which no floor can sit between. The per-word
+  figure does separate this pair — 0.19 for the wrong word against 0.71 for the right one — but
+  `Docs/ai-correction-thresholds.md`
+  measures why one per-word score is not a licence to move a word: recognisers are unsure
+  constantly, and correction needs three independent conditions before one word changes.
+- What is left is recognition accuracy at that level of noise, which is a model and a front-end
+  question rather than a decoding one. `Scripts/dictation_bench.py score` reports every clip run
+  more than once that answered differently, so the class is visible in an ordinary bench run
+  rather than only in a hand-built one.
+
 ## Per-word confidence
 
 - Correction's first condition is that the recogniser was unsure. Without a per-word figure the

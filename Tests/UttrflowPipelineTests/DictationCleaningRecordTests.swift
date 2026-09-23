@@ -41,7 +41,7 @@ private struct RefusingCleaner: TranscriptCleaning {
     ) async throws(TransformationError)
         -> TransformationResult
     {
-        throw .outputRejected(reason: "scripted")
+        throw .outputRejected(reason: "scripted", kind: .lostWord)
     }
 }
 
@@ -113,6 +113,25 @@ struct DictationCleaningRecordTests {
         #expect(records.count == 1)
         #expect(records.first?.changes.first?.removed == ["um"])
         #expect(records.first?.switchedOff == [.spacing])
+    }
+
+    @Test("cleanup is reported as cleaning, not an undoable correction")
+    func cleanupDoesNotBecomeCorrection() async throws {
+        let recorder = CollectingCleaningRecorder()
+        let pipeline = pipeline(
+            cleaner: AccountingCleaner(record: account), recorder: recorder)
+
+        await pipeline.startRecording()
+        await pipeline.finishRecording()
+
+        guard case .inserted(let outcome) = await pipeline.currentState else {
+            Issue.record("dictation did not finish inserted")
+            return
+        }
+        #expect(outcome.changes.corrections.isEmpty)
+        #expect(outcome.changes.snippets.isEmpty)
+        #expect(outcome.changes.entriesTaken.isEmpty)
+        #expect(await recorder.records.first?.changes.first?.step == .fillers)
     }
 
     @Test("a tidier that keeps no account leaves the page with nothing to redraw")

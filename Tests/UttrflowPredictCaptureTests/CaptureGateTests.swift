@@ -2,10 +2,15 @@ import Testing
 
 @testable import UttrflowPredictCapture
 
-private let allowed = CapturePreferences(consent: ["com.example.terminal": .allowed])
+private let allowed = CapturePreferences(
+    consent: ["com.example.terminal": .allowed, "com.example.browser": .allowed])
 
 private func field(_ role: String = "AXTextArea", subrole: String? = nil) -> FieldReading {
     FieldReading(bundleIdentifier: "com.example.terminal", role: role, subrole: subrole)
+}
+
+private func terminalField() -> FieldReading {
+    FieldReading(bundleIdentifier: "com.apple.Terminal", role: "AXTextArea")
 }
 
 @Suite("What is refused before anything is written")
@@ -21,6 +26,15 @@ struct CaptureGateTests {
         #expect(
             CaptureGate.refusal(toRecord: "hunter2000", from: secure, given: CapturePreferences())
                 == .secureField)
+    }
+
+    @Test("A one-time-code field is refused before consent is even consulted.")
+    func sensitiveFieldNameIsRefusedFirst() {
+        let otp = FieldReading(
+            bundleIdentifier: "com.example.unknown", role: "AXTextField",
+            identifier: "one-time-code")
+        #expect(
+            CaptureGate.refusal(toRecord: "123456", from: otp, given: CapturePreferences()) == .secureField)
     }
 
     @Test("An application nobody has been asked about is refused, and the refusal asks.")
@@ -68,6 +82,22 @@ struct CaptureGateTests {
     @Test("A value one character long is refused, because completing it could never save a keystroke.")
     func oneCharacterIsRefused() {
         #expect(CaptureGate.refusal(toRecord: "y", from: field(), given: allowed) == .tooShort)
+    }
+
+    @Test("Short all-digit values in non-terminal fields are refused as form secrets.")
+    func shortNumericWebValuesAreRefused() {
+        let browser = FieldReading(bundleIdentifier: "com.example.browser", role: "AXTextField")
+
+        for value in ["12", "1234", "123456", "01011990"] {
+            #expect(CaptureGate.refusal(toRecord: value, from: browser, given: allowed) == .sensitiveValue)
+        }
+    }
+
+    @Test(
+        "Short all-digit values still pass in terminals, where numbers are ordinary commands and arguments.")
+    func shortNumericTerminalValuesPass() {
+        let terminalAllowed = CapturePreferences(consent: ["com.apple.terminal": .allowed])
+        #expect(CaptureGate.refusal(toRecord: "123456", from: terminalField(), given: terminalAllowed) == nil)
     }
 
     @Test("A destructive command is refused, so it can never be stored to complete later.")

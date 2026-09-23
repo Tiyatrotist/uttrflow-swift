@@ -1,4 +1,3 @@
-import AppKit
 import ApplicationServices
 import Foundation
 
@@ -7,28 +6,9 @@ public enum SurfaceProbe {
     /// Caps one message so an app that never answers releases this thread.
     private static let messagingTimeout: Float = 0.1
 
-    /// Reads the field the user is typing in, or `nil` when nothing is focused; identity comes from the main thread.
+    /// The suggestion loop's own reading of the focused field, so the capability table says what the feature will do.
     public static func read(of app: FrontmostApp) -> SurfaceCapability? {
-        guard AXIsProcessTrusted() else { return nil }
-
-        let started = DispatchTime.now().uptimeNanoseconds
-        guard let field = focusedField(of: app.processIdentifier) else { return nil }
-
-        let role = string(field, kAXRoleAttribute)
-        let value = string(field, kAXValueAttribute)
-        let range = selectedRange(field)
-        let elapsed = Int((DispatchTime.now().uptimeNanoseconds - started) / 1000)
-
-        return SurfaceCapability(
-            application: app.name,
-            role: role,
-            locator: locator(field),
-            reportsValue: value != nil,
-            reportsCaretRect: range.flatMap { bounds(field, at: $0) } != nil,
-            reportsTextStyle: range.flatMap { style(field, at: $0) } != nil,
-            isSecure: isSecure(field, role: role),
-            readMicroseconds: elapsed
-        )
+        FocusedFieldReader.snapshot(app: app)?.capability
     }
 
     /// Asks system-wide first and the application second, because apps answer only one. See `Docs/insertion.md`.
@@ -47,18 +27,6 @@ public enum SurfaceProbe {
         return systemWide ?? own
     }
 
-    /// Tells one field in an application from another, so two of the same role do not collapse into one.
-    private static func locator(_ field: AXUIElement) -> String? {
-        string(field, kAXIdentifierAttribute) ?? string(field, kAXPlaceholderValueAttribute)
-            ?? string(field, kAXDescriptionAttribute)
-    }
-
-    /// Whether the field hides what is typed, which AppKit reports as a subrole and others as a role.
-    private static func isSecure(_ field: AXUIElement, role: String?) -> Bool {
-        let secure = kAXSecureTextFieldSubrole as String
-        return role == secure || string(field, kAXSubroleAttribute) == secure
-    }
-
     /// The caret as a range, which every parameterized read below is asked about.
     static func selectedRange(_ field: AXUIElement) -> CFRange? {
         value(field, kAXSelectedTextRangeAttribute, .cfRange)
@@ -69,17 +37,6 @@ public enum SurfaceProbe {
         let rect: CGRect? = unwrap(
             parameterized(field, kAXBoundsForRangeParameterizedAttribute, range), .cgRect)
         return rect.flatMap { $0.isNull ? nil : $0 }
-    }
-
-    /// The font and colour at the caret, without which a ghost cannot match the line.
-    private static func style(_ field: AXUIElement, at range: CFRange) -> NSAttributedString? {
-        guard
-            let answer = parameterized(
-                field, kAXAttributedStringForRangeParameterizedAttribute,
-                AccessibilityRange.widenedForStyle(range)),
-            let attributed = answer as? NSAttributedString, attributed.length > 0
-        else { return nil }
-        return attributed.attribute(.font, at: 0, effectiveRange: nil) == nil ? nil : attributed
     }
 
     /// One attribute read with a range for a parameter, which is how a field is asked about part of its text.
