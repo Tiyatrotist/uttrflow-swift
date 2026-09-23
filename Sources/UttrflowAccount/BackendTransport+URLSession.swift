@@ -36,7 +36,7 @@ public struct URLSessionTransport: BackendTransport {
         do {
             let (data, response) = try await session.data(for: urlRequest)
             guard let http = response as? HTTPURLResponse else {
-                // A response with no status is a request that did not happen.
+                // A response with no status leaves the request's effect unknown.
                 throw BackendUnreachable(url: request.url, reason: "the response was not HTTP")
             }
             var headers: [String: String] = [:]
@@ -49,7 +49,7 @@ public struct URLSessionTransport: BackendTransport {
         } catch let unreachable as BackendUnreachable {
             throw unreachable
         } catch {
-            // No network, DNS, TLS, timeout or cancellation: the request did not happen; nobody said no.
+            // No network, DNS, TLS, timeout or cancellation: no response arrived, so nobody said no.
             throw BackendUnreachable(url: request.url, reason: error.localizedDescription)
         }
     }

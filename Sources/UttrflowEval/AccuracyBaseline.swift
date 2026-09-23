@@ -240,7 +240,7 @@ extension AccuracyBaseline {
         if shared.isEmpty {
             return "the baseline and this run share no samples"
         }
-        if !report.normalisation.isEmpty, report.normalisation != normalisation {
+        if report.normalisation != normalisation {
             return "the normalisation rules changed since the baseline, so the rates are not comparable"
         }
         return nil

@@ -1,12 +1,13 @@
 # Working in this repository
 
-<!-- release-policy:v3 -->
+<!-- release-policy:v4 -->
 ## Branching & Release Policy — NON-NEGOTIABLE
 
-**Effective 2026-09-02. Supersedes release-policy:v2, which said agents never merge to
-`main`; rule 5 below now says they may, once a pull request is green. Everything else
-stands, including that this repository is the only home for the project and that the
-`beta` branch in any agent's memory belonged to the private one and does not exist here.**
+**Effective 2026-09-23. Supersedes release-policy:v3, which said agents may merge their
+own green pull requests. The live `main` ruleset requires independent review, so agents
+stop at a green pull request and leave the branch for a reviewer. Everything else stands,
+including that this repository is the only home for the project and that the `beta` branch
+in any agent's memory belonged to the private one and does not exist here.**
 
 **One long-lived branch, `main`, always releasable. A release is a tag, not a branch.**
 
@@ -27,17 +28,17 @@ branch / fork  ──PR──>  main  ──tag v2026.9.14-rc.1──>  prerelea
 4. **Nobody pushes to `main` directly.** A ruleset blocks force-pushes and deletions,
    and everything reaches `main` through a pull request. Never force-push `main`, and
    never tag: tagging is the release, and the release is the operator's.
-5. **An agent may merge its own pull request once it is green** — every required check
-   passed, and the branch up to date with `main` so what merges is what was tested. This
-   reverses release-policy:v2, which said agents never merge. The gate was written for a
-   team with reviewers in it; on a one-person org the review requirement could never be
-   satisfied, so it was not a gate but a queue. What actually catches mistakes here is
-   CI, and CI runs before the merge either way.
+5. **An agent stops at a green pull request.** The live `main` ruleset requires one approving review.
+   It also requires code-owner review, resolution of review threads, dismissal of stale
+   reviews after a push, and approval by someone other than the last pusher. The branch
+   must be up to date with `main`, enforced by `strict_required_status_checks_policy`, so
+   what merges is what was tested.
 6. **Green means green, not nearly.** A check still running is not a passed check. If
    you merge past a failing or unfinished check, you are doing it because the operator
    said to, and you say so plainly when you report it — never silently with `--admin`.
-7. **Your task is done when the work is merged and your branch is cleaned up.** Do not
-   tag, and do not release.
+7. **Your implementation task is done when the pull request is open, green, and documented
+   for review.** Keep the worktree and branch while the PR is open; clean them only after
+   GitHub shows the pull request was merged. Do not tag, and do not release.
 
 **Releases stay batched and infrequent.** That has not changed; only the mechanism has.
 `main` accumulates merged work, and the operator decides when a commit on it becomes
@@ -364,9 +365,25 @@ cd .claude/worktrees/<name>                                       # and stay the
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 … work, commit by name, `make verify` before every push …
 # the pre-push hook runs `make verify` for main; CI runs it once more on the PR
-git push -u origin <name> && gh pr create --base main
+git push -u origin <name>
+gh pr create --base main --head <name>
+# Keep this worktree and both feature-branch refs while the pull request is open.
+```
+
+Do not clean up from a successful push, from `gh pr create`, or from `git branch -d`
+returning zero. A local branch can be "merged" to its upstream and still not be in `main`,
+which means deleting the worktree and branch would leave an open pull request with no head
+branch to update when CI or review asks for a repair.
+
+Only after GitHub says the pull request is merged:
+
+```bash
+pr=<number>
+gh pr view "$pr" --json mergedAt --jq 'select(.mergedAt != null) | .mergedAt'
+# Continue only if the command printed a merge timestamp.
 cd -                                                              # back to the main checkout
-git worktree remove .claude/worktrees/<name> && git branch -d <name>
+git worktree remove .claude/worktrees/<name>
+git branch -d <name> 2>/dev/null || git branch -D <name>
 git push origin --delete <name>
 ```
 
@@ -397,10 +414,12 @@ you write down what you would have wanted a reviewer to know: what was measured,
 was assumed, and what you are least sure of. A merge that ends the conversation is worse
 than no merge at all.
 
-**Clear the worktree the moment the work is merged.** `git worktree remove` and delete the
-branch. Four stale worktrees once sat holding pre-rename copies of the whole tree, and an
-abandoned one is indistinguishable from work in progress to the next session that finds
-it. `.claude/worktrees/` is gitignored, so nothing warns you.
+**Clear the worktree the moment the work is merged, never while the pull request is still
+open.** First prove the merge with `gh pr view <pr> --json mergedAt --jq 'select(.mergedAt
+!= null) | .mergedAt'`; only then `git worktree remove` and delete the branch. Four stale
+worktrees once sat holding pre-rename copies of the whole tree, and an abandoned one is
+indistinguishable from work in progress to the next session that finds it.
+`.claude/worktrees/` is gitignored, so nothing warns you.
 
 `sasta-trader` is a different project and does not follow any of this.
 

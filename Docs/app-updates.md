@@ -34,8 +34,9 @@ process being replaced, and without the line the relaunch looks like a crash.
 The loopback exception is what makes the feature rehearsable on one Mac (build, sign, serve,
 install, and watch a running app replace itself and keep its permissions). It is not a hole:
 anything that can serve on this Mac's loopback is already running as the user, and
-`Scripts/bundle.sh` applies the same rule so a build pointed at a local feed cannot be
-published.
+`Scripts/bundle.sh` applies the same URL parser. Local and rehearsal builds may use a
+loopback feed; distribution builds may not, and `Scripts/publish.sh` checks the app inside
+the disk image again before even a dry run calls it publishable.
 
 A placeholder `SUPublicEDKey` fails closed. The entitlement work found the same shape of bug,
 an all-zero Ed25519 key that verified forged signatures.

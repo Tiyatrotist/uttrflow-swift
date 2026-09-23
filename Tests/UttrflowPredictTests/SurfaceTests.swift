@@ -27,4 +27,10 @@ struct SurfaceTests {
         #expect(first == second)
         #expect(Set([first, second]).count == 1)
     }
+
+    @Test("A bundle identifier is stored under its application key.")
+    func bundleIdentifierIsNormalized() {
+        let surface = Surface(bundleIdentifier: "com.example.Terminal", role: "AXTextArea")
+        #expect(surface.bundleIdentifier == "com.example.terminal")
+    }
 }

@@ -45,10 +45,12 @@ public actor PasteboardTextInsertionEngine: TextInsertionEngine {
         } else {
             pasteboard.setText(text, richText: richText)
         }
+        // Read before the paste is posted, so an unchanged caret cannot be read back as a fresh landing.
+        let before = focus.tail(upTo: PasteConfirmation.readLength)
         // Thrown onwards with the words left on the clipboard: the floor below would only put them back.
         try keystrokes.sendPaste()
         // Posting a paste proves nothing, so this waits for the words the way the write above is read back.
-        let outcome = await confirmation.waitFor(text)
+        let outcome = await confirmation.waitFor(text, before: before)
         // Waited for before the reporter is consulted, so attaching a logger cannot be what switches this on.
         report?(outcome)
         // The borrowed clipboard is deliberately never restored. See `Docs/insertion.md`.

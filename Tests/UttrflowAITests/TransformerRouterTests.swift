@@ -68,6 +68,22 @@ struct TransformerRouterTests {
         #expect(failing.transformCount == 1, "it should have been tried before falling through")
     }
 
+    @Test("a moved negation falls back to the faithful rules result")
+    func movedNegationFallsBack() async throws {
+        let model = FakeCleanupModel { _ in "I did tell Mary not to call John." }
+        let generative = GenerativeTextTransformer(kind: .foundationModels, model: model)
+        let router = TransformerRouter(
+            engines: [generative, RuleBasedTransformer()], preference: [.foundationModels, .rules])
+        let spoken = TransformationRequest(
+            transcription: .fixture(text: "I did not tell Mary to call John", language: .english))
+
+        let result = try await router.transform(spoken)
+
+        #expect(result.producedBy == .rules)
+        #expect(result.text.contains("did not tell Mary"))
+        #expect(result.cleaning?.refusals.first?.kind == .negationMoved)
+    }
+
     /// A user who suddenly gets rules-only text has no other way to learn why. See #193.
     @Test("records the refused answer on the record of the engine that did answer")
     func recordsARefusal() async throws {

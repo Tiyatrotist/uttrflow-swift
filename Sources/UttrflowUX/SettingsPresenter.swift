@@ -399,7 +399,8 @@ public enum SettingsPresenter {
     /// Where everything suggestions read and keep stays, and where to turn them off or forget them.
     static let suggestionsPromise =
         "What it reads stays on this Mac. The lines it remembers are kept in Uttrflow's own "
-        + "folder. Nothing is uploaded, and a password field is never read. "
+        + "folder. Nothing is uploaded, and password, one-time-code, PIN, card security "
+        + "code and recovery-answer fields are never read. "
         + "Turn it off for one application, or forget what it learned there, under Applications below."
 
     /// Says what the model is doing, since a switch that is on and silent is indistinguishable from broken.
@@ -599,7 +600,9 @@ public enum SettingsPresenter {
     /// The privacy promise, written once for every screen. See `Docs/ux-settings-model.md`.
     static let privacyPromise =
         "\(recordingsPromise) The text is kept on this Mac and deleted automatically. We "
-        + "never see it, and it is not tied to your account."
+        + "never see it, and it is not tied to your account. Local history, clips, "
+        + "suggestions and retry recordings kept on this Mac until deleted are excluded "
+        + "from Mac backups that honour that setting."
 
     /// What happens to the audio, in the one wording every screen repeats. See `Docs/recordings.md`.
     public static let recordingsPromise =

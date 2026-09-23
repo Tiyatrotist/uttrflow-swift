@@ -69,3 +69,13 @@ light card, which is fine for a dot, an icon or a filled button and unreadable a
 `Color.warningInk`, `successInk`, `criticalInk` and `accentInk` and through `MainTone.foreground`.
 `SemanticInkContrastTests` computes those ratios, so a palette edit that drops one below 4.5:1
 fails.
+
+The three greys text is drawn in — `Text.primary`, `muted` and `dim` — clear 4.5:1 on all four
+surfaces text sits on, the rail included, in both appearances. The rail is the darkest light
+surface, and it carries the sidebar's version and badge counts, so it sets the floor: `dim` was
+`A49DB3` at 2.16:1 there and is `6D6481` at 4.59:1, which puts it within a few steps of `muted`
+on a light desktop. That is the room the ramp has, not a mistake — a fourth readable grey does not
+fit between `muted` and the rail, so `Text.ghost` stays a mark rather than a word and is held to
+3:1. `TextToneContrastTests` computes every one of those ratios and fails below the floor.
+Increase Contrast is a separate question, tracked in #522; this floor is what the palette clears
+before that setting is consulted.

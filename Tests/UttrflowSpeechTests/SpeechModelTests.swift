@@ -41,9 +41,80 @@ struct SpeechModelTests {
     func englishOnlySupport() {
         let englishOnly = SpeechModel(
             variant: "x", downloadBytes: 1, isMultilingual: false,
-            tokenizerRepository: "openai/whisper-tiny.en")
+            weightsRepository: "argmaxinc/whisperkit-coreml",
+            weightsRevision: String(repeating: "0", count: 40),
+            weightFiles: [:],
+            tokenizerRepository: "openai/whisper-tiny.en",
+            tokenizerRevision: String(repeating: "0", count: 40),
+            tokenizerDigests: [:])
         #expect(englishOnly.supports(.english))
         #expect(!englishOnly.supports(.hindi))
+    }
+
+    /// A branch name would let a push to the model repository change what a new install runs (#666).
+    @Test("every model pins its tokenizer to a commit, not to a branch")
+    func everyTokenizerIsPinnedToACommit() {
+        for model in SpeechModel.catalogue {
+            let revision = model.tokenizerRevision
+            #expect(revision.count == 40, "\(model.variant) pins \(revision), which is not a commit")
+            #expect(
+                revision.allSatisfy { $0.isHexDigit },
+                "\(model.variant) pins \(revision), which is not a commit")
+        }
+    }
+
+    /// A branch name would let a push to the model repository change what a new install runs (#666).
+    @Test("every model pins its weights to a commit, not to a branch")
+    func everyWeightSetIsPinnedToACommit() {
+        for model in SpeechModel.catalogue {
+            let revision = model.weightsRevision
+            #expect(revision.count == 40, "\(model.variant) pins \(revision), which is not a commit")
+            #expect(
+                revision.allSatisfy { $0.isHexDigit },
+                "\(model.variant) pins \(revision), which is not a commit")
+        }
+    }
+
+    /// A pinned commit says which files to fetch; only size and digest say the files are the ones pinned.
+    @Test("every model records size and digest for every weight file it fetches")
+    func everyWeightFileHasSizeAndDigest() {
+        for model in SpeechModel.catalogue {
+            for name in WeightsAssets.fileNames {
+                let file = model.weightFiles[name]
+                #expect(file != nil, "\(model.variant) records no metadata for \(name)")
+                #expect((file?.bytes ?? 0) > 0, "\(model.variant)'s \(name) size is not recorded")
+                #expect(file?.sha256.count == 64, "\(model.variant)'s \(name) digest is not a SHA-256")
+                #expect(
+                    file?.sha256.allSatisfy { $0.isHexDigit } == true,
+                    "\(model.variant)'s \(name) digest is not hex")
+            }
+        }
+    }
+
+    /// The file metadata is the part the downloader can verify before a model reaches the install folder.
+    @Test("recorded download sizes include the pinned weight bytes")
+    func downloadSizesCoverPinnedWeights() {
+        for model in SpeechModel.catalogue {
+            let weightBytes = model.weightFiles.values.reduce(Int64(0)) { $0 + $1.bytes }
+            #expect(
+                weightBytes < model.downloadBytes,
+                "\(model.variant)'s total download is smaller than its pinned weights")
+            #expect(
+                model.downloadBytes - weightBytes < 50_000_000,
+                "\(model.variant)'s total download leaves too much unexplained")
+        }
+    }
+
+    /// A pinned commit says which file to fetch; only the digest says the file is the one that was pinned.
+    @Test("every model records a digest for every tokenizer file it fetches")
+    func everyTokenizerFileHasADigest() {
+        for model in SpeechModel.catalogue {
+            for name in TokenizerAssets.fileNames {
+                let digest = model.tokenizerDigests[name]
+                #expect(digest != nil, "\(model.variant) records no digest for \(name)")
+                #expect(digest?.count == 64, "\(model.variant)'s \(name) digest is not a SHA-256")
+            }
+        }
     }
 
     /// A model naming the wrong tokenizer repository would decode its output into nonsense.
