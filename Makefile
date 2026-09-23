@@ -116,6 +116,10 @@ pasteboard-audit: ## Prove only the clipboard adapters touch NSPasteboard. Needs
 release-tag-test: ## Prove release tags come from main. Needs no build.
 	./Scripts/release_tag_ancestry_test.sh
 
+.PHONY: release-order-test
+release-order-test: ## Prove `make release` keeps its stages in order under -j. Dry-run only.
+	./Scripts/release_order_test.sh
+
 .PHONY: bundle-requirement-test
 bundle-requirement-test: ## Prove every bundle-signing mode has a designated requirement. Needs no build.
 	./Scripts/bundle.sh --requirement-self-test
@@ -146,7 +150,7 @@ disclosure-history: ## Scan every commit on every ref. Run before a repo goes pu
 # whose failure cannot be fixed after the fact. A competitor's name in a commit is
 # published the moment the commit is, and no later edit reaches a clone or a cache.
 .PHONY: verify
-verify: pii-audit disclosure-audit issue-template-audit docs-audit comment-audit match-audit ratchet-test range-test pre-push-test update-feed-test issue-template-test uitest-arguments uitest-result-path log-audit store-permissions pasteboard-audit bundle-requirement-test release-tag-test perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, issue template prompts, docs, comments, word matches, log privacy, clipboard, bundle signing, release tags, energy and memory budget, lint, build, tests, coverage floor, offline audit.
+verify: pii-audit disclosure-audit issue-template-audit docs-audit comment-audit match-audit ratchet-test range-test pre-push-test update-feed-test issue-template-test uitest-arguments uitest-result-path log-audit store-permissions pasteboard-audit bundle-requirement-test release-tag-test release-order-test perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, issue template prompts, docs, comments, word matches, log privacy, clipboard, bundle signing, release tags, release stage order, energy and memory budget, lint, build, tests, coverage floor, offline audit.
 
 # Hooks are not cloned — .git/hooks is local to a checkout — so this points git at a
 # directory that is. One command per clone, and the gate cannot be forgotten after that.
@@ -211,12 +215,19 @@ notarise-dmg: ## Notarise and staple the disk image. Needs Apple credentials.
 # *first*, and the image is then built around a bundle that already carries its ticket.
 # Doing it the other way round leaves the app depending on a ticket stapled to a disk
 # image the user no longer has.
+# Each stage is a separate $(MAKE) line, not a prerequisite list: prerequisites are
+# siblings to GNU Make and `-j`, or an inherited MAKEFLAGS, could start notarise, dmg
+# and notarise-dmg before app-dist finished. Recipe lines always run in order.
 # The version is Resources/Uttrflow-Info.plist and nothing else — edited by hand when a
 # release is cut, since a calendar version is the date that happens on. CFBundleShortVersionString
 # is what people see (2026.9.14); CFBundleVersion is the build counter the updater compares,
 # and has to increase every release.
 .PHONY: release
-release: app-dist notarise dmg notarise-dmg ## Build, notarise and package a shippable disk image.
+release: ## Build, notarise and package a shippable disk image, strictly in that order.
+	$(MAKE) app-dist
+	$(MAKE) notarise
+	$(MAKE) dmg
+	$(MAKE) notarise-dmg
 	@echo
 	@echo "Ready to publish. Check it, then run: make publish"
 	@ls -1 dist/Uttrflow-*.dmg
