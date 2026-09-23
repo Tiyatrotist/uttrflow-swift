@@ -35,11 +35,40 @@ final class MainWindowModel {
     var wordDraft = DictionaryDraft()
     /// Whether the sidebar is showing its names; chrome, not a decision, so no presenter builds it.
     var isSidebarExpanded: Bool
+    /// Rises when something outside the window asks for the search field; the header watches it and takes focus.
+    var searchFocusRequest = 0
 
     init(page: MainTab = .home, content: MainContent, isSidebarExpanded: Bool = false) {
         self.page = page
         self.content = content
         self.isSidebarExpanded = isSidebarExpanded
+    }
+
+    /// The chrome of whichever page is showing; a `switch`, so a tenth page fails to compile until handled.
+    var chrome: MainPageChrome {
+        switch page {
+        // Home draws its own greeting, so the toolbar above it stays empty.
+        case .home: MainPageChrome(title: "")
+        case .dictation: content.dictation.chrome
+        case .history:
+            MainPageChrome(
+                title: SidebarPresenter.title(for: .history),
+                caption: HistoryPresenter.caption,
+                search: content.history.showsSearch
+                    ? MainSearchField(
+                        placeholder: HistoryPresenter.searchPlaceholder, query: searchQuery)
+                    : nil)
+        case .dictionary: content.dictionary.chrome
+        case .corrections: content.corrections.chrome
+        case .insights: content.insights.chrome
+        case .snippets: content.snippets.chrome
+        case .style: content.style.chrome
+        case .diagnostics:
+            MainPageChrome(
+                title: SidebarPresenter.title(for: .diagnostics),
+                caption: DiagnosticsPresenter.caption)
+        case .account: content.account.chrome
+        }
     }
 }
 
@@ -90,6 +119,15 @@ final class MainWindowController {
         model = MainWindowModel(
             content: content,
             isSidebarExpanded: defaults.bool(forKey: Self.sidebarExpandedKey))
+    }
+
+    /// Whether Find has anywhere to put the caret: a window on screen, on a page that has a search field.
+    var canFocusSearch: Bool { isVisible && model.chrome.search != nil }
+
+    /// Puts the caret in the page's search field, which is what Edit ▸ Find does.
+    func focusSearch() {
+        guard canFocusSearch else { return }
+        model.searchFocusRequest += 1
     }
 
     /// Shows or hides the sidebar's names, and remembers which.
