@@ -62,6 +62,38 @@ on 200,000 random strings and on planted secrets (see "The oracle sweep" below f
 whole sweep runs). `SecretShapesScalingTests` bounds the
 characters read per character of the clip, so the check is a count, not a clock.
 
+`WordBreaks` is where that `\b` lives, and it asks the pattern engine itself rather than a word
+index of its own: from a boundary it matches `(?s).(?:\B.)*` over the text from there, which
+takes a character and then every further one standing inside the same word, and ends on the next
+boundary. Reading from a boundary is what makes the slice safe — a boundary is where the word
+rules stop looking back, so the text before it cannot move where the next one falls, and each
+character is read once as the scan walks forward. This replaces `String._wordIndex(after:)`, an
+underscored standard library entry that carried no source-stability promise, so a toolchain
+change could have moved a boundary and altered what the scanner masks without failing a test.
+`WordBreaksTests` now compares `WordBreaks` with `\b` over the whole text on combining marks,
+emoji, regional indicator pairs, scripts written without spaces, and boundaries next to
+punctuation, and the two agree at every character on every case measured.
+
+**Where the two walks differ, and why it does not reach the scanner.** The word index worked in
+scalars and could return an index inside a grapheme cluster, usually beside a format character:
+in `" \u{70F}:\u{230F}."` it put a boundary partway through the first cluster, which a walk over
+whole characters steps past. On 40,000 random strings carrying format characters the two walks
+produced a different set of indices on 7,707 of them and differed at a character boundary on none,
+and neither ever failed to advance. `NamedSecretScan` walks with `index(after:)` and asks only
+about a character boundary, so an index inside a cluster was never asked about and never matched.
+
+**What asking the engine costs, measured.** Release build, one core, M5 Pro, 21 September 2026,
+processor time for one `ClipKindDetector.kind(of:)` call on a 2 MB clip, with the word index and
+with the pattern: code 0.011 → 0.011 s, prose 0.016 → 0.017 s, CSV 0.028 → 0.028 s, and logs
+0.084 → 0.087 s, the costliest row of the budget table in `Docs/performance.md`. A boundary costs
+about 0.7 µs from the pattern against 0.03 µs from the word index, and it is the same boundary:
+both find 923,080 of them in the scaling test's 2 MB run, and the cost still rises in proportion
+to the clip. Only a clip that names a secret on every line and never gives one pays for that
+difference — 2 MB of `auth_token=abc pass=x api_key=y secret=z pwd=w credential=v` goes
+0.175 → 0.763 s, over the 0.2 processor-second budget for a copy. Nothing shortens that without a
+word index of the project's own, which means the Unicode word break rules and their property
+tables, so it is left measured rather than reimplemented.
+
 The same pass found four classifier patterns with the same flaw, rewritten as patterns that
 accept the same language without the backtracking: a link's host (`[^\s/?#]+\S*` is
 `[^\s/?#]\S*`), a functional colour (`\(\s*[^()]+\)` is `\([^()]+\)`), a call
