@@ -239,11 +239,12 @@ public struct FileSystemSpeechModelStore: SpeechModelStore {
 
     /// Swaps complete staged weights in for the model's directory, carrying over a tokenizer already there.
     private func commit(_ staging: URL, into destination: URL) throws {
+        // Copied, not moved, so a failed swap never leaves the destination without its tokenizer.
         for name in TokenizerAssets.fileNames {
             let existing = destination.appending(path: name)
             let staged = staging.appending(path: name)
             if fileManager.fileExists(atPath: existing.path), !fileManager.fileExists(atPath: staged.path) {
-                try fileManager.moveItem(at: existing, to: staged)
+                try fileManager.copyItem(at: existing, to: staged)
             }
         }
         if fileManager.fileExists(atPath: destination.path) {
