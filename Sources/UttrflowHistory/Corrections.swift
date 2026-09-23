@@ -126,8 +126,7 @@ public struct RecordedChanges: Sendable, Equatable, Codable {
         return Set(
             corrections.lazy
                 .filter { !$0.isUndone }
-                .flatMap(\.wordRange)
-                .filter { said.contains($0) }
+                .flatMap { $0.wordRange.clamped(to: said) }
         ).count
     }
 
