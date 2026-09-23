@@ -18,6 +18,11 @@ enum TerminalPath {
         normalized(path.hasPrefix("/") ? path : directory + "/" + path)
     }
 
+    /// A path handed to the kernel to resolve, with no lexical `..` or `.` folding, so symlinks are followed before any `..` above them.
+    static func probing(_ path: String, from directory: String) -> String {
+        path.hasPrefix("/") ? path : joined(directory, path)
+    }
+
     /// One name under a directory.
     static func joined(_ directory: String, _ name: String) -> String {
         directory.hasSuffix("/") ? directory + name : directory + "/" + name
