@@ -531,6 +531,10 @@ struct QuickPanelView: View {
         .frame(width: 34, height: 24)
         .clipShape(.rect(cornerRadius: 4))
         .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.panelLine, lineWidth: 1))
+        // Kicks the off-main decode on appearance and again if the row reuses the same view for a different file.
+        .task(id: file) {
+            PanelThumbnails.shared.prepare(file)
+        }
         .accessibilityHidden(true)
     }
 
