@@ -302,7 +302,9 @@ public enum HomePresenter {
             // No figures while a permission is missing; numbers above "cannot listen" argue with themselves.
             figures: blocked == nil
                 ? DictationPresenter.figures(
-                    today: today, earlier: earlier, calendar: calendar, locale: locale)
+                    today: today, earlier: earlier,
+                    retentionDays: snapshot.settings.transcriptRetentionDays, calendar: calendar,
+                    locale: locale)
                 : [],
             recent: blocked == nil ? listed.map { row(for: $0, locale: locale) } : [],
             recentTitle: title(for: listed, calendar: calendar, now: snapshot.now),

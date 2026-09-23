@@ -316,12 +316,26 @@ struct DictationFiguresTests {
         #expect(page.figures.first { $0.caption == "Day streak" }?.value == "2")
     }
 
-    /// A run reaching the oldest thing kept is a floor, since older days may have been deleted.
-    @Test("a streak that reaches the edge of what is kept says so")
-    func streakAtTheEdge() {
+    /// Running out of history is not deletion: a new user's short streak gets the plain caption.
+    @Test("a short streak with no evidence of deletion says nothing about it")
+    func shortStreakIsNotCalledADeletion() {
         let page = HistoryFixture.dictation(entries: [
             HistoryFixture.entry("today"), HistoryFixture.entry("yesterday", daysAgo: 1),
         ])
+        let figure = page.figures.first { $0.caption == "Day streak" }
+        #expect(figure?.value == "2")
+        #expect(figure?.comment == "days in a row")
+    }
+
+    /// A run reaching retention's own edge proves older days were deleted, not merely never dictated.
+    @Test("a streak that fills the whole retention window says so")
+    func streakAtTheEdgeOfRetention() {
+        var settings = Settings.default
+        settings.transcriptRetentionDays = 2
+        let page = HistoryFixture.dictation(
+            entries: [
+                HistoryFixture.entry("today"), HistoryFixture.entry("yesterday", daysAgo: 1),
+            ], settings: settings)
         let figure = page.figures.first { $0.caption == "Day streak" }
         #expect(figure?.value == "2")
         #expect(figure?.comment == "at least — anything older has been deleted")
