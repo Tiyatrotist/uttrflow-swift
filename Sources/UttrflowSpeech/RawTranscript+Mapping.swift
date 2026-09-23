@@ -15,6 +15,15 @@ extension RawTranscript {
         )
     }
 
+    /// Seconds between the recogniser's last segment and the audio end that suggests a decode stopped at the cap.
+    public static let cappedDecodeGap: Duration = .milliseconds(2_500)
+
+    /// Whether the last segment ends well before the audio did, which is what a capped decode looks like from outside.
+    public func appearsCapped(audioDuration: Duration) -> Bool {
+        guard let lastEnd = segments.last?.end else { return false }
+        return audioDuration.inSeconds - lastEnd > Self.cappedDecodeGap.inSeconds
+    }
+
     private var detectedLanguage: DetectedLanguage? {
         guard let languageIdentifier, let code = LanguageCode(languageIdentifier) else { return nil }
         return DetectedLanguage(code: code, confidence: languageProbability)
