@@ -93,9 +93,15 @@ comfortable length, which is between two words far more often than inside one.
 ## How it works
 
 `SpeechWindowing` decides where a piece ends, from the loudness frames `VoiceActivity`
-already computes. A piece must hold at least five seconds; after that, a pause of 0.8 s
-ends it, which is a sentence ending rather than a breath. Once a piece holds fifteen
-seconds, a pause of 0.4 s will do. A piece never holds more than thirty seconds, the
+already computes. A cut may not fall before five seconds; where it may, a pause of 0.8 s
+ends the piece, which is a sentence ending rather than a breath. Once the cut falls past
+fifteen seconds, a pause of 0.4 s will do.
+
+**A pause is as long as the speaker made it, wherever the five-second mark falls inside
+it.** Every quiet run is measured from where it truly began and the cut goes to its
+middle, so a 0.9 s breath from 4.6 s to 5.5 s ends the piece at 5.0 s. Measuring the run
+only from five seconds instead saw 0.5 s of it, read a sentence ending as a breath, and
+left the commonest dictation length one piece — which is what #917 was. A piece never holds more than thirty seconds, the
 recogniser's own window, and with no pause at all it is cut there — which is exactly
 what the recogniser would have done to it anyway.
 
@@ -134,6 +140,10 @@ is remembered as unfinished, the audio cursor moves past it, and the next pause 
 on as usual; the release pass then does every unfinished span in its own place, so a
 failure still gets reported and still costs only that piece's words rather than the whole
 recording's wait.
+
+If that release pass still gets no words for audio `VoiceActivity` judges speech-bearing,
+the dictation fails instead of inserting only the other pieces. A kept recording can be
+retried; a window holding genuine silence is still skipped.
 
 The pieces are then joined with a space. Corrections keep their word ranges by being
 shifted past the words of the pieces before them. If any piece fell back to the rules,
@@ -197,6 +207,40 @@ its work — four tidying sessions started at once took exactly as long as four 
 measured above — so prewarming during a rewrite would move the cost into the wait rather than
 out of it. The instructions come from the destination and are read once per dictation, so
 there is one key to make against and no extra model call: still one call per piece.
+
+## What a ten-second dictation gains, and what it cannot
+
+Taken on 21 September 2026, `uttrflow-dev bench` in real-time mode, release build, M5 Pro,
+48 GB, macOS 26.5.1, shipping router, no dictionary words, five runs a row for the first two
+and three for the third, medians with the range in brackets. **Load average 4-42 through the
+runs**, so these are quieter-machine figures than #918's. "After key-up" is recognition that
+began or was still running when the key came up.
+
+| clip | pieces | recognition after key-up | wait |
+|---|---|---|---|
+| 9.58 s, no quiet frame anywhere | 1 → 1 | 0.81 s → 0.89 s | 1.58 s (1.40-1.94) → 1.61 s (1.53-1.65) |
+| 8.59 s, 1.12 s pause from 4.44 s, a sentence end | 1 → 2 | 0.68 s → 0.49 s | 1.35 s (1.35-1.60) → 0.95 s (0.92-0.96) |
+| 9.10 s, 0.90 s breath from 4.60 s, mid-sentence | 1 → 2 | 0.90 s → 0.47 s | 1.57 s (1.36-1.61) → 0.90 s (0.89-0.90) |
+
+Both straddling rows recognise and tidy their first piece about 3 s and 1.7 s before the key
+comes up, and the words are the same as before to the character — including the mid-sentence
+row, whose wrong full stop after "design review" is the recogniser punctuating the breath and
+is there whether or not a piece is cut there. Word error rate over the whole bench corpus is
+unchanged in every category, voice and audio variant; no corpus clip has a pause across the
+five-second mark, so none of them changed piece count either.
+
+**The first row cannot be fixed by finding a pause, because there is none.** Its loudness has
+no quiet run of even 0.25 s, so no threshold reaches it. The ceiling for continuous speech is
+what a blind cut at a chosen second would buy, measured with `uttrflow-dev transcribe` on the
+same clip split at 6.5 s, three runs: the whole clip is recognised in 0.96 s (0.94-1.09) and
+the last 3.08 s alone in 0.49 s (0.49-0.66). So about 0.47 s of the 1.58 s wait is available —
+and it costs the word the cut lands in. The head came back as "fix the flaky test proper",
+lowercase and unpunctuated, and the tail as "than retry it three times": "properly" is gone,
+one word in thirty, which is the same damage a hard cut did to "Terraform" above.
+`MeaningPreservationGuard` cannot see it, because it judges each piece's rewrite against that
+piece's own words and never sees the seam. Buying that 0.47 s therefore needs the seam to
+carry evidence of what it is (#474) and the tail's recognition not to queue behind the head's
+tidy (#853), rather than a blinder cut.
 
 ## Trimming the prompt does not pay
 

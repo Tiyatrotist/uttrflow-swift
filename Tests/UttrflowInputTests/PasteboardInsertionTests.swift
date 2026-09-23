@@ -98,10 +98,13 @@ final class FakeKeystrokeSender: KeystrokeSender {
 /// A caret that answers a fixed value and counts how many times it was asked, which is the point of #222.
 final class CountingFocus: AccessibilityFocus, @unchecked Sendable {
     private let answer: String
+    private let readsBeforeItLands: Int
     private let reads = Mutex(0)
 
-    init(answer: String) {
+    /// `readsBeforeItLands` is how many reads answer something else, so a pre-paste read differs from the landed text.
+    init(answer: String, readsBeforeItLands: Int = 0) {
         self.answer = answer
+        self.readsBeforeItLands = readsBeforeItLands
     }
 
     func focusedTextField() -> (any FocusedTextField)? { nil }
@@ -109,8 +112,11 @@ final class CountingFocus: AccessibilityFocus, @unchecked Sendable {
     func isSelfFrontmost() -> Bool { false }
 
     func tail(upTo count: Int) -> FieldTail {
-        reads.withLock { $0 += 1 }
-        return .text(answer)
+        let read = reads.withLock { reads -> Int in
+            reads += 1
+            return reads
+        }
+        return .text(read > readsBeforeItLands ? answer : "what was already there")
     }
 
     var readCount: Int { reads.withLock { $0 } }
@@ -253,7 +259,7 @@ struct PasteboardTextInsertionEngineTests {
 
     @Test("reports a paste it read back as confirmed")
     func reportsAConfirmedPaste() async throws {
-        let focus = CountingFocus(answer: "and then dictated words")
+        let focus = CountingFocus(answer: "and then dictated words", readsBeforeItLands: 1)
 
         #expect(try await confirming(focus).insert("dictated words") == .confirmed)
     }
@@ -284,7 +290,7 @@ struct UnreportedPasteRouteTests {
     /// #222: the clip route is built with no `reporting:`, so it was the one path that checked nothing.
     @Test("checks the paste on the route that nothing is listening to")
     func confirmsWithoutAReporter() async throws {
-        let focus = CountingFocus(answer: "and then dictated words")
+        let focus = CountingFocus(answer: "and then dictated words", readsBeforeItLands: 1)
         let coordinator = TextInsertion.coordinator(
             focus: focus, pasteboard: FakePasteboard(), keystrokes: FakeKeystrokeSender())
 

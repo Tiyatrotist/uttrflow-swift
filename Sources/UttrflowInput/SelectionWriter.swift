@@ -22,10 +22,18 @@ struct SelectionWriter<Field: SelectionAttributes>: FocusedTextField {
     func replaceSelection(with text: String) throws(TextInsertionError) {
         // Read first so the write can be checked; a field that will not answer is trusted.
         let before = field.value()
+        let selectionBefore = field.selectedRange()
 
         let result = field.setSelectedText(text)
         guard result == .success else {
             throw .insertionRejected(description: "the field refused the text (\(result.rawValue))")
+        }
+
+        // The selection collapsing to where this text ends is a write, even where the text it replaced reads the same.
+        if let selectionBefore, let after = field.selectedRange(), after.length == 0,
+            after.location == selectionBefore.location + text.utf16.count
+        {
+            return
         }
 
         // A success that changed nothing is the failure this catches. See `Docs/insertion.md`.

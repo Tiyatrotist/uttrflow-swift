@@ -293,9 +293,15 @@ alone. Some cleanings only make sense over the whole:
   allows paragraphs, the join is a blank line rather than a space.
 - **Restatement corrections** that straddle a boundary.
 - **The seam's stop.** A piece ends at a pause of 0.8 s (0.4 s past fifteen seconds), which
-  `Docs/early-transcription.md` reads as a sentence ending, so every seam but a list item's
-  or a code line's ends as a sentence the way the place ends one: a full stop unless the
-  place's stop policy is `.never`, in which case a stop the recogniser wrote comes off.
+  `Docs/early-transcription.md` reads as a sentence ending, so a seam ends as a sentence the
+  way the place ends one: a full stop unless the place's stop policy is `.never`, in which
+  case a stop the recogniser wrote comes off. A pause is not always a sentence end, so a seam
+  takes no stop where a list item or a code line ends the piece, or where the words on either
+  side of the cut show the sentence ran through it: the piece ends on a word no sentence ends
+  on ("we moved the review to"), or the next piece opens on a preposition a speaker never
+  fronts followed by a name or a determiner ("to Thursday"), which is a phrase continuing the
+  clause before it. A seam with no evidence either way keeps its stop, which is what #183
+  asked for.
 
 Some passes are only correct over the whole message, and their scope is in the type.
 `CleaningPipeline.piece(numbers:digits:steps:)` is what a piece gets — it takes no

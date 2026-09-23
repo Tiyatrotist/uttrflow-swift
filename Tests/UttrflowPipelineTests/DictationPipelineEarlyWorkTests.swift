@@ -15,10 +15,12 @@ private actor NumberingSpeechEngine: SpeechEngine {
     private(set) var sampleCounts: [Int] = []
     private(set) var biases: [[String]] = []
     private var silentCalls: Set<Int>
+    private var blankCalls: Set<Int>
     private var failingCalls: Set<Int>
 
-    init(silentCalls: Set<Int> = [], failingCalls: Set<Int> = []) {
+    init(silentCalls: Set<Int> = [], blankCalls: Set<Int> = [], failingCalls: Set<Int> = []) {
         self.silentCalls = silentCalls
+        self.blankCalls = blankCalls
         self.failingCalls = failingCalls
     }
 
@@ -33,7 +35,8 @@ private actor NumberingSpeechEngine: SpeechEngine {
         if silentCalls.contains(call) { throw .nothingHeard }
         if failingCalls.contains(call) { throw .transcriptionFailed(description: "call \(call)") }
         return Transcription(
-            text: "w\(call) x", detectedLanguage: DetectedLanguage(code: .english, confidence: 1),
+            text: blankCalls.contains(call) ? "" : "w\(call) x",
+            detectedLanguage: DetectedLanguage(code: .english, confidence: 1),
             audioDuration: audio.duration)
     }
 
@@ -268,6 +271,8 @@ private enum Take {
     /// Three phrases with a clear pause after the first two.
     static let threePieces = AudioSamples.canonical(
         tone(1.2) + silence(0.5) + tone(1.2) + silence(0.5) + tone(0.4))
+
+    static let speechThenSilence = AudioSamples.canonical(tone(1.2) + silence(1.0))
 }
 
 /// Windows short enough for a test recording to have several.
@@ -297,12 +302,13 @@ struct DictationPipelineEarlyWorkTests {
         corrector: any WordCorrecting = NoTextChanges(),
         metrics: any MetricsRecording = NoOpMetricsRecorder(),
         recordings: any RecordingKeeper = RecordingsNotKept(),
+        earlyPoll: Duration = .milliseconds(2),
         speechWords: @escaping @Sendable (AppContext) async -> [String] = { _ in [] }
     ) -> DictationPipeline {
         DictationPipeline(
             capture: capture, speech: speech, cleaner: cleaner, context: context,
             inserter: inserter, speechWords: speechWords, corrector: corrector, metrics: metrics,
-            recordings: recordings, windowing: quick, earlyPoll: .milliseconds(2))
+            recordings: recordings, windowing: quick, earlyPoll: earlyPoll)
     }
 
     /// Waits for the recogniser to have been asked `count` times.
@@ -466,23 +472,49 @@ struct DictationPipelineEarlyWorkTests {
         #expect(await speech.calls == 3)
     }
 
-    @Test("a window with nothing in it is skipped, and the rest are joined")
+    @Test("a speech-bearing piece with no words fails the dictation instead of inserting a partial answer")
+    func speechBearingPieceIsNotSkipped() async {
+        for blank in [false, true] {
+            let speech = NumberingSpeechEngine(
+                silentCalls: blank ? [] : [2], blankCalls: blank ? [2] : [])
+            let inserter = CollectingInserter()
+            let pipeline = makePipeline(
+                capture: FakeAudioCaptureEngine(stopOutcome: .success(Take.threePieces)),
+                speech: speech, inserter: inserter, earlyPoll: .seconds(60))
+
+            await pipeline.startRecording()
+            await pipeline.finishRecording()
+
+            #expect(
+                await pipeline.currentState
+                    == .failed(
+                        DictationFailure(
+                            SpeechEngineError.transcriptionFailed(
+                                description: "speech in a recording piece produced no words"))))
+            #expect(inserter.texts.isEmpty)
+        }
+    }
+
+    @Test("a genuinely silent trailing window is skipped after speech")
     func silentWindowIsSkipped() async {
         let speech = NumberingSpeechEngine(silentCalls: [2])
         let pipeline = makePipeline(
-            capture: FakeAudioCaptureEngine(stopOutcome: .success(Take.threePieces)), speech: speech)
+            capture: FakeAudioCaptureEngine(stopOutcome: .success(Take.speechThenSilence)),
+            speech: speech, earlyPoll: .seconds(60))
 
         await pipeline.startRecording()
         await pipeline.finishRecording()
 
-        #expect(await pipeline.currentState.outcome?.text == "W1 X. W3 X")
+        #expect(await pipeline.currentState.outcome?.text.hasPrefix("W1 X") == true)
+        #expect(await speech.calls == 2)
     }
 
-    @Test("a recording with nothing in any window is refused as silence")
+    @Test("a genuinely silent recording is refused as silence")
     func allSilentIsRefused() async {
-        let speech = NumberingSpeechEngine(silentCalls: [1, 2, 3])
+        let speech = NumberingSpeechEngine(silentCalls: [1])
         let pipeline = makePipeline(
-            capture: FakeAudioCaptureEngine(stopOutcome: .success(Take.threePieces)), speech: speech)
+            capture: FakeAudioCaptureEngine(stopOutcome: .success(AudioSamples.canonical(Take.silence(3)))),
+            speech: speech)
 
         await pipeline.startRecording()
         await pipeline.finishRecording()

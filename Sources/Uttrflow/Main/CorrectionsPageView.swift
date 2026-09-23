@@ -3,7 +3,7 @@
 import UttrflowUX
 import SwiftUI
 
-/// Every word Uttrflow changed today and why; nothing is abbreviated, so a long row grows.
+/// Every dictionary correction listed today and why; nothing is abbreviated, so a long row grows.
 struct CorrectionsPageView: View {
     let presentation: CorrectionsPresentation
     var onIntent: (MainIntent) -> Void

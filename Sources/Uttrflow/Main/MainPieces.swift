@@ -136,6 +136,31 @@ struct MainCalloutView: View {
     }
 }
 
+/// The band above a page saying a change it was asked for did not happen.
+struct MainNoticeBar: View {
+    let notice: MainNotice
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: notice.symbolName)
+                .font(.system(size: 13))
+                .foregroundStyle(notice.tone.foreground)
+                .padding(.top, 1)
+            Text(notice.message)
+                .font(.system(size: MainMetrics.subheadSize))
+                // In the tone's own colour, not secondary: a refusal has to read unlike a caption.
+                .foregroundStyle(notice.tone.foreground)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(notice.tone.background, in: .rect(cornerRadius: MainMetrics.cardRadius))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(notice.message)
+    }
+}
+
 /// A capsule filled to a fraction of its width, on a faint track.
 struct MainBar: View {
     let fraction: Double
