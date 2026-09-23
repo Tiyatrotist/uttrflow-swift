@@ -93,6 +93,26 @@ struct PanelPlacementTests {
         #expect(origin.y >= small.minY)
     }
 
+    /// A display shorter than the panel must still show its top edge, where the search field lives.
+    @Test("a display shorter than the panel is given a shrunk panel, not a clipped one")
+    func fittedOnAShortDisplay() {
+        let shortDisplay = CGRect(x: 0, y: 0, width: 420, height: 500)
+
+        let size = PanelPlacement.fitted(Self.size, in: shortDisplay)
+        let origin = PanelPlacement.origin(remembered: nil, size: size, in: shortDisplay)
+        let panel = CGRect(origin: origin, size: size)
+
+        #expect(size.height == 500)
+        #expect(panel.minY >= shortDisplay.minY, "top control stays on screen")
+        #expect(panel.maxY <= shortDisplay.maxY)
+    }
+
+    /// A display roomy enough for the design never shrinks it.
+    @Test("fitted leaves a size that already fits alone")
+    func fittedLeavesRoomyDisplayAlone() {
+        #expect(PanelPlacement.fitted(Self.size, in: Self.screen) == Self.size)
+    }
+
     /// Clamping is idempotent, or a position drifting by a margin each open would walk across the screen.
     @Test("clamping a position that is already fine changes nothing")
     func idempotent() {

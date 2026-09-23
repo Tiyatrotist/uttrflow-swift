@@ -81,7 +81,11 @@ with none opens in its default corner.
 A remembered position is clamped rather than trusted. Displays are unplugged and
 resolutions change, and a panel restored onto a screen that no longer extends that far
 would open somewhere the user cannot see or reach, with no way back, because moving it
-needs it to be visible first. When the panel is larger than the screen, `clamped` pins it
-to the bottom-left rather than centring on the overflow: the alternative is a negative
-range, and the corner at least keeps the search field and the first rows reachable.
-Clamping is idempotent, because the panel is placed on every open.
+needs it to be visible first. Before either the default corner or a remembered spot is
+computed, `PanelPlacement.fitted` shrinks the design size to the display's visible frame,
+so a display shorter or narrower than the design gets a smaller panel rather than one
+whose top runs off the top. `clamped` then pins whatever is left to the bottom-left rather
+than centring on any remaining overflow: the alternative is a negative range, and the
+corner keeps the search field and the first rows reachable because the panel it is
+placing now actually fits. Clamping is idempotent, because the panel is placed on every
+open.

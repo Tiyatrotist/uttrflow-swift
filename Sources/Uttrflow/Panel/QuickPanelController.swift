@@ -265,9 +265,11 @@ final class QuickPanelController: NSObject, NSWindowDelegate {
     /// Places the panel where the user left it on this display, or in the top-right corner, via `PanelSpots`.
     private func placedFrame(on screen: NSScreen?) -> CGRect {
         // The design's size on every open; a resize lasts only while the panel is on screen.
-        let size = CGSize(width: QuickPanelMetrics.width, height: QuickPanelMetrics.height)
+        let designSize = CGSize(width: QuickPanelMetrics.width, height: QuickPanelMetrics.height)
         // With no screen at all, a rectangle at the origin beats a crash.
-        guard let screen else { return CGRect(origin: .zero, size: size) }
+        guard let screen else { return CGRect(origin: .zero, size: designSize) }
+        // Shrunk to the visible frame first, so a display shorter than the design still shows the top controls.
+        let size = PanelPlacement.fitted(designSize, in: screen.visibleFrame)
         let origin = rememberedSpots.origin(
             on: Self.displayNumber(of: screen), size: size, in: screen.visibleFrame)
         return CGRect(
