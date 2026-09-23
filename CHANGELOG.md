@@ -12,6 +12,12 @@ Each released version is a git tag and a build at
 ## [Unreleased]
 
 ### Fixed
+- **Inline ghost stops at the host window's edge when the field's frame is unusable.** When the
+  focused field's Accessibility frame was a caret-shaped 3pt rectangle or the caret was scrolled
+  outside it, the ghost ran all the way to the screen's right edge, painting over the host
+  window's chrome and controls. The host window's rectangle is now the second rung of the bound
+  ladder, between the field and the screen, and a caret-shaped field frame is no longer taken
+  as a real field at all (#1101).
 - **Copy Diagnostics no longer puts dictated words on the clipboard.** When the AI clean-up refused
   an answer, the copied report quoted the words it refused over — a name, a number, whatever was
   said — though the report promises it counts and never quotes. It now names the kind of refusal
