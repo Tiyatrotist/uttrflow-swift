@@ -272,6 +272,8 @@ def jobs(args):
     chosen = [c for c in made if not args.categories or c["category"] in args.categories.split(",")]
     if args.clean_only:
         chosen = [c for c in chosen if c["variant"] == "clean"]
+    if not chosen:
+        sys.exit(f"--categories {args.categories!r} selected no clips out of {len(made)} in the corpus")
     cleaners = args.cleaners.split(",")
     if not set(cleaners) <= {"shipping", "rules"}:
         sys.exit(f"--cleaners takes shipping and rules, not {args.cleaners}")
@@ -282,6 +284,8 @@ def jobs(args):
                 fields = [c["id"], c["wav"], ",".join(c["vocabulary"]), args.mode, cleaner]
                 if c.get("languages"): fields.append(",".join(c["languages"]))
                 lines.append("\t".join(fields))
+    if not lines:
+        sys.exit(f"selected {len(chosen)} clip(s) but --repeat {args.repeat} produced no jobs")
     sys.stdout.write("\n".join(lines) + "\n")
 
 
@@ -346,14 +350,23 @@ def percentile(values, p):
 
 def score(args):
     made = {c["id"]: c for c in json.load(open(os.path.join(args.out, "corpus.json")))}
-    rows = []
+    rows, unknown_ids, malformed = [], [], 0
     for line in open(args.run):
-        if line.startswith("BENCH "):
+        if not line.startswith("BENCH "):
+            continue
+        try:
             event = json.loads(line[6:])
-            if event["event"] == "loaded":
-                print(f"model loaded in {event['seconds']:.1f} s, {event['cpu']:.1f} processor-seconds")
-            elif event["event"] == "result" and event["id"] in made:
+            kind = event["event"]
+        except (json.JSONDecodeError, KeyError):
+            malformed += 1
+            continue
+        if kind == "loaded":
+            print(f"model loaded in {event['seconds']:.1f} s, {event['cpu']:.1f} processor-seconds")
+        elif kind == "result":
+            if event.get("id") in made:
                 rows.append(event)
+            else:
+                unknown_ids.append(event.get("id"))
     scored = []
     for r in rows:
         c = made[r["id"]]
@@ -366,6 +379,18 @@ def score(args):
         scored.append(dict(r=r, c=c, raw=(raw_e, raw_n), out=(out_e, out_n), first_early=min(early) if early else None,
                            asr=sum(float(e["t1"]) - float(e["t0"]) for e in heard),
                            tidy=sum(float(e["t1"]) - float(e["t0"]) for e in tidied)))
+    if not scored:
+        details = []
+        if unknown_ids:
+            details.append(f"{len(unknown_ids)} result(s) with an id not in the corpus: {sorted(set(unknown_ids))[:10]}")
+        if malformed:
+            details.append(f"{malformed} malformed or unrecognized BENCH line(s)")
+        reason = "; ".join(details) if details else "the run file had no BENCH result events"
+        sys.exit(f"no recognized results scored in {args.run} ({reason})")
+    if unknown_ids:
+        print(f"\n{len(unknown_ids)} result(s) had an id not in the corpus: {sorted(set(unknown_ids))}")
+    if malformed:
+        print(f"{malformed} malformed or unrecognized BENCH line(s) were skipped")
 
     def wer_table(title, key, keep):
         groups = defaultdict(list)
