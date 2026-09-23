@@ -769,6 +769,14 @@ struct GeneratedSuggestionTests {
         #expect(update?.suggestion == .certain("git commit"))
     }
 
+    @Test("A model line that is the typed text in another case is not an extension, so it is dropped.")
+    func theTypedLineInAnotherCaseIsNotADrawable() throws {
+        var session = SuggestionSession()
+        let asked = try asked(&session, typing: "Meet a")
+        let update = session.resolveGenerated(["meet a"], for: asked, elapsedMilliseconds: 0)
+        #expect(update == .quiet(because: .nothingOffered))
+    }
+
     @Test("When nothing the model returns can be shown, nothing is.")
     func nothingUsable() throws {
         var session = SuggestionSession()

@@ -46,6 +46,28 @@ struct MainMenuTests {
         }
     }
 
+    /// ⌘F is where people reach for search without looking, so Edit is the only place it can live.
+    @Test("Edit offers Find on plain command-F")
+    func find() throws {
+        let find = try #require(MainMenu.edit.items.first { $0.title == "Find" })
+        #expect(find.keyEquivalent == "f")
+        #expect(find.keyEquivalentModifierMask == [.command])
+        #expect(find.action == #selector(AppDelegate.findFromMenu(_:)))
+    }
+
+    /// One shortcut, one item: a second claim on ⌘F would leave which one fires up to menu order.
+    @Test("nothing else in the menu bar answers to command-F")
+    func findIsTheOnlyClaimOnCommandF() {
+        let menus = [
+            MainMenu.application(named: "Uttrflow"), MainMenu.edit, MainMenu.view, MainMenu.window,
+            MainMenu.help(for: "Uttrflow"),
+        ]
+        let claims = menus.flatMap(\.items).filter {
+            $0.keyEquivalent == "f" && $0.keyEquivalentModifierMask == [.command]
+        }
+        #expect(claims.map(\.title) == ["Find"])
+    }
+
     @Test("Redo is shift-command-Z, not a second plain command-Z")
     func redo() throws {
         let redo = try #require(MainMenu.edit.items.first { $0.title == "Redo" })

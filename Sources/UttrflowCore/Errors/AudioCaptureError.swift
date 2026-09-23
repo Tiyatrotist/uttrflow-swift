@@ -1,5 +1,7 @@
 /// A failure while recording.
 public enum AudioCaptureError: UttrflowFailure {
+    /// macOS has not granted this process microphone access.
+    case microphoneDenied
     /// No microphone is connected.
     case noInputDevice
     /// `start` while already recording.
@@ -14,6 +16,8 @@ public enum AudioCaptureError: UttrflowFailure {
     /// A plain sentence per case.
     public var userMessage: String {
         switch self {
+        case .microphoneDenied:
+            "Microphone access is required. Turn it on in System Settings to start dictating."
         case .noInputDevice:
             "No microphone was found. Connect one and try again."
         case .alreadyRecording:
@@ -27,9 +31,10 @@ public enum AudioCaptureError: UttrflowFailure {
         }
     }
 
-    /// A retry for a one-off; nothing for a missing or unusable microphone.
+    /// The Microphone pane where access is refused, a retry for a one-off, nothing for unusable hardware.
     public var recovery: RecoveryAction? {
         switch self {
+        case .microphoneDenied: .openSystemSettings(.microphone)
         case .noInputDevice, .unsupportedInputFormat: nil
         case .alreadyRecording, .notRecording, .engineFailed: .retry
         }
@@ -39,7 +44,7 @@ public enum AudioCaptureError: UttrflowFailure {
     public var severity: FailureSeverity {
         switch self {
         // No usable microphone is the end of it: nothing to record with.
-        case .noInputDevice, .unsupportedInputFormat: .blocking
+        case .microphoneDenied, .noInputDevice, .unsupportedInputFormat: .blocking
         // The two state assertions and a dropped audio unit are one-offs the next press gets past.
         case .alreadyRecording, .notRecording, .engineFailed: .recoverable
         }

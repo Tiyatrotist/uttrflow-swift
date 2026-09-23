@@ -126,11 +126,16 @@ public actor CaptureSession {
         {
             return .refused(refusal)
         }
-        if let superseded = commit.supersedes {
-            try await sink.supersede(superseded, with: commit.text, in: surface)
+        do {
+            if let superseded = commit.supersedes {
+                try await sink.supersede(superseded, with: commit.text, in: surface)
+            }
+            try await sink.record(
+                commit.text, in: surface, after: lastRecorded[surface], selfSourced: false, at: moment)
+        } catch {
+            detector.forgetLastIdleCommit()
+            throw error
         }
-        try await sink.record(
-            commit.text, in: surface, after: lastRecorded[surface], selfSourced: false, at: moment)
         lastRecorded[surface] = commit.text
         return .recorded(commit.text)
     }

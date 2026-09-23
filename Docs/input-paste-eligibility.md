@@ -3,6 +3,9 @@
 `PasteboardTextInsertionEngine.canInsert()` declines for one case only: Uttrflow itself
 being the frontmost application. Everything else is worth attempting.
 
+Per-application results live in [compatibility.md](compatibility.md), whose `Paste` column this
+page feeds — specifically whether the route volunteers at all.
+
 ## Asking Accessibility first refused the applications pasting exists for
 
 The precondition used to be "can the Accessibility API see a focused element", which

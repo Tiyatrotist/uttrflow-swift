@@ -136,6 +136,22 @@ struct TerminalPathGateTests {
         #expect(standing == ["git push origin main"])
     }
 
+    @Test("A line in a remote session is not suggested, and this Mac's disk is not asked about it.")
+    func remoteSessionIsNotThisDisk() async throws {
+        let disk = FakeDisk(
+            directories: ["/Users/someone/api"], files: ["/Users/someone/api/README.md"],
+            executables: ["/usr/bin/cat"])
+        let verifier = Verifier(index: EnvironmentIndex(reader: StubEnvironment([:])), files: disk)
+        let lines = ["cat README.md", "cat /Users/someone/api/README.md"]
+        let candidates = lines.map { Candidate(text: $0, source: .personal) }
+        let remote = shell(in: RemoteSession.scope)
+        #expect(await verifier.verified(candidates, in: remote, typed: "", now: moment).isEmpty)
+        #expect(await verifier.standing(lines, after: "cat", in: remote, now: moment).isEmpty)
+        #expect(disk.operations.isEmpty)
+        let here = shell(in: "/Users/someone/api")
+        #expect(await verifier.verified(candidates, in: here, typed: "", now: moment).map(\.text) == lines)
+    }
+
     @Test("A model's line with a path that is not here is dropped before the machine has answered.")
     func generatedLinesAreChecked() async throws {
         let folder = try Folder()

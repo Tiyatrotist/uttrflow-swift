@@ -109,6 +109,7 @@ extension LocalStore {
             else { continue }
             do {
                 try FileManager.default.moveItem(at: url, to: destination)
+                try? PrivateFile.excludeFromBackup(at: destination)
                 log.error("Set aside an unreadable \(name, privacy: .public) instead of replacing it")
                 return destination
             } catch {

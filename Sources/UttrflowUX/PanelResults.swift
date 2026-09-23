@@ -55,46 +55,64 @@ public struct PanelResults: Sendable, Equatable {
 }
 
 extension PanelSnapshot {
-    /// What the panel is showing right now, computed on every ask so Return has one answer.
+    /// What the panel is showing right now, found once for each list of clips, query and tab, so Return and an arrow key share the search.
     public var results: PanelResults {
+        let (rows, omitted) = searchMemo.rows(
+            for: PanelSearchMemo.View(self), scanning: matches(ruledIn:), ranking: ranked)
+        return PanelResults(
+            rows: rows, selectedIndex: Self.index(of: selection, in: rows), omitted: omitted)
+    }
+
+    /// Every clip this view admits, and why it is here; `ruledIn` names the clips a shorter query found, whose text alone still has to be searched, and `nil` searches every clip's.
+    func matches(ruledIn: Set<Clip.ID>?) -> [PanelMatch] {
         let needle = self.needle
         // A tab narrows what is browsed, never what is searched, so typing looks everywhere.
         let wanted = needle.isEmpty ? Self.name(category) : nil
         // The bottom bar is a tab too, and `nil` rather than `.history` so a search still finds dictations.
         let browsing: PanelScope? = needle.isEmpty ? scope : nil
 
-        // The store's position rides along so equal ranks keep copy order and the sort is total.
-        let found = clips.enumerated().compactMap { position, clip -> (Int, PanelResult)? in
+        return clips.enumerated().compactMap { position, clip -> PanelMatch? in
             guard browsing?.admits(clip, inCollection: wanted != nil) ?? true,
                 filter.admits(clip.kind)
             else { return nil }
             if let wanted, Self.name(clip.category) != wanted { return nil }
             guard !needle.isEmpty else {
-                return (position, PanelResult(clip: clip, match: nil, isExactAlias: false))
+                return PanelMatch(
+                    position: position,
+                    result: PanelResult(clip: clip, match: nil, isExactAlias: false))
             }
             // The exact test comes first, so "/pgprod" still finds the clip aliased "pgprod".
             let isExact = Self.isAlias(needle, of: clip, locale: locale)
+            // An alias and a collection name are words and are searched for every clip; only a clip's own text is long enough to be worth skipping.
             let matched: PanelMatchField? =
-                isExact ? .alias : Self.field(matching: needle, in: clip, locale: locale)
+                isExact
+                ? .alias
+                : Self.field(
+                    matching: needle, in: clip, locale: locale,
+                    searchingText: ruledIn?.contains(clip.id) ?? true)
             guard let matched else { return nil }
-            return (position, PanelResult(clip: clip, match: matched, isExactAlias: isExact))
+            return PanelMatch(
+                position: position,
+                result: PanelResult(clip: clip, match: matched, isExactAlias: isExact))
         }
+    }
 
+    /// The matches in the order they are drawn, and how many of each kind the cap left out.
+    func ranked(_ matches: [PanelMatch]) -> ([PanelResult], [PanelMatchField: Int]) {
+        let needle = self.needle
         // A clip whose whole text is the query can never be narrowed to, so it leads its group.
         let whole = Set(
-            found.lazy.filter { $0.1.match == .content }.map(\.1.clip)
+            matches.lazy.filter { $0.result.match == .content }.map(\.result.clip)
                 .filter { Self.isWhole(needle, of: $0, locale: self.locale) }.map(\.id))
-        let ordered = found.sorted { Self.rank($0, whole: whole) < Self.rank($1, whole: whole) }
-            .map { $0.1 }
-        let (kept, omitted) = Self.capping(ordered) { row in
+        let ordered = matches.sorted { Self.rank($0, whole: whole) < Self.rank($1, whole: whole) }
+            .map(\.result)
+        return Self.capping(ordered) { row in
             // A collection named exactly is asked for whole; there is nothing more to type to narrow it.
             row.match == .category
                 && row.clip.category?.compare(
                     needle, options: [.caseInsensitive, .diacriticInsensitive], locale: self.locale)
                     == .orderedSame
         }
-        return PanelResults(
-            rows: kept, selectedIndex: Self.index(of: selection, in: kept), omitted: omitted)
     }
 
     /// Whether a clip's whole text, trimmed, is the query, ignoring case and accents.
@@ -105,12 +123,12 @@ extension PanelSnapshot {
     }
 
     /// Match field, then exact alias or whole text, then pinned, then arrival order, so groups are contiguous for ↓.
-    static func rank(_ entry: (Int, PanelResult), whole: Set<Clip.ID>) -> (Int, Int, Int, Int) {
+    static func rank(_ entry: PanelMatch, whole: Set<Clip.ID>) -> (Int, Int, Int, Int) {
         (
-            entry.1.match?.rawValue ?? 0,
-            entry.1.isExactAlias || whole.contains(entry.1.clip.id) ? 0 : 1,
-            entry.1.clip.isPinned ? 0 : 1,
-            entry.0
+            entry.result.match?.rawValue ?? 0,
+            entry.result.isExactAlias || whole.contains(entry.result.clip.id) ? 0 : 1,
+            entry.result.clip.isPinned ? 0 : 1,
+            entry.position
         )
     }
 
@@ -143,10 +161,13 @@ extension PanelSnapshot {
         return selection.flatMap { id in rows.firstIndex { $0.id == id } } ?? 0
     }
 
-    /// The strongest part of a clip the query appears in: alias, then category, then content.
-    static func field(matching needle: String, in clip: Clip, locale: Locale) -> PanelMatchField? {
+    /// The strongest part of a clip the query appears in: alias, then category, then content, the last searched only where an earlier query has not already ruled the clip out.
+    static func field(
+        matching needle: String, in clip: Clip, locale: Locale, searchingText: Bool = true
+    ) -> PanelMatchField? {
         let fields: [(PanelMatchField, String?)] = [
-            (.alias, clip.alias), (.category, clip.category), (.content, clip.text),
+            (.alias, clip.alias), (.category, clip.category),
+            (.content, searchingText ? clip.text : nil),
         ]
         return fields.first { $0.1?.contains(needle, ignoringCaseAndAccentsIn: locale) == true }?.0
     }

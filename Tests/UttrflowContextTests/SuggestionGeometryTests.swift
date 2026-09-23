@@ -75,26 +75,122 @@ struct SuggestionGeometryTests {
         #expect(anchor?.frame.maxX == field.maxX)
     }
 
-    @Test("A field frame that does not hold the caret, or is caret-thin, is not trusted as the edge")
-    func anUntrustworthyFieldIsIgnored() {
+    @Test("A field frame that does not hold the caret falls to the window edge, not the screen")
+    func anUntrustworthyFieldFallsToTheWindow() {
         let long = CGSize(width: 2_000, height: 24)
-        for field in [
-            CGRect(x: 10, y: 490, width: 300, height: 30), CGRect(x: 621, y: 490, width: 2, height: 17),
-            CGRect.null,
-        ] {
-            let anchor = SuggestionGeometry.anchor(
-                for: .inlineGhost, caret: caret, window: documentWindow, field: field, screen: mainScreen,
-                size: long)
-            #expect(anchor?.frame.maxX == mainScreen.maxX)
-        }
+        // Field starts before the caret and ends before it — the caret is outside on the right.
+        let shiftedField = CGRect(x: 10, y: 490, width: 300, height: 30)
+        let anchor = SuggestionGeometry.anchor(
+            for: .inlineGhost, caret: caret, window: documentWindow, field: shiftedField,
+            screen: mainScreen, size: long)
+        #expect(anchor?.frame.maxX == documentWindow.maxX)
+    }
+
+    @Test("A caret-thin field frame is not trusted, so the window edge is the bound")
+    func aCaretThinFieldFallsToTheWindow() {
+        let long = CGSize(width: 2_000, height: 24)
+        let thinField = CGRect(x: 621, y: 490, width: 2, height: 17)
+        let anchor = SuggestionGeometry.anchor(
+            for: .inlineGhost, caret: caret, window: documentWindow, field: thinField,
+            screen: mainScreen, size: long)
+        #expect(anchor?.frame.maxX == documentWindow.maxX)
+    }
+
+    @Test("A null field falls to the window edge when the window holds the caret")
+    func aNullFieldFallsToTheWindow() {
+        let long = CGSize(width: 2_000, height: 24)
+        let anchor = SuggestionGeometry.anchor(
+            for: .inlineGhost, caret: caret, window: documentWindow, field: nil,
+            screen: mainScreen, size: long)
+        #expect(anchor?.frame.maxX == documentWindow.maxX)
+    }
+
+    @Test("A field and window that do not hold the caret fall all the way to the screen edge")
+    func nothingTrustworthyFallsToTheScreen() {
+        let long = CGSize(width: 2_000, height: 24)
+        let elsewhereWindow = CGRect(x: 1500, y: 200, width: 900, height: 700)
+        let elsewhereField = CGRect(x: 10, y: 490, width: 300, height: 30)
+        let anchor = SuggestionGeometry.anchor(
+            for: .inlineGhost, caret: caret, window: elsewhereWindow, field: elsewhereField,
+            screen: mainScreen, size: long)
+        #expect(anchor?.frame.maxX == mainScreen.maxX)
+    }
+
+    @Test("No window at all falls to the screen edge when the field is also untrustworthy")
+    func noWindowFallsToTheScreen() {
+        let long = CGSize(width: 2_000, height: 24)
+        let untrustworthyField = CGRect(x: 10, y: 490, width: 300, height: 30)
+        let anchor = SuggestionGeometry.anchor(
+            for: .inlineGhost, caret: caret, window: nil, field: untrustworthyField,
+            screen: mainScreen, size: long)
+        #expect(anchor?.frame.maxX == mainScreen.maxX)
+    }
+
+    @Test("A field the caret does not sit in is not the field, so the ghost runs to the window")
+    func fieldOutsideTheCaretRunsToTheWindow() {
+        let long = CGSize(width: 2_000, height: 24)
+        let fieldOffToTheLeft = CGRect(x: 100, y: 490, width: 300, height: 30)
+        let anchor = SuggestionGeometry.anchor(
+            for: .inlineGhost, caret: caret, window: documentWindow,
+            field: fieldOffToTheLeft, screen: mainScreen, size: long)
+        #expect(anchor?.frame.maxX == documentWindow.maxX)
+    }
+
+    @Test("A caret-shaped field frame is read as no field at all, so the ghost runs to the window")
+    func caretShapedFrameFallsToTheWindow() {
+        let long = CGSize(width: 2_000, height: 24)
+        let caretShapedField = CGRect(x: 620, y: 500, width: 2, height: 17)
+        let anchor = SuggestionGeometry.anchor(
+            for: .inlineGhost, caret: caret, window: documentWindow,
+            field: caretShapedField, screen: mainScreen, size: long)
+        #expect(anchor?.frame.maxX == documentWindow.maxX)
+    }
+
+    @Test("Without a field or a window, the ghost runs to the screen")
+    func noFieldNoWindowStopsAtTheScreen() {
+        let long = CGSize(width: 2_000, height: 24)
+        let anchor = SuggestionGeometry.anchor(
+            for: .inlineGhost, caret: caret, window: nil, field: nil, screen: mainScreen,
+            size: long)
+        #expect(anchor?.frame.maxX == mainScreen.maxX)
+    }
+
+    @Test("Available width follows the ladder: field edge, then window, then screen")
+    func availableWidthWalksTheLadder() {
+        // Field holds the caret and is narrower than the window: field edge wins.
+        let holding = CGRect(x: 400, y: 490, width: 300, height: 30)
+        #expect(
+            SuggestionGeometry.availableWidth(
+                caret: caret, field: holding, window: documentWindow, screen: mainScreen
+            ) == holding.maxX - caret.maxX)
+        // Field doesn't hold the caret: window edge wins.
+        let offToTheLeft = CGRect(x: 100, y: 490, width: 300, height: 30)
+        #expect(
+            SuggestionGeometry.availableWidth(
+                caret: caret, field: offToTheLeft, window: documentWindow, screen: mainScreen
+            ) == documentWindow.maxX - caret.maxX)
+        // Field is caret-thin and window is known: window wins, not screen.
+        let caretShaped = CGRect(x: 620, y: 500, width: 2, height: 17)
+        #expect(
+            SuggestionGeometry.availableWidth(
+                caret: caret, field: caretShaped, window: documentWindow, screen: mainScreen
+            ) == documentWindow.maxX - caret.maxX)
+        // Field is caret-thin and no window: screen wins.
+        #expect(
+            SuggestionGeometry.availableWidth(
+                caret: caret, field: caretShaped, window: nil, screen: mainScreen
+            ) == mainScreen.maxX - caret.maxX)
     }
 
     @Test("The room after the caret is nothing once the caret is past the screen's right edge")
     func noRoomPastTheEdge() {
         let past = CGRect(x: mainScreen.maxX + 5, y: 500, width: 0, height: 17)
-        #expect(SuggestionGeometry.availableWidth(caret: past, field: nil, screen: mainScreen) == nil)
         #expect(
-            SuggestionGeometry.availableWidth(caret: caret, field: nil, screen: mainScreen)
+            SuggestionGeometry.availableWidth(
+                caret: past, field: nil, window: nil, screen: mainScreen) == nil)
+        #expect(
+            SuggestionGeometry.availableWidth(
+                caret: caret, field: nil, window: nil, screen: mainScreen)
                 == mainScreen.maxX - caret.maxX)
     }
 
@@ -215,6 +311,18 @@ struct SuggestionGeometryTests {
             for: .inlineGhost, caret: CGRect(x: 240, y: 140, width: 2, height: 17),
             window: tiny, screen: tiny, size: huge)
         #expect(anchor?.frame == CGRect(x: 242, y: tiny.minY, width: tiny.maxX - 242, height: tiny.height))
+    }
+
+    @Test("A taller-than-the-window surface is cut to the window, not the screen")
+    func surfaceTallSurfaceIsCutToTheWindow() throws {
+        let tall = CGSize(width: 260, height: 1_200)
+        // A window shorter than the screen; the surface would otherwise extend past the window's bottom.
+        let shortWindow = CGRect(x: 380, y: 200, width: 900, height: 300)
+        let anchor = try #require(
+            SuggestionGeometry.anchor(
+                for: .inlineGhost, caret: caret, window: shortWindow, screen: mainScreen,
+                size: tall))
+        #expect(anchor.frame.maxY <= shortWindow.maxY)
     }
 
     @Test(

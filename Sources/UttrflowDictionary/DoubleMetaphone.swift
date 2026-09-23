@@ -1,3 +1,4 @@
+internal import Foundation
 private import Synchronization
 
 /// How a word sounds, as Double Metaphone's two codes, so an ambiguous opening never has to be guessed.
@@ -47,7 +48,7 @@ public enum DoubleMetaphone {
     /// Counts the encodings made while bound, child tasks included, so a test can bound the work without a clock.
     @TaskLocal package static var tally: EncodingTally?
 
-    /// The sound of one word; case and marks around it make no difference, while a mark inside it may.
+    /// The sound of one word; case, surrounding marks and Latin accents make no difference.
     public static func code(for word: String) -> PhoneticCode {
         tally?.record()
         var encoder = Encoder(word: word)
@@ -64,7 +65,9 @@ extension DoubleMetaphone {
         private var index = 0
 
         init(word: String) {
-            letters = Array(Self.withoutSurroundingMarks(word).uppercased())
+            letters = Array(
+                Self.withoutSurroundingMarks(word)
+                    .folding(options: .diacriticInsensitive, locale: nil).uppercased())
         }
 
         /// The word without quotes, brackets or other marks around it, so the opening rules start at its first letter.
@@ -171,7 +174,7 @@ extension DoubleMetaphone {
             case "W": encodeW()
             case "X": emit("KS", skipping: "XC", "XX")
             case "Z": encodeZ()
-            // Digits, punctuation, spaces, accented letters: no sound, no key.
+            // Digits, punctuation, spaces and letters outside the rule set have no sound key.
             default: index += 1
             }
         }
