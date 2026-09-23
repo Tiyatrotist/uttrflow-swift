@@ -92,6 +92,7 @@ if [[ "$REAL_CERTIFICATE" == "yes" && -z "$SIGNING_IDENTITY" ]]; then
 fi
 
 PACKAGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PACKAGE_ROOT"
 SCRIPT_DIR="$PACKAGE_ROOT/Scripts"
 
