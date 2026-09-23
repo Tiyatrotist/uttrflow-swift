@@ -54,7 +54,7 @@ struct OnboardingFlowTests {
         #expect(await harness.press("Continue"))
         #expect(harness.step == .microphone)
         #expect(harness.detail == .permission(.notDetermined))
-        #expect(harness.buttonTitles == ["Allow Microphone Access"])
+        #expect(harness.buttonTitles == ["Allow Microphone Access", "Continue Without It"])
     }
 
     // MARK: A permission that is already granted
@@ -94,7 +94,7 @@ struct OnboardingFlowTests {
         #expect(await harness.press("Allow Microphone Access"))
         #expect(harness.step == .microphone)
         #expect(harness.detail == .permission(.denied))
-        #expect(harness.buttonTitles == ["Open System Settings"])
+        #expect(harness.buttonTitles == ["Open System Settings", "Continue Without It"])
         #expect(harness.page.note != nil)
     }
 
@@ -108,15 +108,16 @@ struct OnboardingFlowTests {
         #expect(await harness.press("Open System Settings"))
         #expect(harness.panes.panes == [.microphone])
         #expect(harness.detail == .awaitingSystemSettings)
-        #expect(harness.buttonTitles == ["Open System Settings", "Check Again"])
+        #expect(
+            harness.buttonTitles == ["Open System Settings", "Check Again", "Continue Without It"])
 
         await harness.microphone.setStatus(.granted)
         await harness.flow.refresh()
         #expect(harness.step != .microphone)
     }
 
-    /// The microphone is not optional, so coming back without it offers no way on, and no loop either.
-    @Test("still refused on the way back: no loop, and no way past it either")
+    /// Checking again must not loop, and the way on stays beside it however many times it is pressed.
+    @Test("still refused on the way back: no loop, and the way on is still there")
     func stillRefusedOnReturn() async {
         let harness = Harness(microphone: .notDetermined, microphoneAfterAsking: .denied)
         await harness.flow.start()
@@ -129,7 +130,8 @@ struct OnboardingFlowTests {
         #expect(await harness.press("Check Again"))
         #expect(harness.step == .microphone)
         #expect(harness.detail == .awaitingSystemSettings)
-        #expect(harness.buttonTitles == ["Open System Settings", "Check Again"])
+        #expect(
+            harness.buttonTitles == ["Open System Settings", "Check Again", "Continue Without It"])
 
         // The pane stays reachable for somebody who closed the wrong window, and does not move them on.
         #expect(await harness.press("Open System Settings"))
@@ -173,18 +175,22 @@ struct OnboardingFlowTests {
 
         #expect(await harness.press("Continue"))
         #expect(harness.step == .accessibility)
-        #expect(harness.buttonTitles == ["Allow Accessibility Access"])
+        #expect(
+            harness.buttonTitles == ["Allow Accessibility Access", "Continue Without It"])
         #expect(await harness.press("Allow Accessibility Access"))
         #expect(harness.detail == .finishing(.ready))
     }
 
-    @Test("sends the user to the Accessibility pane once macOS has already been told no")
+    /// `AXIsProcessTrusted` cannot say "not asked", so the first visit still asks rather than sending them away.
+    @Test("sends the user to the Accessibility pane once the ask has been made")
     func accessibilityGoesToItsOwnPane() async {
         let harness = Harness(microphone: .granted, accessibility: .denied)
         await harness.flow.start()
         #expect(await harness.press("Continue"))
 
         #expect(harness.step == .accessibility)
+        #expect(harness.page.note == nil, "nobody has refused anything yet")
+        #expect(await harness.press("Allow Accessibility Access"))
         #expect(await harness.press("Open System Settings"))
         #expect(harness.panes.panes == [.accessibility])
     }
@@ -238,6 +244,68 @@ struct OnboardingFlowTests {
         await harness.flow.refresh()
         #expect(harness.detail == .finishing(.needsMicrophone))
         #expect(harness.buttonTitles == ["Open System Settings", "Close"])
+    }
+
+    /// The rule the flow is built on, end to end: a refusal is a choice, not a wall. See `Docs/ux-onboarding.md`.
+    @Test("a user who will not grant Accessibility still finishes, and is told what it costs")
+    func finishesWithoutAccessibility() async {
+        let harness = Harness(microphone: .granted, accessibility: .denied)
+        await harness.flow.start()
+        #expect(await harness.press("Continue"))
+        #expect(harness.step == .accessibility)
+
+        #expect(await harness.press("Continue Without It"))
+        #expect(harness.detail == .finishing(.pastesManually))
+        #expect(await harness.press("Start Using Uttrflow"))
+        #expect(harness.finishedWith == .pastesManually)
+    }
+
+    @Test("a user who will not grant the microphone still finishes, and is told what it costs")
+    func finishesWithoutTheMicrophone() async {
+        let harness = Harness(
+            microphone: .notDetermined, microphoneAfterAsking: .denied, accessibility: .granted)
+        await harness.flow.start()
+        #expect(await harness.press("Continue"))
+        #expect(await harness.press("Allow Microphone Access"))
+        #expect(harness.detail == .permission(.denied))
+
+        #expect(await harness.press("Continue Without It"))
+        #expect(harness.detail == .finishing(.needsMicrophone))
+        // Without a microphone there is nothing to start, so the last page closes rather than cheers.
+        #expect(await harness.press("Close"))
+        #expect(harness.finishedWith == .needsMicrophone)
+    }
+
+    /// Refusing both is the same choice twice, and neither page may hold the user on the way through.
+    @Test("a user who grants neither permission still reaches the end")
+    func finishesWithNeitherPermission() async {
+        let harness = Harness(
+            microphone: .notDetermined, microphoneAfterAsking: .denied, accessibility: .denied)
+        await harness.flow.start()
+        #expect(await harness.press("Continue"))
+        #expect(await harness.press("Allow Microphone Access"))
+        #expect(await harness.press("Continue Without It"))
+
+        // Neither page holds them: the second refusal is left the same way as the first.
+        #expect(harness.step == .accessibility)
+        #expect(await harness.press("Continue Without It"))
+
+        // The microphone stops them first, so that is the ending the last page reads.
+        #expect(harness.detail == .finishing(.needsMicrophone))
+        #expect(harness.finishedWith == nil, "nothing is finished until the last page is pressed")
+        #expect(await harness.press("Close"))
+        #expect(harness.finishedWith == .needsMicrophone)
+    }
+
+    /// Going past a refusal must never look like granting it, or the user is told they are set up when they are not.
+    @Test("going on without Accessibility does not say the Mac is ready")
+    func goingOnIsNotGranting() async {
+        let harness = Harness(microphone: .granted, accessibility: .denied)
+        await harness.flow.start()
+        #expect(await harness.press("Continue"))
+        #expect(await harness.press("Continue Without It"))
+
+        #expect(harness.detail != .finishing(.ready))
     }
 
     // MARK: The download

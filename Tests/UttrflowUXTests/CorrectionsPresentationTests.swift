@@ -1,4 +1,4 @@
-// Tests for the Corrections page: rows, scope, search, and the four empty states.
+// Tests for the Corrections page: dictionary-backed rows, scope, search, and empty states.
 import Foundation
 import UttrflowSettings
 import Testing
@@ -6,7 +6,7 @@ import Testing
 @testable import UttrflowUX
 
 extension HistoryFixture {
-    /// One change, seen on screen and in Slack by default.
+    /// One dictionary-backed correction, seen on screen and in Slack by default.
     static func correction(
         in dictation: UUID = UUID(),
         heard: String = "utter flow",
@@ -38,18 +38,20 @@ extension HistoryFixture {
     }
 }
 
-@Suite("Corrections: what was changed, and why")
+@Suite("Corrections: dictionary-backed substitutions")
 struct CorrectionsPageTests {
-    /// The page the product is accountable through, so the sentence saying so is on the page.
+    /// The page the product is accountable through, so the contract is on the page.
     @Test("the page says why it exists")
     func callout() {
         let page = HistoryFixture.corrections()
-        #expect(page.callout.message.contains("owes you this page"))
+        #expect(page.callout.message.contains("Dictionary-backed word substitutions"))
+        #expect(page.callout.message.contains("what it wrote from your Dictionary"))
         #expect(page.callout.symbolName == "arrow.left.arrow.right")
         #expect(page.chrome.title == "Corrections")
+        #expect(page.chrome.caption?.contains("Dictionary-backed substitutions") == true)
     }
 
-    @Test("every change made today is listed")
+    @Test("every dictionary correction made today is listed")
     func lists() {
         let page = HistoryFixture.corrections([
             HistoryFixture.correction(heard: "utter flow", wrote: "Uttrflow"),
@@ -72,7 +74,7 @@ struct CorrectionsPageTests {
         #expect(!row.when.isEmpty)
     }
 
-    @Test("a change that still applies can be undone")
+    @Test("a correction that still applies can be undone")
     func undo() {
         let correction = HistoryFixture.correction()
         let row = HistoryFixture.corrections([correction]).rows[0]
@@ -80,8 +82,8 @@ struct CorrectionsPageTests {
         #expect(!row.isUndone)
     }
 
-    /// Drawing an undone change as still applied would make this page lie about its own subject.
-    @Test("a change already put back is struck through and offers no second undo")
+    /// Drawing an undone correction as still applied would make this page lie about its own subject.
+    @Test("a correction already put back is struck through and offers no second undo")
     func alreadyUndone() {
         let row = HistoryFixture.corrections([HistoryFixture.correction(isUndone: true)]).rows[0]
         #expect(row.isUndone)
@@ -98,16 +100,16 @@ struct CorrectionsPageTests {
         }
     }
 
-    /// The number of changes alone is unreadable without knowing how much was said.
-    @Test("the caption counts the changes and the sentences they are spread across")
+    /// The number of corrections alone is unreadable without knowing how much was said.
+    @Test("the caption counts the corrections and the sentences they are spread across")
     func caption() {
         let page = HistoryFixture.corrections(
             [HistoryFixture.correction(), HistoryFixture.correction()],
             dictations: [HistoryFixture.entry(), HistoryFixture.entry(), HistoryFixture.entry()])
-        #expect(page.caption == "Today · 2 changes across 3 dictations")
+        #expect(page.caption == "Today · 2 corrections across 3 dictations")
     }
 
-    @Test("yesterday's changes belong to yesterday")
+    @Test("yesterday's corrections belong to yesterday")
     func todayOnly() {
         let page = HistoryFixture.corrections([
             HistoryFixture.correction(wrote: "Today"),
@@ -130,13 +132,13 @@ struct CorrectionsScopeTests {
     func options() {
         let scope = HistoryFixture.corrections([HistoryFixture.correction()]).chrome.scope
         #expect(scope?.options.map(\.id) == ["all", "applied", "undone"])
-        #expect(scope?.title == "All changes")
+        #expect(scope?.title == "All corrections")
         #expect(scope?.options.filter(\.isSelected).map(\.id) == ["all"])
     }
 
     @Test("each scope is named")
     func titles() {
-        #expect(CorrectionsScope.all.title == "All changes")
+        #expect(CorrectionsScope.all.title == "All corrections")
         #expect(CorrectionsScope.applied.title == "Still applied")
         #expect(CorrectionsScope.undone.title == "Undone")
     }
@@ -173,7 +175,7 @@ struct CorrectionsScopeTests {
     func searching() {
         let corrections = [
             HistoryFixture.correction(heard: "utter flow", wrote: "Uttrflow"),
-            HistoryFixture.correction(heard: "um, so", wrote: "so", reason: .heardAsStrayLetters),
+            HistoryFixture.correction(heard: "s q l", wrote: "SQL", reason: .heardAsStrayLetters),
         ]
         #expect(HistoryFixture.corrections(corrections, query: "uttr").rows.count == 1)
         #expect(HistoryFixture.corrections(corrections, query: "Uttrflow").rows.count == 1)
@@ -185,11 +187,14 @@ struct CorrectionsScopeTests {
 @Suite("Corrections with nothing to show")
 struct CorrectionsEmptyTests {
     /// An empty page here is the good outcome, not a missing feature — and it says so.
-    @Test("changing nothing is reported as the good outcome")
-    func changedNothing() {
+    @Test("no dictionary corrections is reported as the good outcome")
+    func noDictionaryCorrections() {
         let empty = HistoryFixture.corrections(dictations: [HistoryFixture.entry()]).emptyState
-        #expect(empty?.title == "Uttrflow changed nothing you said today")
-        #expect(empty?.chips.map(\.caption) == ["dictation today", "words changed"])
+        #expect(empty?.title == "No dictionary corrections today")
+        #expect(empty?.message.contains("word substitutions backed by your Dictionary") == true)
+        #expect(empty?.message.contains("filler removal") == true)
+        #expect(empty?.message.contains("does not appear here") == true)
+        #expect(empty?.chips.map(\.caption) == ["dictation today", "dictionary corrections"])
         #expect(empty?.chips.first?.value == "1")
         #expect(empty?.footnote?.contains("good outcome") == true)
     }
@@ -225,14 +230,14 @@ struct CorrectionsEmptyTests {
         #expect(page.emptyState?.chips.first?.value == "1")
     }
 
-    /// "It changed nothing" and "your filter hid everything" are reassurance and confusion.
+    /// "No corrections" and "your filter hid everything" are reassurance and confusion.
     @Test("a scope that hid everything says so rather than claiming nothing changed")
     func scopeHidEverything() {
         let empty = HistoryFixture.corrections(
             [HistoryFixture.correction()], scope: .undone
         ).emptyState
         #expect(empty?.title == "Nothing in this view")
-        #expect(empty?.message == "1 change today, and none of them is undone.")
+        #expect(empty?.message == "1 correction today, and none of them is undone.")
     }
 
     @Test("a search that matched nothing says what it was looking for")
@@ -242,6 +247,7 @@ struct CorrectionsEmptyTests {
         ).emptyState
         #expect(empty?.title == "No matches")
         #expect(empty?.message.contains("“invoice”") == true)
+        #expect(empty?.message.contains("dictionary correction") == true)
     }
 
     /// Two pieces of small print under one sentence is clutter; the empty state has its own closing line.

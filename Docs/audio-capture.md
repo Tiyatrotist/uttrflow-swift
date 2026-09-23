@@ -24,6 +24,28 @@ the one-line comments. `Docs/microphone.md` covers the hardware moving under the
   but is called synchronously before `convert` returns and never escapes, which is why
   `ConversionInput` is `@unchecked Sendable`.
 
+## Microphone access is read before the engine, not after it
+
+`EngineDevice.open()` refuses with `AudioCaptureError.microphoneDenied` unless
+`AVCaptureDevice.authorizationStatus(for: .audio)` is `authorized`, and it does so before an
+`AVAudioEngine` exists. Nothing else in the capture path reads the authorisation: the only
+hardware check `open()` had was `format.sampleRate > 0`, which catches a missing device and not
+a refused one, because a refused microphone still reports the device's real format.
+
+What that cost, before the guard: the engine opened, the tap delivered, and the samples carried
+no speech — so `VoiceActivity` refused the recording and the user was told "Didn't catch that."
+with no recovery action, for a permission only System Settings can give back. Measured here on
+macOS 26.5.1: three seconds of digital silence through `uttrflow-dev transcribe` comes back
+`SpeechEngineError.nothingHeard`, which is `informational` and offers nothing.
+
+The guard covers the reopen after a hardware change as well as the first open, because
+`InputDeviceSession` reaches the device through the same `open()`.
+
+**What is not measured.** Whether a refused microphone taps zeros or never calls back at all —
+revoking access needs a Mac whose privacy settings can be changed, and it was not available.
+Either way the guard fires first, and either way the message without it was wrong: silence reads
+as `nothingHeard`, and an empty recording as `audioTooShort`.
+
 ## The level meter
 
 - A microphone tap runs on a real-time thread that must never wait on an actor, so
@@ -117,14 +139,19 @@ What mitigates it, in descending order of effect:
    the cue; it changed the input format from 1 channel to 9 on this machine, which the resampler
    would reduce to channel 0; and it imposes AGC and noise suppression the recogniser has not
    been tuned against.
-2. Trimming a lead-in. The cue occupies a known window at the head of the recording, before any
-   human has begun speaking; discarding it is a pipeline decision.
-3. Being short and quiet, which is all the cue can do by itself. `Tink` is the shortest sound in
+2. Being short and quiet, which is all the cue can do by itself. `Tink` is the shortest sound in
    `/System/Library/Sounds` on macOS 26.5 at 0.564 s, chosen for brevity rather than taste, and
    the default volume is 0.4.
 
 Deliberately not a mitigation: waiting for the start cue to finish before opening the
 microphone. It buys silence at the cost of half a second before the user may speak.
+
+**Trimming a lead-in is also deliberately not a mitigation, by measured decision.** A synthetic
+sweep with `Tink` through `BackedSpeechEngine` found no word errors at the loudest measured
+real leak (−11.5 dBFS); a fixed-window trim would convert a probabilistic bleed into
+deterministic word loss for users who press and speak, so the cue stays in the buffer. The start
+cue in `Sources/UttrflowAudio/RecordingCue+System.swift:8` points at this paragraph rather than
+at an open question.
 
 ## Playing a system sound reliably
 

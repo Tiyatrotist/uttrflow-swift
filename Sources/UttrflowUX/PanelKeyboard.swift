@@ -44,6 +44,16 @@ public enum PanelKey: Sendable, Equatable {
     case choosePlain(Clip.ID)
     /// ⌘-Return: choose the highlighted clip without its formatting.
     case returnPlain
+    /// Page Up, Page Down, Home and End: the long moves ↑↓ would take a thousand presses to make.
+    case jump(PanelJump)
+}
+
+/// The long moves through the list, named rather than counted so the view holds no row arithmetic.
+public enum PanelJump: Sendable, Equatable {
+    case pageUp
+    case pageDown
+    case top
+    case bottom
 }
 
 /// What a keystroke did, beyond changing what is on screen.
@@ -93,7 +103,7 @@ extension PanelSnapshot {
         // A sheet with nothing to type into holds the list still: the row it asks about must stay listed.
         if let sheet, !sheet.takesTyping {
             switch key {
-            case .up, .down, .search: return stayingOpen
+            case .up, .down, .jump, .search: return stayingOpen
             default: break
             }
         }
@@ -134,6 +144,7 @@ extension PanelSnapshot {
         case .tickBox(let id, let index): ticking(id, box: index)
         case .returnPlain: sheet == nil ? resolvingPlain(results.selected) : committingSheet()
         case .choosePlain(let id): choosingPlain(id)
+        case .jump(let jump): PanelResponse(state: jumping(jump), outcome: .open)
         }
     }
 
@@ -164,6 +175,19 @@ extension PanelSnapshot {
         var next = self
         next.selection = visible.rows[min(max(current + rows, 0), visible.rows.count - 1)].id
         return next
+    }
+
+    /// How many rows a page moves, which is what the panel shows at once. See `Docs/panel.md`.
+    static let rowsPerPage = 8
+
+    /// Page Up and Page Down move a screenful; Home and End reach the ends ↑↓ never wrap to.
+    func jumping(_ jump: PanelJump) -> PanelSnapshot {
+        switch jump {
+        case .pageUp: moving(by: -Self.rowsPerPage)
+        case .pageDown: moving(by: Self.rowsPerPage)
+        case .top: moving(by: -results.rows.count)
+        case .bottom: moving(by: results.rows.count)
+        }
     }
 
     /// ⌘1 is All and the categories run from ⌘2; a number nothing is filed under does nothing.

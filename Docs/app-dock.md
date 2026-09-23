@@ -36,8 +36,7 @@ fails when one would need a fourth line, and the whole notice is on the pointer 
   Mode or at serious thermal pressure it drops to the 20 Hz data rate and accepts the step, per
   `MotionBudget`; see `Docs/performance.md`.
 - Meter width is fixed at 56 points; how many bars fit is a consequence of the width.
-- `meterAmplitude` 0.9 keeps a loud syllable from touching the glass. `settledLevel` 0.18 is
-  where the row settles when the microphone closes; zero reads as a broken panel.
+- `meterAmplitude` 0.9 keeps a loud syllable from touching the glass.
 - Working is three dots walking left to right, in the meter's own 56 points so the pill keeps
   its width. It runs for as long as there is work left, which includes the wait for the
   application to take the words: transcribing, tidying and inserting are one wait to the
@@ -88,7 +87,7 @@ the pill a few points to its left; the tick's job is to be unmistakable.
   | Failure disc | `dockWarningFill` `#C25E00` | its white glyph | 4.29:1 | 3:1 |
   | Failure disc | `#C25E00` | light / dark glass | 3.70:1 / 3.53:1 | 3:1 |
   | Copied keycap text | `dockWarningInk` `#9A4E00` light, `#FFB05C` dark | light / dark glass | 5.23:1 / 8.37:1 | 4.5:1 |
-  | Inserted tick | `dockSuccessInk` `#1F8A3A` light, `#34C759` dark | light / dark glass | 3.81:1 / 6.82:1 | 3:1 |
+  | Inserted tick | `dockSuccessInk` `#176A2F` light, `#5CD97E` dark | light / dark glass | 5.77:1 / 8.42:1 | 3:1 |
 
   The bright `dockWarning` `#FF8D28` and `dockSuccess` `#34C759` measure 2.31:1 under white
   and about 2:1 on light glass, so the dock never draws with them.

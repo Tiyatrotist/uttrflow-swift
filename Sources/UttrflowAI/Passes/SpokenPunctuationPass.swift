@@ -12,7 +12,7 @@ enum SpokenMarkKind: Sendable, Equatable {
     case closing
 }
 
-/// Turns a punctuation mark said by name into the mark, when it is used rather than mentioned.
+/// Turns a punctuation mark said by name into the mark, and a spoken email address into the address, when used rather than mentioned.
 public struct SpokenPunctuationPass: CleaningPass {
     public static let id: PassID = .spokenPunctuation
 
@@ -51,6 +51,11 @@ public struct SpokenPunctuationPass: CleaningPass {
         let repeated = repeatedNames(in: live, of: draft)
         var position = 0
         while position < live.count {
+            if let address = SpokenAddress.read(at: position, in: live, of: draft) {
+                write(address, at: position, in: &live, of: &draft)
+                position += 1
+                continue
+            }
             guard
                 let found = Self.marks.first(where: { matches($0.words, at: position, in: live, of: draft) }),
                 !MentionGuard.isMentioned(
@@ -68,6 +73,16 @@ public struct SpokenPunctuationPass: CleaningPass {
             }
         }
         return draft
+    }
+
+    /// Writes the address over the first of its words and drops the rest, which spelled it.
+    private func write(
+        _ address: SpokenAddress, at position: Int, in live: inout [Int], of draft: inout Draft
+    ) {
+        let after = position + address.length
+        draft.replace(at: live[position], with: address.text, by: Self.id)
+        for index in live[(position + 1)..<after] { draft.remove(at: index, by: Self.id) }
+        live.removeSubrange((position + 1)..<after)
     }
 
     private func matches(_ words: [String], at position: Int, in live: [Int], of draft: Draft) -> Bool {

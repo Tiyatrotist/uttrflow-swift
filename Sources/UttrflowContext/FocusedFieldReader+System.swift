@@ -107,7 +107,7 @@ public enum FocusedFieldReader {
         )
     }
 
-    /// The same reading, synchronously, which only the queue above calls with an identity read on main.
+    /// The same reading, synchronously, for the queue above and for the capability probe; the identity is read on main.
     static func snapshot(
         app: FrontmostApp, while isWanted: @Sendable () -> Bool = { true }
     ) -> FocusedFieldSnapshot? {
@@ -149,7 +149,7 @@ public enum FocusedFieldReader {
             selection: range.map { NSRange(location: $0.location, length: $0.length) },
             caret: range.flatMap { caret(field, at: $0) }.map { flip($0, below: flipped) },
             window: windowFrame(of: field).map { flip($0, below: flipped) },
-            field: frame(of: field).map { flip($0, below: flipped) },
+            field: fieldFrame(of: field).map { flip($0, below: flipped) },
             pointSize: style?.size,
             fontFamily: style?.family,
             textColor: style?.color,
@@ -196,6 +196,13 @@ public enum FocusedFieldReader {
             let size: CGSize = SurfaceProbe.value(element, kAXSizeAttribute, .cgSize)
         else { return nil }
         return CGRect(origin: origin, size: size)
+    }
+
+    /// The field's frame for the snapshot, returned only when the host published one wider than a caret.
+    private static func fieldFrame(of field: AXUIElement) -> CGRect? {
+        guard let frame = frame(of: field), !FocusedFieldSnapshot.isCaretShaped(frame)
+        else { return nil }
+        return frame
     }
 
     /// The caret's screen rectangle, read off the glyph beside it because its own zero-length bounds lies.

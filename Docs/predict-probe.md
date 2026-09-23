@@ -4,6 +4,10 @@ Measurements taken before any of the feature was built, so the design rests on n
 from this machine rather than on estimates. Re-run everything here with
 `uttrflow-dev probe`.
 
+The surface sweep here is the widest single reading of other applications in the repository, and
+it feeds the `Published`, `Caret` and `Value` columns of
+[compatibility.md](compatibility.md).
+
 Apple M5 Pro, release build, SQLite 3.53.2. Every timing is a median of 100 runs after
 20 warm-up runs.
 
@@ -73,32 +77,104 @@ would be missed.
 settle: whether the inline ghost reaches enough fields to lead with. Below 30% it does
 not — and since the inline ghost is the only surface, there is nothing to fall back on.
 
-## The application sweep — pending the operator
+## The application sweep — measured
 
-`uttrflow-dev probe surface --seconds 120 --output Docs/predict-sweep.md`
+`uttrflow-dev probe surface --seconds 240`
 
-**Not yet run.** It needs somebody at the Mac to click into a text field in each
-application while it runs, and that is the whole of what it needs. Until then the
-capability table below is empty and the ladder decision is unmade.
+Taken on macOS 26.5.1 (25F80), MacBook Pro, Apple M5 Pro, release build. 28 focused elements
+across 21 applications, each brought to the front in turn with the caret put in one of its
+fields — a search field, a quick-open field or a message composer, whichever the application
+offers without creating a document.
 
-To run it: run the command above from a terminal that already holds Accessibility, then
-click into a text field in each of Terminal, Chrome, Safari, Slack, Mail, Notes, Word,
-Cursor, VS Code, Xcode, Messages, Finder, Music, Preview, Numbers, Pages, Linear,
-Notion, Figma and System Settings.
+The columns are the suggestion loop's own reading. Until this run they were not:
+`SurfaceProbe.read` answered the three capability questions itself, with a caret test that
+accepted the zero-size rectangle Chromium and Terminal return for an empty range, a style
+test that looked for a font object no application sends, and a secure test narrower than
+`SecureField`'s. It measured a reader nothing draws from — every field claimed no styling,
+and fields with nowhere to put a caret claimed they had one. It now goes through
+`FocusedFieldReader.snapshot`, so the table says what the feature will do.
 
-The binary needs no grant of its own and no password, because Accessibility is
-attributed to the responsible process, which is the terminal. `Docs/predict-ime.md`
-holds the reading behind that, under "An aside that unblocks the pending sweeps": every
-cross-process Accessibility read in that document was made from an unsigned scratch
-binary launched that way, and `AXIsProcessTrusted()` returned true. It also quotes what
-this page used to say, so the correction can be checked rather than taken.
+| Application | Role | Field | Value | Caret | Style | Secure | Read | Placement |
+|---|---|---|---|---|---|---|--:|---|
+| Activity Monitor | AXOutline | Processes | no | no | no | no | 947 µs | nothing |
+| Calendar | AXTextField | ToolBarSearchField | yes | yes | no | no | 1428 µs | inline ghost |
+| ChatGPT | AXTextArea | Do anything | yes | yes | no | no | 1497 µs | inline ghost |
+| Claude | AXTextArea | Prompt | yes | yes | no | no | 1494 µs | inline ghost |
+| Cursor | AXTextArea |  | yes | yes | no | no | 1456 µs | inline ghost |
+| Cursor | AXTextField | Search files... | yes | no | no | no | 1072 µs | nothing |
+| Finder | AXOutline | ListView | no | no | no | no | 868 µs | nothing |
+| Finder | AXTextField | PathTextField | yes | yes | yes | no | 1288 µs | inline ghost |
+| GitKraken | AXWebArea |  | yes | yes | no | no | 4228 µs | inline ghost |
+| Google Chrome | AXTextField | Find | yes | no | no | no | 2905 µs | nothing |
+| Google Chrome | AXTextField | Press Tab then Enter to ask AI Mode | yes | no | no | no | 1576 µs | nothing |
+| Mail | AXTextField | — | yes | yes | no | no | 73730 µs | inline ghost |
+| Messages | AXGroup | — | no | no | no | no | 1123 µs | nothing |
+| Messages | AXTextField | Search | yes | no | no | no | 3207 µs | nothing |
+| Music | AXSheet | — | no | no | no | no | 828 µs | nothing |
+| Notes | AXTextField | — | yes | yes | no | no | 1036 µs | inline ghost |
+| Notes | AXWindow | _NS:6 | no | no | no | no | 687 µs | nothing |
+| Reminders | AXWindow | _NS:10 | no | no | no | no | 703 µs | nothing |
+| Safari | AXTextField | WEB_BROWSER_ADDRESS_AND_SEARCH_FIELD | yes | yes | no | no | 2619 µs | inline ghost |
+| Slack | AXRadioButton | Home | no | yes | no | no | 2602 µs | nothing |
+| Stickies | AXTextArea | _NS:153 | yes | yes | yes | no | 1368 µs | inline ghost |
+| System Settings | AXTextField | Search | yes | yes | no | no | 1968 µs | inline ghost |
+| System Settings | AXWindow | — | no | no | no | no | 1147 µs | nothing |
+| Terminal | AXTextArea | shell | yes | yes | no | no | 2720 µs | inline ghost |
+| TextEdit | AXTextArea | First Text View | yes | yes | yes | no | 1340 µs | inline ghost |
+| WhatsApp | AXStaticText | TokenizedSearchBar_TextView | no | yes | no | no | 4871 µs | nothing |
+| WhatsApp | AXTextArea | ChatBar_ComposerTextView | no | yes | no | no | 2777 µs | nothing |
+| Zed | AXWindow | — | no | no | no | no | 641 µs | nothing |
 
-The probe prints each new field as it sees it, so the run can be watched. It asks
-system-wide first and the application second, in that order, because apps answer one or
-the other and not reliably both — the same ordering `Docs/insertion.md` records for the
-dictation path. Fields are told apart by application, role and whichever of identifier,
-placeholder or description the field publishes, so Chrome's address bar and a search box
-on a page do not collapse into one row.
+**46% take the inline ghost, so the ladder decision is settled: lead with it.** The threshold
+was 30%, and it is cleared without needing the applications the sweep did not reach.
+
+Four things qualify it.
+
+**The denominator is every focused element, not every text field.** Ten of the 28 rows are an
+`AXWindow`, an `AXOutline`, a group, a sheet, a static text or a radio button — what the
+application answered with while no field of its own had focus. Of the 18 rows that are a role
+a person types into, 13 take the inline ghost, which is 72%. Both numbers are worth keeping:
+46% is the reach over whatever the user happens to be focused on, 72% the reach over fields.
+
+**Chrome's own fields take nothing.** Its omnibox and its find bar both report their text,
+and both answer `AXBoundsForRange` with a zero-size rectangle at the left edge of the screen
+— they do not list the attribute at all. Asked directly, with a messaging timeout forty times
+longer than the read path allows, the answer does not change, so this is not the timeout
+giving up. Safari's address bar, asked the same question, gives a real rectangle. Since there
+is no fallback surface, nothing can be drawn in Chrome's browser chrome, and neither the
+text-marker range nor the one-pixel-textarea fallback helps: both are for a Chromium *page*,
+and these two fields are native.
+
+Page content inside Chrome was not focused in this sweep, so the live confirmation
+`Docs/predict-reliability.md` records as pending stays pending. What the sweep does show is
+that the web path is not dead: GitKraken's `AXWebArea` — Chromium, in an Electron shell —
+answers with a caret rectangle and takes the inline ghost.
+
+**Almost nothing answers for styling, and that is survivable.** Only the three AppKit fields
+here — Finder's path field, Stickies and TextEdit — describe the font at the caret, and they
+do it with an `AXFont` dictionary rather than a font object. Terminal does not publish
+`AXAttributedStringForRange` at all. The ghost therefore defaults its face and size nearly
+everywhere, which the ladder already allows.
+
+One reading was slow enough to name: Mail's search field took **73.7 ms**, against a median
+near 1.4 ms. The read path gives up after 50 ms, so a field that answers like that some of
+the time will drop the odd turn rather than hold the loop.
+
+Every application named in the table was reached, and the table is the list. Not installed
+here: Word, VS Code, Numbers, Pages, Linear, Notion, Figma. Installed and still unswept:
+Xcode and Preview, neither of which offers a field to focus without first opening a project
+or a document.
+
+The run confirms what this page said it would: the binary needs no grant of its own and no
+password, because Accessibility is attributed to the responsible process, which is the
+terminal. `AXIsProcessTrusted()` returned true for the release build and for an unsigned
+scratch binary built to check the readings above.
+
+The probe prints each new field as it sees it, so the run can be watched. It asks system-wide
+first and the application second, in that order, because apps answer one or the other and not
+reliably both — the same ordering `Docs/insertion.md` records for the dictation path. Fields
+are told apart by application, role and whichever of identifier, placeholder or description
+the field publishes, so Chrome's address bar and its find bar do not collapse into one row.
 
 ## The event tap — pending the operator
 
