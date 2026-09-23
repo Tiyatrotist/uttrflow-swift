@@ -93,6 +93,7 @@ fi
 
 PACKAGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PACKAGE_ROOT"
+SCRIPT_DIR="$PACKAGE_ROOT/Scripts"
 
 PRODUCT="Uttrflow"
 SCHEME="Uttrflow"
@@ -520,12 +521,16 @@ FEED_URL="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$APP/Contents/Info.pl
 PUBLIC_KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$APP/Contents/Info.plist" 2>/dev/null || true)"
 if [[ -n "$FEED_URL" ]]; then
     # https, or http to this machine — the loopback address is what makes an update
-    # rehearsable end to end on one Mac. See UpdateController.isAcceptable.
-    case "$FEED_URL" in
-        https://*) ;;
-        http://127.0.0.1*|http://localhost*) LOCAL_FEED="yes" ;;
-        *) fail "SUFeedURL is neither https nor a local address: $FEED_URL" ;;
-    esac
+    # rehearsable end to end on one Mac. Distribution builds may not ship that address.
+    FEED_KIND="$(python3 "$SCRIPT_DIR/update_feed_gate.py" classify "$FEED_URL" 2>&1)" \
+        || fail "$FEED_KIND"
+    if [[ "$FEED_KIND" == "local" && "$MODE" == "distribution" ]]; then
+        fail "$(
+            printf 'distribution builds must not use a local update feed: %s\n' "$FEED_URL"
+            printf '  Local feeds are for rehearsing updates on one Mac; a public build\n'
+            printf '  would strand installed copies on an address only the release Mac can serve.'
+        )"
+    fi
     [[ -n "$PUBLIC_KEY" && "$PUBLIC_KEY" != *" "* ]] || fail "$(
         printf 'SUFeedURL is set and SUPublicEDKey is not a key.\n'
         printf '  An update feed with nothing to verify downloads against installs\n'
