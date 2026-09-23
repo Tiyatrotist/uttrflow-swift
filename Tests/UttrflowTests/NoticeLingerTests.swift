@@ -2,6 +2,7 @@
 
 import Foundation
 import Testing
+import UttrflowTestSupport
 
 @testable import Uttrflow
 
@@ -13,7 +14,7 @@ struct NoticeLingerTests {
         let linger = NoticeLinger(linger: .milliseconds(20))
         var closed = false
         linger.start { closed = true }
-        try await Task.sleep(for: .milliseconds(200))
+        try await eventually { closed && !linger.isPending }
         #expect(closed)
         #expect(!linger.isPending)
     }
@@ -25,7 +26,7 @@ struct NoticeLingerTests {
         linger.start { closed = true }
         try await Task.sleep(for: .milliseconds(10))
         linger.interrupt()
-        try await Task.sleep(for: .milliseconds(200))
+        try await Task.sleep(for: .milliseconds(500))
         #expect(!closed)
     }
 
@@ -35,7 +36,7 @@ struct NoticeLingerTests {
         var closes = 0
         linger.start { closes += 1 }
         linger.start { closes += 1 }
-        try await Task.sleep(for: .milliseconds(200))
+        try await eventually { closes == 1 && !linger.isPending }
         #expect(closes == 1)
     }
 }

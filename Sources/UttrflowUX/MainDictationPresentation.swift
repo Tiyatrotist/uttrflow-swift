@@ -210,8 +210,8 @@ public enum DictationPresenter {
             footnote: rows.isEmpty
                 ? nil
                 : """
-                Point at a row for copy, insert again, flag and more. Today stays here; \
-                everything older moves to History.
+                Copy, insert again, flag and more are on every row: point at it, or Tab \
+                to it. Today stays here; everything older moves to History.
                 """)
     }
 

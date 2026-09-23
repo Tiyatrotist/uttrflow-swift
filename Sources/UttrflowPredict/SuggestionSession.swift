@@ -300,8 +300,9 @@ public struct SuggestionSession: Sendable, Equatable {
         var seen: Set<String> = []
         let lowered = typed.lowercased()
         return lines.filter {
-            $0 != typed && $0.lowercased().hasPrefix(lowered) && LatinScript.writes($0)
-                && seen.insert($0.lowercased()).inserted
+            let lower = $0.lowercased()
+            return lower != lowered && lower.hasPrefix(lowered) && LatinScript.writes($0)
+                && seen.insert(lower).inserted
         }
     }
 

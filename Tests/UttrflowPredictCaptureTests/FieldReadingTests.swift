@@ -81,6 +81,41 @@ struct FieldReadingTests {
     }
 
     @Test(
+        "A terminal running a remote session is scoped as that session, not the directory this Mac was left in.",
+        arguments: [
+            "someone@host: ~ \u{2014} ssh \u{2014} 80\u{00D7}24", "api \u{2014} ssh someone@host",
+            "api \u{2014} mosh-client", "(mosh)",
+        ])
+    func remoteSessionIsNotTheLocalDirectory(windowTitle: String) {
+        let reading = FieldReading(
+            bundleIdentifier: "com.apple.Terminal", role: "AXTextArea",
+            document: "file:///Users/someone/api", windowTitle: windowTitle)
+        #expect(reading.scope == RemoteSession.scope)
+        #expect(reading.scope?.hasPrefix("/") != true)
+    }
+
+    @Test(
+        "A local terminal keeps its directory, including one whose name only reads like a remote program.",
+        arguments: [
+            "api \u{2014} -zsh \u{2014} 80\u{00D7}24", ".ssh \u{2014} -zsh", "~/api/.ssh",
+            "someone@this-mac: ~/api", "api \u{2014} ssh-keygen", "api \u{2014} scp",
+        ])
+    func localTerminalKeepsItsDirectory(windowTitle: String) {
+        let reading = FieldReading(
+            bundleIdentifier: "com.apple.Terminal", role: "AXTextArea",
+            document: "file:///Users/someone/api", windowTitle: windowTitle)
+        #expect(reading.scope == "/Users/someone/api")
+    }
+
+    @Test("A window title naming a remote program scopes nothing differently outside a terminal.")
+    func remoteProgramInAnotherApplicationIsNotASession() {
+        let reading = FieldReading(
+            bundleIdentifier: "com.example.notes", role: "AXTextArea",
+            document: "file:///Users/someone/api/notes.md", windowTitle: "ssh notes")
+        #expect(reading.scope == "/Users/someone/api")
+    }
+
+    @Test(
         "A terminal in a directory whose name has a dot is scoped to that directory, not its parent.",
         arguments: ["com.apple.Terminal", "com.googlecode.iterm2"])
     func terminalDottedDirectoryIsItsOwnScope(bundleIdentifier: String) {
