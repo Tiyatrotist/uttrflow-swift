@@ -35,6 +35,14 @@ Each released version is a git tag and a build at
   bar switch, the notes on that screen and what VoiceOver reads for a suggestion all use the
   new name. Nothing you chose there changes: every setting is kept as it was.
 
+### Fixed
+- **A copied picture the clipboard does not keep no longer leaves its file on disk.** A
+  screenshot dropped the moment it arrives, because the pictures folder is already at its
+  limit, used to leave a PNG behind that nothing ever deleted, so repeated copies grew the
+  folder past the limit it declares. Pictures left behind by an earlier version are removed
+  the next time Uttrflow starts; no clip refers to them, so nothing you can still see goes
+  with them (#777).
+
 ## [2026.9.14] — 2026-09-14
 
 The first release named by its date. Nothing about updating changes: an installed copy of
