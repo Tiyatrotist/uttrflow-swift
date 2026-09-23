@@ -1,8 +1,8 @@
 # Cuts a release from a tag.
 #
 # A release is a tag, not a branch. `main` is always releasable; tagging is the act of
-# deciding that a particular commit on it is the one people get. Nothing here reads a
-# branch name, so there is no state to keep in sync and no long-lived branch to protect.
+# deciding that a particular commit on it is the one people get. The gate checks that
+# the tagged commit is reachable from main before either publication job starts.
 #
 #   git tag v2026.9.14 && git push origin v2026.9.14        a release
 #   git tag v2026.9.14-rc.1 && git push origin v2026.9.14-rc.1   a release candidate
@@ -53,9 +53,9 @@ permissions:
 
 jobs:
   # Cheap, and first. Everything below costs macOS minutes and up to an hour; a tag that
-  # disagrees with the plist should cost five seconds to find out about.
+  # is off main or disagrees with the plist should fail before publication starts.
   check-version:
-    name: Tag agrees with the plist
+    name: Tag is on main and agrees with the plist
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.compare.outputs.version }}
@@ -69,6 +69,10 @@ jobs:
           # read it, and in the release job those steps include building third-party
           # Swift dependencies in the same job that holds the signing keychain.
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check tag ancestry
+        run: ./Scripts/release_tag_ancestry.sh "$GITHUB_REF"
 
       - name: Compare
         id: compare
