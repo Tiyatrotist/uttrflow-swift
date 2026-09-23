@@ -141,6 +141,10 @@ on as usual; the release pass then does every unfinished span in its own place, 
 failure still gets reported and still costs only that piece's words rather than the whole
 recording's wait.
 
+If that release pass still gets no words for audio `VoiceActivity` judges speech-bearing,
+the dictation fails instead of inserting only the other pieces. A kept recording can be
+retried; a window holding genuine silence is still skipped.
+
 The pieces are then joined with a space. Corrections keep their word ranges by being
 shifted past the words of the pieces before them. If any piece fell back to the rules,
 the whole dictation is reported as tidied by the rules, because "tidied by Apple's

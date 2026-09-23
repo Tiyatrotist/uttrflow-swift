@@ -573,7 +573,10 @@ struct DictationPipelineStateTests {
     /// A tap too brief to transcribe is told how to fix it, rather than that nothing was heard.
     @Test("says a hold was too short when the whole recording was")
     func tooShortSaysSo() async {
+        let briefSpeech = AudioSamples.canonical(
+            Array(repeating: Float(0.1), count: AudioSamples.canonicalSampleRate / 5))
         let pipeline = makePipeline(
+            capture: FakeAudioCaptureEngine(stopOutcome: .success(briefSpeech)),
             speech: FakeSpeechEngine(transcribeOutcome: .failure(.audioTooShort)))
 
         await pipeline.startRecording()
