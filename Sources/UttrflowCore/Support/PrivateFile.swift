@@ -2,6 +2,7 @@
 
 public import struct Foundation.Data
 public import struct Foundation.URL
+public import struct Foundation.URLResourceValues
 public import class Foundation.FileManager
 
 /// Writes what a local store keeps so only its owner can read it. See `Docs/local-store-permissions.md`.
@@ -19,6 +20,7 @@ public enum PrivateFile {
             attributes: [.posixPermissions: directoryMode])
         // A folder that was already there keeps its own mode through `createDirectory`.
         try tighten(at: directory)
+        try? excludeFromBackup(at: directory)
     }
 
     /// Writes `data` to `url` atomically, keeping the owner's own bits where the file already had some.
@@ -27,6 +29,7 @@ public enum PrivateFile {
         // Read first: an atomic write replaces the file, and the replacement is the umask's, not the old file's.
         let kept = (try? mode(at: url)).map { $0 & 0o700 }
         try data.write(to: url, options: .atomic)
+        try? excludeFromBackup(at: url)
         try set(kept ?? fileMode, at: url)
     }
 
@@ -35,6 +38,14 @@ public enum PrivateFile {
         let current = try mode(at: url)
         guard current & 0o077 != 0 else { return }
         try set(current & 0o700, at: url)
+    }
+
+    /// Keeps a local store path out of backup systems that honour Finder's exclusion flag.
+    public static func excludeFromBackup(at url: URL) throws {
+        var target = url
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try target.setResourceValues(values)
     }
 
     /// What is on whatever is at `url`, which throws when nothing is.

@@ -330,6 +330,26 @@ struct EvaluationCorpusTests {
         #expect(!EvaluationCorpus.cases(for: .hindi).isEmpty)
     }
 
+    @Test("measured Hindi failures score as invented content while the romanised floor passes")
+    func measuredHindiFailures() async throws {
+        let failures = [
+            ("hindi-translation-refused", "Meeting is at four o'clock, no no, five o'clock."),
+            (
+                "hindi-worked-example-refused",
+                "Main aaj ke standup mein deployment ke baare mein baat karunga."
+            ),
+        ]
+        for (id, badAnswer) in failures {
+            let testCase = try #require(EvaluationCorpus.all.first { $0.id == id })
+            let badScore = Scorer.score(badAnswer, against: testCase)
+            #expect(!badScore.passed, "\(id) accepted the observed bad answer")
+            #expect(!badScore.invented.isEmpty, "\(id) has no invented-content guard")
+
+            let floor = try await RuleBasedTransformer().transform(testCase.transformationRequest()).text
+            #expect(Scorer.score(floor, against: testCase).passed, "\(id): \(floor)")
+        }
+    }
+
     /// A reference that already lost a required word would score every model wrongly.
     @Test("keeps every required word in its own reference answer")
     func referencesAreSelfConsistent() {

@@ -188,3 +188,39 @@ stack than the first.
 The parts that cannot be unit-tested are exercised by posting synthetic `CGEvent`s at the real
 app and watching the recording window appear. That proves the tap, the Accessibility grant and
 the UI agree; it proves nothing about what was said, which is `uttrflow-dev dictate`'s job.
+
+## The clipboard panel's own keys
+
+The global shortcut opens the panel; everything after that is the panel's, and all of it
+works without the pointer. The chords live in one table, `PanelRowAction.chord`
+(`Sources/UttrflowUX/PanelShortcuts.swift`), which the key handler, the ⋯ menu's labels and
+this list all read, so none of the three can drift from the others.
+
+| Key | What it does |
+|---|---|
+| ↑ ↓ | Move the highlight one row |
+| Page Up / Page Down | Move a screenful |
+| Home / End | The first row, the last row |
+| ⏎ | Paste the highlighted clip |
+| ⌘⏎ | Paste it without its formatting |
+| esc | Close the sheet, or the panel |
+| ⌘1–⌘9 | Browse a collection, by the number printed beside it |
+| ⌘Z | Put back the clip the last delete removed |
+| ⌘R | Reveal a masked clip |
+| ⌘⇧C | Copy it to the clipboard |
+| ⌘P | Pin it, or unpin it |
+| ⌘N | Name it, or rename it |
+| ⌘M | File it into a collection |
+| ⌘⇧F | Format it |
+| ⌘⇧I | Re-indent it |
+| ⌘⇧T | Make it a note |
+| ⌘⇧⌫ | Delete it |
+
+A chord does nothing where the highlighted row does not offer that action, because the
+handler reads the row's own action list rather than a second copy of the rules — Format is
+offered only where a formatter exists for the clip's language, and Reveal only on a masked
+clip.
+
+⌫ and ⌘⌫ are left to the search field, which is why Delete takes ⇧ as well; ⌘C is the
+field's copy, so the row's is ⌘⇧C. A chord that acted on a row only while the field was
+empty would be a trap, so none of them does.

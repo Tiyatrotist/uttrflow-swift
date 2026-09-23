@@ -151,9 +151,12 @@ public actor Verifier {
         guard let choices = Verification.choices(for: token) else { return .open }
         var offered: [String] = []
         var answered = false
+        var everyLookupComplete = true
         for lookup in choices.lookups {
-            guard let known = await known(of: lookup.kinds, in: surface, now: now) else { continue }
+            guard let (known, complete) = await knownAndComplete(of: lookup.kinds, in: surface, now: now)
+            else { continue }
             answered = true
+            if !complete { everyLookupComplete = false }
             // A word already whole and known may be continued freely; the model is held only while the word is open.
             if Verification.attests(lookup.word, known) { return .open }
             var values = known.filter { Self.begins($0, as: lookup.word) }.map { lookup.prefix + $0 }
@@ -173,6 +176,8 @@ public actor Verifier {
         guard answered else { return .open }
         var seen: Set<String> = []
         let distinct = offered.filter { seen.insert($0).inserted }.sorted { ($0.count, $0) < ($1.count, $1) }
+        // Nothing offered while a relevant kind is still unanswered is not proof there is nothing: stay open rather than say none.
+        guard !distinct.isEmpty || everyLookupComplete else { return .open }
         return distinct.isEmpty ? .none : .among(Array(distinct.prefix(Verification.mostChoices)))
     }
 
@@ -213,6 +218,8 @@ public actor Verifier {
     private func admits(_ line: String, in surface: Surface, now: Date) async -> Bool {
         guard !DestructiveCommand.matches(line) else { return false }
         guard TerminalApplications.contains(surface.bundleIdentifier) else { return true }
+        // A remote session's files are on another machine, so nothing this disk could say stands behind the line.
+        guard !RemoteSession.names(surface.scope) else { return false }
         // Aliases are read from the shell's configuration as text; until they are, an alias is not a command.
         let aliases = await index.values(of: .alias, in: surface.scope ?? "~", now: now) ?? []
         return lines.allows(line, in: surface.scope, aliases: Set(aliases))
@@ -222,13 +229,25 @@ public actor Verifier {
     private func known(
         of kinds: [EnvironmentKind], in surface: Surface, now: Date
     ) async -> Set<String>? {
+        await knownAndComplete(of: kinds, in: surface, now: now)?.known
+    }
+
+    /// The same union, plus whether every kind asked has actually answered, so a still-refreshing kind is never read as a "no".
+    private func knownAndComplete(
+        of kinds: [EnvironmentKind], in surface: Surface, now: Date
+    ) async -> (known: Set<String>, complete: Bool)? {
         guard let directory = EnvironmentSource.workingDirectory(of: surface) else { return nil }
         var known: Set<String>?
+        var complete = true
         for kind in kinds {
-            guard let values = await index.values(of: kind, in: directory, now: now) else { continue }
+            guard let values = await index.values(of: kind, in: directory, now: now) else {
+                complete = false
+                continue
+            }
             known = (known ?? []).union(values)
         }
-        return known
+        guard let known else { return nil }
+        return (known, complete)
     }
 
     /// What the model says, silent when it is not up and over budget when it did not answer in time.

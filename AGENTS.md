@@ -28,11 +28,13 @@ branch / fork  ──PR──>  main  ──tag v2026.9.14-rc.1──>  prerelea
    and everything reaches `main` through a pull request. Never force-push `main`, and
    never tag: tagging is the release, and the release is the operator's.
 5. **An agent may merge its own pull request once it is green** — every required check
-   passed, and the branch up to date with `main` so what merges is what was tested. This
-   reverses release-policy:v2, which said agents never merge. The gate was written for a
-   team with reviewers in it; on a one-person org the review requirement could never be
-   satisfied, so it was not a gate but a queue. What actually catches mistakes here is
-   CI, and CI runs before the merge either way.
+   passed, and the branch up to date with `main` so what merges is what was tested. The
+   GitHub ruleset named `main` enforces this with required status checks, including
+   `make verify`, and `strict_required_status_checks_policy` turned on. This reverses
+   release-policy:v2, which said agents never merge. The gate was written for a team with
+   reviewers in it; on a one-person org the review requirement could never be satisfied,
+   so it was not a gate but a queue. What actually catches mistakes here is CI, and CI
+   runs before the merge either way.
 6. **Green means green, not nearly.** A check still running is not a passed check. If
    you merge past a failing or unfinished check, you are doing it because the operator
    said to, and you say so plainly when you report it — never silently with `--admin`.

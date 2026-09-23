@@ -26,6 +26,19 @@ struct Sandbox: ~Copyable {
     deinit { try? FileManager.default.removeItem(at: root) }
 }
 
+/// Runs `body` with the folder the stores write into refusing writes, as a full disk or bad permissions does.
+@MainActor
+private func refusingWrites<T>(under root: URL, _ body: () async throws -> T) async throws -> T {
+    let manager = FileManager.default
+    let folder = DictationHistoryStore.defaultFile(in: root).deletingLastPathComponent()
+    let path = folder.path(percentEncoded: false)
+    try manager.createDirectory(at: folder, withIntermediateDirectories: true)
+    try manager.setAttributes([.posixPermissions: 0o500], ofItemAtPath: path)
+    // Put back whatever happens, or the sandbox cannot be cleared and the next run finds it.
+    defer { try? manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path) }
+    return try await body()
+}
+
 @MainActor
 @Suite("What the buttons on the main window actually do")
 struct MainIntentWiringTests {
@@ -365,6 +378,172 @@ struct MainIntentWiringTests {
         let kept = try #require(await history.records(keeping: retention).first)
         #expect(kept.changes?.corrections.first?.isUndone == true)
         #expect(kept.text == "print s q l")
+    }
+
+    // MARK: A store that refuses
+
+    /// The whole point of the notice: a refused delete must look different from one that worked.
+    @Test("a dictation the store refuses to delete is said, not swallowed")
+    func saysARefusedDictationDelete() async throws {
+        let sandbox = Sandbox()
+        let app = AppDelegate(container: sandbox.root)
+        let store = DictationHistoryStore(
+            file: DictationHistoryStore.defaultFile(in: sandbox.root))
+        let retention = Retention(days: 30, now: .now)
+        let record = DictationRecord(text: "Right, the drafting is done.", when: .now)
+        try await store.append(record, keeping: retention)
+
+        try await refusingWrites(under: sandbox.root) {
+            app.carryOut(.forgetDictation(record.id))
+            await app.intentWork?.value
+        }
+
+        #expect(app.actionNotice?.message == HistoryStoreError.couldNotWrite.userMessage)
+        // Still there, which is what makes the silence the bug rather than the delete.
+        #expect(await store.records(keeping: retention).count == 1)
+    }
+
+    @Test("a word the store refuses to delete is said in the dictionary's own words")
+    func saysARefusedWordDelete() async throws {
+        let sandbox = Sandbox()
+        let app = AppDelegate(container: sandbox.root)
+        let store = PersonalDictionaryStore(
+            file: PersonalDictionaryStore.defaultFile(in: sandbox.root))
+        let entry = DictionaryEntry(word: "Uttrflow", origin: .added, firstSeen: .now)
+        try await store.add(entry)
+
+        try await refusingWrites(under: sandbox.root) {
+            app.carryOut(.forgetWord(entry.id))
+            await app.intentWork?.value
+        }
+
+        #expect(app.actionNotice?.message == DictionaryStoreError.couldNotWrite.userMessage)
+        #expect(await store.allEntries().count == 1)
+    }
+
+    @Test("a retired word the store refuses to restore is said")
+    func saysARefusedWordRestore() async throws {
+        let sandbox = Sandbox()
+        let app = AppDelegate(container: sandbox.root)
+        let store = PersonalDictionaryStore(
+            file: PersonalDictionaryStore.defaultFile(in: sandbox.root))
+        let entry = DictionaryEntry(
+            word: "Uttrflow", origin: .learned, firstSeen: .now, timesUsed: 4, timesReverted: 3)
+        try await store.add(entry)
+
+        try await refusingWrites(under: sandbox.root) {
+            app.carryOut(.restoreWord(entry.id))
+            await app.intentWork?.value
+        }
+
+        #expect(app.actionNotice?.message == DictionaryStoreError.couldNotWrite.userMessage)
+        #expect(await store.allEntries().first?.isTrustworthy == false)
+    }
+
+    @Test("a snippet the store refuses to delete is said in the snippets' own words")
+    func saysARefusedSnippetDelete() async throws {
+        let sandbox = Sandbox()
+        let app = AppDelegate(container: sandbox.root)
+        let store = SnippetStore(file: SnippetStore.defaultFile(in: sandbox.root))
+        let snippet = Snippet(trigger: "my address", expansion: "Flat 402", created: .now)
+        try await store.save(snippet)
+
+        try await refusingWrites(under: sandbox.root) {
+            app.carryOut(.forgetSnippet(snippet.id))
+            await app.intentWork?.value
+        }
+
+        #expect(app.actionNotice?.message == SnippetStoreError.couldNotWrite.userMessage)
+        #expect(await store.snippets().count == 1)
+    }
+
+    @Test("a flag the store refuses to keep is said")
+    func saysARefusedFlag() async throws {
+        let sandbox = Sandbox()
+        let app = AppDelegate(container: sandbox.root)
+        let store = DictationHistoryStore(
+            file: DictationHistoryStore.defaultFile(in: sandbox.root))
+        let retention = Retention(days: 30, now: .now)
+        let record = DictationRecord(text: "Right, the drafting is done.", when: .now)
+        try await store.append(record, keeping: retention)
+
+        try await refusingWrites(under: sandbox.root) {
+            app.carryOut(.flagDictation(record.id))
+            await app.intentWork?.value
+        }
+
+        #expect(app.actionNotice?.message == HistoryStoreError.couldNotWrite.userMessage)
+        #expect(await store.records(keeping: retention).first?.isFlagged == false)
+    }
+
+    /// Undo went through `try?` of its own, so it had to stop swallowing alongside the rest.
+    @Test("an undo the store refuses is said")
+    func saysARefusedUndo() async throws {
+        let sandbox = Sandbox()
+        let app = AppDelegate(container: sandbox.root)
+        let history = DictationHistoryStore(
+            file: DictationHistoryStore.defaultFile(in: sandbox.root))
+        let retention = Retention(days: 30, now: .now)
+        let correction = try #require(
+            RecordedCorrection(
+                heard: "s q l", wrote: "SQL", wordRange: 1..<4, entryID: UUID(),
+                reason: "heardAsStrayLetters", heardConfidence: 0.4))
+        let record = DictationRecord(
+            text: "print SQL", when: .now,
+            changes: RecordedChanges(corrections: [correction], snippets: []))
+        try await history.append(record, keeping: retention)
+
+        try await refusingWrites(under: sandbox.root) {
+            app.carryOut(.undoCorrection(correction.id))
+            await app.intentWork?.value
+        }
+
+        #expect(app.actionNotice?.message == HistoryStoreError.couldNotWrite.userMessage)
+        #expect(await history.records(keeping: retention).first?.text == "print SQL")
+    }
+
+    /// A notice that outlived the refusal would have the page complaining about something that then worked.
+    @Test("a change that works clears the refusal the last one left")
+    func clearsTheNoticeOnceSomethingWorks() async throws {
+        let sandbox = Sandbox()
+        let app = AppDelegate(container: sandbox.root)
+        let store = PersonalDictionaryStore(
+            file: PersonalDictionaryStore.defaultFile(in: sandbox.root))
+        let entry = DictionaryEntry(word: "Uttrflow", origin: .added, firstSeen: .now)
+        try await store.add(entry)
+
+        try await refusingWrites(under: sandbox.root) {
+            app.carryOut(.forgetWord(entry.id))
+            await app.intentWork?.value
+        }
+        #expect(app.actionNotice != nil)
+
+        app.carryOut(.forgetWord(entry.id))
+        await app.intentWork?.value
+
+        #expect(app.actionNotice == nil)
+        #expect(await store.allEntries().isEmpty)
+    }
+
+    /// The notice names a button on one page, so it does not follow the user to the next.
+    @Test("moving to another page leaves the refusal behind")
+    func dropsTheNoticeOnChangingPage() async throws {
+        let sandbox = Sandbox()
+        let app = AppDelegate(container: sandbox.root)
+        let store = PersonalDictionaryStore(
+            file: PersonalDictionaryStore.defaultFile(in: sandbox.root))
+        let entry = DictionaryEntry(word: "Uttrflow", origin: .added, firstSeen: .now)
+        try await store.add(entry)
+
+        try await refusingWrites(under: sandbox.root) {
+            app.carryOut(.forgetWord(entry.id))
+            await app.intentWork?.value
+        }
+        #expect(app.actionNotice != nil)
+
+        app.carryOut(.show(.snippets))
+
+        #expect(app.actionNotice == nil)
     }
 
     // MARK: The account

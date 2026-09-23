@@ -101,6 +101,126 @@ relies on. `Docs/bakeoff.md` compares the engines; `Docs/offline.md` states the 
   12.3% to 18.4%. With both, none of those, every run gives identical text, and overall WER is
   11.8%. English transcripts are unchanged byte for byte.
 
+## What Devanagari costs, and why Hindi is still decoded in it
+
+Hindi is decoded in Devanagari and romanised afterwards (`Docs/latin-output.md`), so the decoder
+spends steps spelling a script the product converts away. Recognition time follows the number of
+decoder steps, which makes that density a latency cost rather than a matter of taste.
+
+- **The density, measured off the shipping model's own `tokenizer.json`** over the twelve Hindi and
+  Hinglish passages of `Sources/UttrflowEval/TranscriptionCorpus.swift`, whose Devanagari and
+  romanised forms are word-for-word parallel:
+
+  | | words | tokens | tokens a word |
+  |---|---|---|---|
+  | English passages | 302 | 385 | 1.27 |
+  | Hindi, Devanagari | 201 | 954 | **4.75** |
+  | Hindi, romanised | 201 | 399 | 1.99 |
+  | Hinglish, Devanagari | 183 | 684 | 3.74 |
+  | Hinglish, romanised | 183 | 311 | 1.70 |
+
+  Devanagari costs 3.7 times English per word. The same words romanised cost 1.6 times, so even a
+  decoder that romanised perfectly would not reach English density — the ceiling on this whole
+  question is about a 2.4x saving in steps, not a 3.7x one.
+
+- **What the options measure.** `uttrflow-dev transcribe --raw` over the same passages spoken by
+  `say` (Hindi and Hinglish by `Lekha` from the Devanagari form, English by `Samantha`), 16 kHz
+  mono, every option run against every clip before any option is run twice, so a load spike lands
+  on all of them. Load average 4.6 to 24.7.
+
+  | option | ms a word | against English | output script |
+  |---|---|---|---|
+  | English speech, `en` hint | 21.7 | 1.0x | Latin |
+  | Hindi speech, `hi` hint — what ships | 58.8 | 2.7x | Devanagari, 12 of 12 clips |
+  | Hindi speech, `hi` hint, dictionary-shaped romanised prompt | 82.7 | 3.8x | Devanagari, 12 of 12 |
+  | Hindi speech, `en` hint | 49.4 | 2.3x | Latin, and translated |
+
+  The 2.7x reproduces the shape the issue reported. Both alternatives are worse.
+
+- **A romanised conditioning prompt does not move the script, and costs steps to fail.** Offered the
+  romanised words of another passage through `VocabularyPrompt`, every clip still came back in
+  Devanagari, and the prompt's own prefill made the decode slower — 82.7 ms a word against 58.8,
+  measured at a *lower* load than the baseline row, so the rise is the prompt rather than the
+  machine. The only thing that moved was a primed proper noun: `Raghunath` came back as Latin
+  `Agunath` inside an otherwise Devanagari sentence, which is a mixed script and a worse spelling.
+
+- **Running romanised text as the prompt moves the script unpredictably, which is worse than not
+  moving it.** Given two romanised sentences from other passages as the prompt instead of a word
+  list, the twelve clips split: 3 came back wholly in Latin, 6 wholly in Devanagari, and 3 mixed —
+  one of them with Perso-Arabic inside it (`late شروع ہوگی`), and one with a Latin fragment glued
+  into a Devanagari word (`सunow`). Where it did romanise, the density fell to 1.87 tokens a word as
+  predicted, and the spelling was the model's improvisation rather than `Romaniser`'s: `Kal shaam ko
+  main` came back as `Kul sham ko mein`, `Kal ka deploy` as `kakla ka diplo`. An output script that
+  depends on the clip is not a property the romaniser, the script guard or `LatinScript.enforced`
+  can be reasoned about against.
+
+- **Decoding under the English token is the only option that spends fewer steps, and it
+  translates.** `हाँ ठीक है…` came back as English prose, which `Docs/latin-output.md` forbids outright. It is
+  not even reliably fast: 2 of the 6 pure Hindi clips came back empty, and the times ranged from
+  0.72 s to 3.83 s because an English token over Hindi audio trips the thresholds above and
+  re-decodes the window warmer, which is how 1.0 tokens a word still measures 2.3x. The section on
+  which language the recogniser may answer in already constrains the language token for this reason;
+  this is that failure measured.
+
+- **No option measured reaches 1.3x**, and the only one whose density could — English tokens over
+  Hindi audio — gets there by translating. Romanised decoding would land near it if it were
+  reliable: the fixed encoder cost is most of a short dictation, so 1.99 tokens a word against
+  English's 1.27 works out at about 1.2x by the step model above. It is the reliability that fails,
+  not the arithmetic.
+
+**So Devanagari stays.** The density is the tokenizer's property, not this repository's, and every
+way of spending fewer steps on it changes what the speaker sees: a translation, a spelling nobody
+tested, or a script that varies clip to clip. A 2.4x saving in decoder steps is real and is worth
+revisiting, but only behind a decoder that writes romanised Hindi as its own output rather than one
+talked into it — a different model, judged against a baseline that does not exist yet
+(`Docs/measuring-accuracy.md`).
+
+**What these numbers are not.** The clips are synthetic, and synthetic Hindi speech is not a stand-in
+for a read corpus — the recorded audio `Docs/measuring-accuracy.md` calls the whole gap is still
+missing, so these figures rank the options against each other and assert nothing about how well the
+product hears Hindi. Word accuracy here was scored word by word against the parallel references with
+a grapheme-aware split, deliberately not through `Scripts/dictation_bench.py`, whose Hindi rate is
+counted over letter fragments (#705) and is therefore not a word error rate at all.
+
+## Why one noisy clip answers differently every run
+
+- A two-word reply mixed with brown noise at 10 dB SNR (`reply4-daniel-snr10`, "Ship it") was
+  inserted as "Shit is." in 16 of 50 runs and refused as "Didn't catch that." in the other 34, on
+  byte-identical audio; a second 50 split 23 to 27. Sampling in the temperature ladder is the only
+  randomness in a decode, so which of the two a run gives is which draw lands.
+- **The ladder does not invent the words.** With `firstTokenLogProbThreshold` unset, the greedy
+  decode of that clip is the same misreading on every run, at an average log-probability of -0.297
+  and a compression ratio of 0.86 — confident against every threshold the options carry, and 0.02
+  away from the -0.275 the same clip scores when it is read correctly as synthesised. The
+  near-homophone is the model's own first reading of this audio at this level of noise; the
+  clip as synthesised and at 20 dB SNR both read "Ship it." The ladder decides whether the
+  misreading is shown, never what it is.
+- **`firstTokenLogProbThreshold: -1.5` is what makes the outcome a draw.** It ends a window at its
+  first sampled token when that token scores below the threshold, leaving no tokens at all
+  (`Core/TextDecoder.swift:674` and `:686`). In a timestamped decode that first token is the
+  segment's opening timestamp, so noise over a 0.6 s clip fails it on where the speech starts
+  rather than on any word. WhisperKit reads the check ahead of the silence test
+  (`Core/Models.swift:366`, "order matters here"), so such a window never gets a no-speech
+  probability and is retried warmer instead of being discarded as silence. It fired at temperature
+  0 on all 50 runs, and at 1.0 on the 34 that ended empty.
+- The ladder keeps the first draw that passes the thresholds and otherwise the last one
+  (`Core/TranscribeTask.swift:327-405`). Every one of the 16 words came from temperature 0.8;
+  0.2 to 0.6 were rejected every time, and the 34 empties are the abandoned decode at 1.0.
+- **Neither a word list nor a confidence floor separates the misreading from a correct
+  transcript.** Rejecting a fallback result that adds a listed word the greedy result lacks reads,
+  as shipped, against a greedy result with no words in it, so it fires on the accident that the
+  window was abandoned; the moment the first-token check passes, the misreading *is* the greedy
+  result and the comparison sees nothing. The average log-probability the ladder accepts on is
+  0.02 apart for the right and the wrong reading, which no floor can sit between. The per-word
+  figure does separate this pair — 0.19 for the wrong word against 0.71 for the right one — but
+  `Docs/ai-correction-thresholds.md`
+  measures why one per-word score is not a licence to move a word: recognisers are unsure
+  constantly, and correction needs three independent conditions before one word changes.
+- What is left is recognition accuracy at that level of noise, which is a model and a front-end
+  question rather than a decoding one. `Scripts/dictation_bench.py score` reports every clip run
+  more than once that answered differently, so the class is visible in an ordinary bench run
+  rather than only in a hand-built one.
+
 ## Per-word confidence
 
 - Correction's first condition is that the recogniser was unsure. Without a per-word figure the

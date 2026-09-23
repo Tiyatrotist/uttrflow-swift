@@ -54,7 +54,10 @@ When the device never comes back, the session says so and the recording ends as 
 with a Retry, rather than handing back what it managed to capture. That distinction only
 holds before the first word: audio captured *before* the change survives, so a recording
 that ends this way can still contain speech, and half a sentence reads as a whole one. It
-is `.engineFailed`, so `DictationPipeline` keeps the audio and offers the retry. See
+is `.engineFailed`, and the WAV is finished before the refusal, so `DictationPipeline`
+claims that recording and the notice offers `.retryFromRecording` — the Dictation page's own
+Retry, which delivers to the clipboard on the user's say-so — and never `.retry`, which would
+open the microphone for a new dictation in place of the kept one. See
 `Docs/silence.md` for what the voice-activity check does with a recording that holds no
 speech at all.
 

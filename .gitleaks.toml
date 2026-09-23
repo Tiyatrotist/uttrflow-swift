@@ -1,6 +1,6 @@
 # What gitleaks is allowed to find and not fail on.
 #
-# Two files in this tree contain things shaped exactly like credentials, on purpose:
+# Four files in this tree contain things shaped exactly like credentials, on purpose:
 #
 #   SecretDetectionTests.swift    the fixtures for the clipboard's secret detector. Its
 #                                 whole job is to recognise an AWS key, a GitHub token, a
@@ -13,10 +13,25 @@
 #                                 Ed25519 key at run time and issues a profile at
 #                                 @uttrflow.invalid. Nothing it produces exists off the
 #                                 machine that ran it.
+#   SpeechModel.swift             the speech-model catalogue. It lists a pinned
+#                                 tokenizerRevision and the SHA-256 digest of each file
+#                                 the install must verify, so a published digest is the
+#                                 only way to prove the file is the one that was pinned.
+#                                 A SHA-256 string looks indistinguishable from a high-
+#                                 entropy API key to gitleaks' default rules, but is
+#                                 integrity evidence, not a credential. #666.
 #
 # One value is allowed by itself: the updater's EdDSA public key, which ships in every
 # app's Info.plist and which UpdateConfigurationTests pins. It is the public half, the
 # exact string and nothing near it, so any other value in any file still fails.
+#
+# The same, by exact value, for what `SpeechModel` pins each tokenizer to: a commit in a
+# public model repository, and the SHA-256 of two files at that commit. They are hex and
+# they are long, which is all `generic-api-key` reads; they are also published by whoever
+# owns the repository and are the thing that proves the download was not tampered with.
+# Listing them by value rather than allowing the file means a real key committed to
+# `SpeechModel.swift` still fails, and means bumping a revision has to touch this file,
+# where the change is visible.
 #
 # The files above are allowed by path and by path alone. Nothing else in the tree is exempt, so a
 # real key committed anywhere — including into a different test file — still fails the
@@ -30,7 +45,18 @@ useDefault = true
     '''Tests/UttrflowClipboardTests/SecretDetectionTests\.swift''',
     '''Sources/UttrflowAccount/InMemoryAuthenticationService\.swift''',
     '''Tests/UttrflowAccountTests/AccountSupport\.swift''',
+    '''Sources/UttrflowSpeech/SpeechModel\.swift''',
   ]
   regexes = [
     '''^apWgly8fYgdo1U2MUj56SuqUqZ4QHv5GRZIbuLT0PGE=$''',
+    # openai/whisper-large-v3, and tokenizer.json and tokenizer_config.json at that commit.
+    '''^06f233fe06e710322aca913c1bc4249a0d71fce1$''',
+    '''^6d8cbd7cd0d8d5815e478dac67b85a26bbe77c1f5e0c6d76d1ce2abc0e5f21ca$''',
+    '''^844b642c73a91359722f47b35705f7174686df33d252695d8572cf9ac03a6389$''',
+    # openai/whisper-small, whose tokenizer is byte-identical to openai/whisper-base's.
+    '''^973afd24965f72e36ca33b3055d56a652f456b4d$''',
+    '''^27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566$''',
+    '''^2a4c4281cf9f51ac6ccc406fdc711a087afe6530f671fa7b80953edc498275ce$''',
+    # openai/whisper-base.
+    '''^e37978b90ca9030d5170a5c07aadb050351a65bb$''',
   ]

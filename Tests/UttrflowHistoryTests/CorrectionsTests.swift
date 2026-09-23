@@ -140,7 +140,7 @@ struct CorrectionsScopeTests {
 
     @Test("each scope is named")
     func titles() {
-        #expect(CorrectionsScope.all.title == "All changes")
+        #expect(CorrectionsScope.all.title == "All corrections")
         #expect(CorrectionsScope.applied.title == "Still applied")
         #expect(CorrectionsScope.undone.title == "Undone")
     }
@@ -183,6 +183,16 @@ struct CorrectionUndoTests {
         let undone = try #require(record.undoing(correction.id))
         #expect(undone.record.changes?.corrections.map(\.isUndone) == [true])
         #expect(undone.record.changes?.corrections.map(\.heard) == ["utter flow"])
+    }
+
+    /// A change records the punctuation it kept, so an undo looking for the bare word would find nothing.
+    @Test("a change that kept the word's punctuation is still found and put back")
+    func restoresAPunctuatedWord() throws {
+        let correction = made(heard: "tarvock,", wrote: "Tarvok,", range: 2..<3)
+        let record = said(
+            "Open the Tarvok, then", changes: RecordedChanges(corrections: [correction]))
+        let undone = try #require(record.undoing(correction.id))
+        #expect(undone.record.text == "Open the tarvock, then")
     }
 
     /// Splicing by character range keeps a dictated code block from arriving on one line.
@@ -317,6 +327,18 @@ struct CorrectedWordsTests {
         let changes = RecordedChanges(corrections: [made(range: 0..<9)], spokenWords: 2)
         #expect(changes.correctedWords == 2)
         #expect(RecordedChanges(corrections: [made(range: 4..<6)], spokenWords: 2).correctedWords == 0)
+    }
+
+    /// A malformed file can carry a range past the end by an arbitrary amount; work is bounded by the spoken count. Regression for #1307.
+    @Test("a huge decoded range stays bounded by the spoken word count")
+    func hugeRangeStaysBounded() {
+        let changes = RecordedChanges(
+            corrections: [made(range: 0..<5_000_000)], spokenWords: 2)
+        let started = Date()
+        let count = changes.correctedWords
+        let elapsed = Date().timeIntervalSince(started)
+        #expect(count == 2, "the two in-range positions are still counted")
+        #expect(elapsed < 0.1, "a five-million-element range must not slow the count")
     }
 
     /// With no utterance counted there is nothing for these to be positions in.

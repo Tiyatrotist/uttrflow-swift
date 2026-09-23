@@ -30,10 +30,13 @@ service that authenticates with a bearer token and sets no cookies.
 short enough that a first-run sign-in on a dead network fails while the user is still
 watching. `waitsForConnectivity` is off for the same reason.
 
-## Every `URLSession` failure is "the request did not happen"
+## Every `URLSession` failure is "no response arrived"
 
-No network, DNS, TLS, a timeout, a cancellation, a response that is not HTTP: none of
-them is the server saying no, and the transport throws `BackendUnreachable` for all of
-them. Every answer the server gave, `401` and `502` included, comes back as a
-`BackendResponse`. That difference decides whether this Mac keeps working offline; see
-`Docs/account-session.md` for what the service does with it.
+No network, DNS, TLS, a timeout, a cancellation, a response that is not HTTP: none of them
+is the server saying no, and the transport throws `BackendUnreachable` for all of them.
+Every answer the server gave, `401` and `502` included, comes back as a `BackendResponse`.
+That difference decides whether this Mac keeps working offline; see
+`Docs/account-session.md` for what the service does with it. A thrown request may still
+have reached the server before the response disappeared, so state-changing calls carry
+their own recovery semantics rather than relying on transport errors as proof that nothing
+happened.

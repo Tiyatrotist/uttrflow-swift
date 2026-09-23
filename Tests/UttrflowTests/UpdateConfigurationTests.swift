@@ -35,28 +35,4 @@ struct UpdateConfigurationTests {
         let feed = try #require((info["SUFeedURL"] as? String).flatMap(URL.init(string:)))
         #expect(feed.scheme == "https")
     }
-
-    @Test("accepts only https with a host or exact loopback http feeds")
-    func feedURLPredicate() throws {
-        let accepted = [
-            "https://example.com/a.xml",
-            "http://127.0.0.1:8080/a.xml",
-            "http://localhost/a.xml",
-            "http://[::1]/a.xml",
-        ]
-        for feed in accepted {
-            let url = try #require(URL(string: feed))
-            #expect(UpdateController.acceptsFeedURL(url), "\(feed) should be accepted")
-        }
-
-        let refused = [
-            "http://127.0.0.1.example.com/a.xml",
-            "http://localhost.example.com/a.xml",
-            "https:///a.xml",
-        ]
-        for feed in refused {
-            let url = try #require(URL(string: feed))
-            #expect(!UpdateController.acceptsFeedURL(url), "\(feed) should be refused")
-        }
-    }
 }

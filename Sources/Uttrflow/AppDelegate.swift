@@ -152,7 +152,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var claimedHotkeys: [ShortcutAction: CarbonHotkeyMonitor] = [:]
     private var claimedTasks: [ShortcutAction: Task<Void, Never>] = [:]
     /// The last thing dictated, so it can be put back without reopening History.
-    private var lastTranscript: String?
+    private(set) var lastTranscript: String?
+    /// The history record the last transcript came from, so deleting that record forgets it too.
+    private(set) var lastTranscriptID: UUID?
     /// Asked when the panel opens whether a paste can be placed, held so the answer costs one call.
     private let accessibility = AccessibilityPermissionGate()
     private let microphone = MicrophonePermissionGate()
@@ -171,6 +173,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// The panel's state while it is open, held here because a window has no memory.
     private var panel: PanelSnapshot?
+    /// Counts the store reads the panel has asked for, so an older list never replaces a newer one.
+    private var panelReads = 0
     private var clipboardWatchTask: Task<Void, Never>?
 
     /// F7, F9 — the clip a delete removed, held by the app because the undo outlives the panel.
@@ -428,11 +432,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Shows or hides the sidebar's names, and does nothing when there is no window yet.
     @objc func toggleSidebarFromMenu(_ sender: Any?) { mainWindow?.toggleSidebar() }
 
-    /// Names the sidebar item after what choosing it does, which a fixed title gets wrong half the time.
+    /// Puts the caret in the page's search field, and does nothing when the page has none.
+    @objc func findFromMenu(_ sender: Any?) { mainWindow?.focusSearch() }
+
+    /// Answers for the two items whose state the window decides, rather than the menu's fixed text.
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
-        guard item.action == #selector(toggleSidebarFromMenu(_:)) else { return true }
-        item.title = mainWindow?.isSidebarExpanded == true ? "Hide Sidebar" : "Show Sidebar"
-        return mainWindow != nil
+        switch item.action {
+        case #selector(toggleSidebarFromMenu(_:)):
+            // Named after what choosing it does, which a fixed title gets wrong half the time.
+            item.title = mainWindow?.isSidebarExpanded == true ? "Hide Sidebar" : "Show Sidebar"
+            return mainWindow != nil
+        case #selector(findFromMenu(_:)):
+            return mainWindow?.canFocusSearch == true
+        default:
+            return true
+        }
     }
 
     /// Shows the first-run flow, which the rest of the app is deliberately not gated behind.
@@ -474,26 +488,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Finishes the dictation in flight before letting the process die, but not for ever.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let pipeline else {
-            // The clipboard's held uses are written first, so a quit does not cost the eviction order.
-            Task { [clipboard] in
-                await clipboard.flushUse()
-                NSApplication.shared.reply(toApplicationShouldTerminate: true)
-            }
-            return .terminateLater
-        }
-
         Task { [weak self, pipeline, clipboard] in
-            await clipboard.flushUse()
-            // A recording waits on the user, not the app, and the key may never come up.
-            if await pipeline.currentState.isListening { await pipeline.finishRecording() }
-
-            _ = try? await withStageTimeout(Self.quitBudget, clock: ContinuousClock()) {
-                for await state in await pipeline.states() where !state.isBusy { return }
+            let controller = self?.controller
+            let quittingPipeline = pipeline.map { pipeline in
+                AppQuitCoordinator.Pipeline(
+                    currentState: { await pipeline.currentState },
+                    finishRecording: { await pipeline.finishRecording() },
+                    states: { await pipeline.states() })
             }
-            await self?.controller?.stop()
-            // On every path: an unanswered `terminateLater` is an app that cannot be quit.
-            NSApplication.shared.reply(toApplicationShouldTerminate: true)
+            await AppQuitCoordinator.finish(
+                budget: Self.quitBudget,
+                clock: ContinuousClock(),
+                pipeline: quittingPipeline,
+                flushClipboard: { await clipboard.flushUse() },
+                stopController: { await controller?.stop() },
+                reply: {
+                    // On every path: an unanswered `terminateLater` is an app that cannot be quit.
+                    await MainActor.run {
+                        NSApplication.shared.reply(toApplicationShouldTerminate: true)
+                    }
+                })
         }
         return .terminateLater
     }
@@ -736,6 +750,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Submitted, not handled: the controller queues gestures so press and release cannot interleave.
         dock.onPressBegan = { [weak self] in self?.controller?.submit(.pressed) }
         dock.onPressEnded = { [weak self] in self?.controller?.submit(.released) }
+        // A toggle, not a press and a release: VoiceOver activates the button and has nothing to hold.
+        dock.onToggle = { Task { [weak self] in await self?.controller?.toggleFromControl() } }
         dock.onRecoveryAction = { [weak self] action in self?.perform(action) }
 
         dock.setShortcut(SettingsShortcut.compact(settings.hotkey))
@@ -922,6 +938,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             closeQuickPanel()
             return
         }
+        // Fresh, and shown before anything is awaited, so the keys after the shortcut reach the search (#860).
+        let opening = PanelSnapshot.opening(now: Date(), resuming: resume)
+        panel = opening
+        quickPanel.show(PanelPresenter.present(opening))
+        let opened = quickPanel.opens
         // A copy since the last poll is taken now, started not awaited, so no read holds the panel shut (#895).
         if settings.clipboardEnabled {
             let arrived: @Sendable (NoticedClip) async -> Void = { [weak self] noticed in
@@ -929,23 +950,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
             Task { [clipboardWatcher] in await clipboardWatcher.catchUp(handing: arrived) }
         }
-        let clips = await clipboard.clips(keeping: retention)
         let placement = await placement()
-        // Built fresh, so a revealed secret cannot outlive the panel that revealed it.
-        var snapshot = PanelSnapshot.opening(
-            clips: clips, now: Date(), insertion: placement, resuming: resume)
-        snapshot.dictation = await voice()
+        let dictation = await voice()
         // K4, B8 — asked once on the way in, so the presenter stays a function of its input.
-        snapshot.imagesFolder = await clipboard.imagesFolder
-        let facts = await facts(about: clips)
-        snapshot.install(
-            clips, missingImages: facts.missing, formattableLanguages: facts.formattable)
+        let folder = await clipboard.imagesFolder
+        // Nothing is written into a panel this open no longer owns; a later one asks these again itself.
+        guard quickPanel.opens == opened, panel != nil else { return }
+        panel?.insertion = placement
+        panel?.dictation = dictation
+        panel?.imagesFolder = folder
         // A4 — said on the way in, not after Return, when there is nowhere left to say it.
         if case .clipboardOnly(let obstacle) = placement, obstacle == .accessibilityNotGranted {
-            snapshot.notice = obstacle.notice
+            panel?.notice = obstacle.notice
         }
-        panel = snapshot
-        quickPanel.show(PanelPresenter.present(snapshot))
+        if let snapshot = panel { quickPanel.update(PanelPresenter.present(snapshot)) }
+        // The list comes by the one path a copy arriving also takes, so neither can undo the other.
+        await refreshPanelIfOpen()
     }
 
     /// B3–B5 — whether Return will place a clip or only copy it, asked while there is still somewhere to say so.
@@ -1320,8 +1340,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Adds a copy made while the panel is open, without moving a selection held by identity.
     private func refreshPanelIfOpen() async {
         guard panel != nil, quickPanel.isVisible else { return }
+        panelReads += 1
+        let read = panelReads
         let clips = await clipboard.clips(keeping: retention)
         let facts = await facts(about: clips)
+        // A read that started earlier never replaces a newer list, or a copy shown while opening would go.
+        guard read == panelReads else { return }
         panel?.install(
             clips, missingImages: facts.missing, formattableLanguages: facts.formattable)
         guard let snapshot = panel else { return }
@@ -1392,6 +1416,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                             expansion: $0.expansion)
                     },
                     spokenWords: outcome.changes.spokenWords))
+            lastTranscriptID = record.id
             keep(record)
             // I4 — into the clipboard too, which the watcher never sees because this is not a copy.
             recordAsClip(kept, of: record.id)
@@ -1437,10 +1462,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Speaks a state change through VoiceOver, since focus stays in the app being typed into.
     private func announce(_ announcement: DictationAnnouncement?) {
         guard let announcement else { return }
-        let priority: NSAccessibilityPriorityLevel = announcement.isUrgent ? .high : .medium
+        announce(announcement.text, urgently: announcement.isUrgent)
+    }
+
+    /// Speaks one line through VoiceOver; an urgent one interrupts what it is reading.
+    private func announce(_ text: String, urgently: Bool) {
+        let priority: NSAccessibilityPriorityLevel = urgently ? .high : .medium
         NSAccessibility.post(
             element: NSApplication.shared, notification: .announcementRequested,
-            userInfo: [.announcement: announcement.text, .priority: priority.rawValue])
+            userInfo: [.announcement: text, .priority: priority.rawValue])
     }
 
     /// Keeps one dictation, echoed on screen at once because the menu cannot await the store.
@@ -1623,16 +1653,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     /// Forgets what a reset removed before redrawing, so the page cannot repaint the words it took.
-    private func forget(after reset: SettingsReset) {
+    func forget(after reset: SettingsReset) {
         guard reset.forgetsTheLastDictation else {
             refreshMainWindow()
             return
         }
         lastCleaning = nil
+        forgetLastTranscript()
         Task { [weak self] in
             await self?.diagnostics.forget()
             self?.refreshMainWindow()
         }
+    }
+
+    /// Drops the words the paste and copy shortcuts put back, with the record they came from.
+    private func forgetLastTranscript() {
+        lastTranscript = nil
+        lastTranscriptID = nil
     }
 
     /// Redraws from a fresh snapshot, reading everything on one hop so the pages agree.
@@ -1676,6 +1713,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let corrections = changed.corrections
 
         return MainContent(
+            notice: actionNotice,
             home: HomePresenter.page(
                 for: HomeSnapshot(
                     permissions: knownPermissions, entries: entries,
@@ -1770,6 +1808,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Why the last Save was refused, per editor, until the next keystroke clears it.
     private var wordRefusal: String?
     private var snippetRefusal: String?
+    /// Why the last delete, flag, restore or undo did not happen, until one of them works or the page changes.
+    private(set) var actionNotice: MainNotice?
 
     /// Counts editor requests, so a slow one cannot open over a faster one that followed it.
     private var editorGeneration = 0
@@ -1843,6 +1883,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .copy(let text): putOnClipboard(text, used: nil)
         case .insert(let text): insert(text, used: nil)
         case .show(let page):
+            // A notice describes the button that was pressed on the page being left, so it goes with it.
+            actionNotice = nil
             mainWindow?.show(page)
             // Redrawn from what was last read: nothing on disk changed by moving tabs.
             redrawMainWindow()
@@ -1856,6 +1898,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             act { [weak self] in await self?.recordings.discard(id) }
 
         case .forgetDictation(let id):
+            if id == lastTranscriptID { forgetLastTranscript() }
             let retention = Retention(days: settings.transcriptRetentionDays, now: Date())
             act { [weak self] in
                 guard let self else { return }
@@ -1911,14 +1954,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             refreshMainWindow()
 
         case .undoCorrection(let id):
-            // In order: the history decides there was something to undo before the dictionary hears of it.
             let retention = Retention(days: settings.transcriptRetentionDays, now: Date())
-            intentWork = Task { [weak self] in
-                guard let self,
-                    let entryID = try? await history.undoCorrection(id, keeping: retention)
-                else { return }
-                _ = try? await dictionary.recordRevert(of: entryID)
-                refreshMainWindow()
+            act { [weak self] in
+                guard let self else { return }
+                // In order: the history decides there was something to undo before the dictionary hears of it.
+                guard let entryID = try await history.undoCorrection(id, keeping: retention) else {
+                    return
+                }
+                _ = try await dictionary.recordRevert(of: entryID)
             }
 
         case .flagDictation(let id):
@@ -1956,11 +1999,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         intentWork = Task { [weak self] in
             do {
                 try await change()
+                // Cleared only on success, so the last refusal stays up until something works.
+                self?.actionNotice = nil
             } catch {
-                Self.log.error("store change failed: \(SuggestionLog.failure(error), privacy: .public)")
+                self?.report(error)
             }
             self?.refreshMainWindow()
         }
+    }
+
+    /// Puts a refused change on the page and through VoiceOver as well as in the log, so it is never silent.
+    private func report(_ error: any Error) {
+        let notice = MainNotice(refusing: error)
+        Self.log.error(
+            "store change refused: \(notice.message, privacy: .public) \(SuggestionLog.failure(error), privacy: .public)"
+        )
+        actionNotice = notice
+        announce(notice.message, urgently: true)
     }
 
     /// Opens or closes the inline word editor, in both places that track it.

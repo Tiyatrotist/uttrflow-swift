@@ -51,6 +51,7 @@ struct SecretShapesOracleTests {
         "password = getpass.getpass()", "token=a.b.c,", "pwd=f();", "token=a..bcdefghijkl",
         "token=" + "x.deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", "token=abcdef.ghijkl()x",
         "pwd=getpass.getpass()\u{37E}", "pwd=getpass.getpass.\u{301}x",
+        #"password="abc123\"def456""#, #"password="abc123\\"def456""#,
     ]
 
     static func randomText(_ random: inout Seeded) -> String {
@@ -243,7 +244,7 @@ enum BacktrackingPatterns {
             | credentials? | private[_\-]?key | access[_\-]?key | auth[_\-]?token
             | client[_\-]?secret )
         \b["']? \s* [:=] \s*
-        (?<value> "[^"\n]+" | '[^'\n]+' | [^\s"'\n]+ )
+        (?<value> "(?:[^"\\\n]|\\.)+" | '(?:[^'\\\n]|\\.)+' | [^\s"'\n]+ )
         \s*[,;]?\s*$
         /#
         .anchorsMatchLineEndings()
