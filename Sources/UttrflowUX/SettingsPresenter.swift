@@ -399,7 +399,8 @@ public enum SettingsPresenter {
     /// Where everything suggestions read and keep stays, and where to turn them off or forget them.
     static let suggestionsPromise =
         "What it reads stays on this Mac. The lines it remembers are kept in Uttrflow's own "
-        + "folder. Nothing is uploaded, and a password field is never read. "
+        + "folder. Nothing is uploaded, and password, one-time-code, PIN, card security "
+        + "code and recovery-answer fields are never read. "
         + "Turn it off for one application, or forget what it learned there, under Applications below."
 
     /// Says what the model is doing, since a switch that is on and silent is indistinguishable from broken.

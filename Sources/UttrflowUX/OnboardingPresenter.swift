@@ -146,17 +146,19 @@ public enum OnboardingPresenter {
             title: wording.title,
             subtitle: subtitle(for: state.detail, asking: wording),
             body: wording.body,
-            note: note(for: state.detail, asking: wording),
+            note: note(for: state.detail, asking: wording, about: kind),
             buttons: buttons(for: state.detail, asking: kind)
         )
     }
 
     /// What is not possible until this is granted, shown only once the user has been asked.
     private static func note(
-        for detail: OnboardingDetail, asking wording: PermissionWording
+        for detail: OnboardingDetail, asking wording: PermissionWording, about kind: PermissionKind
     ) -> OnboardingNote? {
         switch detail {
         case .permission(.notDetermined): nil
+        // Accessibility reads as refused before anyone has been asked, so a first visit has refused nothing.
+        case .permission(.denied) where !kind.reportsNotDetermined: nil
         default: wording.blocked
         }
     }
@@ -296,22 +298,34 @@ public enum OnboardingPresenter {
         }
     }
 
-    /// One answer on every form of these pages, always the one that grants the permission.
+    /// The way on from a permission page, which is never only the way that grants it. See `Docs/ux-onboarding.md`.
+    static let carryOn = "Continue Without It"
+
+    /// One answer on every form of these pages, and beside it the way past a refusal.
     private static func buttons(
         for detail: OnboardingDetail, asking kind: PermissionKind
     ) -> [OnboardingButton] {
         let pane = OnboardingIntent.recover(.openSystemSettings(kind.settingsPane))
+        let without = OnboardingButton.plain(carryOn, .advance)
         switch detail {
         case .permission(.notDetermined):
-            return [.prominent(PermissionWording.of(kind).allow, .requestPermission(kind))]
+            return [.prominent(PermissionWording.of(kind).allow, .requestPermission(kind)), without]
+        // Accessibility arrives here unasked, so its first answer is still the ask, not System Settings.
+        case .permission(.denied) where !kind.reportsNotDetermined:
+            return [
+                .prominent(PermissionWording.of(kind).allow, .requestPermission(kind)), without,
+            ]
         case .permission(.denied):
-            return [.prominent("Open System Settings", pane)]
+            return [.prominent("Open System Settings", pane), without]
         case .awaitingSystemSettings:
             // Look again, with the settings pane still reachable beside it.
-            return [.plain("Open System Settings", pane), .prominent("Check Again", .recover(.retry))]
+            return [
+                .plain("Open System Settings", pane), .prominent("Check Again", .recover(.retry)),
+                without,
+            ]
         case .permission(.restricted):
             // A device policy has decided this, so going on is the only thing left that is true.
-            return [.prominent("Continue Without It", .advance)]
+            return [.prominent(carryOn, .advance)]
         default:
             // Granted, or nothing left to ask for.
             return [.prominent("Continue", .advance)]
@@ -408,8 +422,8 @@ private struct PermissionWording {
         blocked: OnboardingNote(
             symbolName: "exclamationmark.triangle",
             text: """
-                Until this is on, Uttrflow has nowhere to put your words: it cannot type \
-                into another app, and setting up cannot go on without it.
+                Until this is on, Uttrflow cannot type into another app. It will put your \
+                words on the clipboard instead, for you to paste.
                 """,
             tone: .warning)
     )

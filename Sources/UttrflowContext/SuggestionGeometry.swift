@@ -18,7 +18,7 @@ public enum SuggestionGeometry {
     /// Below this much room after the caret nothing is drawn, since a ghost cut to a letter or two says nothing.
     public static let minimumWidth: CGFloat = 24
 
-    /// The frame at the caret, never wider than the room to the field's, window's or screen's right edge and never off the screen.
+    /// The frame at the caret, never wider than the room to the field's, window's or screen's right edge and never off the screen or the window.
     public static func anchor(
         for placement: SuggestionPlacement,
         caret: CGRect?,
@@ -28,29 +28,29 @@ public enum SuggestionGeometry {
         size: CGSize
     ) -> SuggestionAnchor? {
         guard placement == .inlineGhost, let caret = usable(caret, on: screen),
-            let room = availableWidth(
-                caret: caret, field: field, window: window, screen: screen),
+            let room = availableWidth(caret: caret, field: field, window: window, screen: screen),
             size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0,
             room >= min(size.width, minimumWidth)
         else { return nil }
         let width = min(size.width, room)
-        let height = min(size.height, screen.height)
-        let top = min(max(caret.maxY, screen.minY + height), screen.maxY)
+        let lowerY = max(screen.minY, window?.minY ?? screen.minY)
+        let upperY = min(screen.maxY, window?.maxY ?? screen.maxY)
+        let height = min(size.height, max(upperY - lowerY, 0))
+        let top = min(max(caret.maxY, lowerY + height), upperY)
         return SuggestionAnchor(
             placement: .inlineGhost,
             frame: CGRect(x: caret.maxX, y: top - height, width: width, height: height))
     }
 
-    /// How far the ghost may run from the caret before it meets the first trusted edge to its right.
+    /// How far the ghost may run from the caret before it meets the field's, window's or screen's right edge, or nothing when the caret is past all three.
     public static func availableWidth(
-        caret: CGRect, field: CGRect?, window: CGRect? = nil, screen: CGRect
+        caret: CGRect, field: CGRect?, window: CGRect?, screen: CGRect
     ) -> CGFloat? {
         let start = caret.maxX
         guard start.isFinite, start >= screen.minX, start < screen.maxX else { return nil }
         let edge = min(
             screen.maxX,
-            fieldEdge(field, holding: start)
-                ?? windowEdge(window, holding: start)
+            fieldEdge(field, holding: start) ?? windowEdge(window, holding: start)
                 ?? screen.maxX)
         return edge > start ? edge - start : nil
     }
@@ -69,9 +69,9 @@ public enum SuggestionGeometry {
         return field.maxX
     }
 
-    /// The host window's right edge, trusted when the caret sits inside it.
+    /// The window's right edge, the rung between a stale field rect and the screen.
     private static func windowEdge(_ window: CGRect?, holding start: CGFloat) -> CGFloat? {
-        guard let window, !window.isNull, !window.isInfinite, window.width > 0,
+        guard let window, !window.isNull, !window.isInfinite,
             window.minX <= start, start <= window.maxX
         else { return nil }
         return window.maxX

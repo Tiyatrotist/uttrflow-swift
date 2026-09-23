@@ -112,8 +112,7 @@ final class SuggestionPanelController {
             ? nil
             : request.caret.flatMap {
                 SuggestionGeometry.availableWidth(
-                    caret: $0, field: request.field, window: request.window,
-                    screen: visibleFrame)
+                    caret: $0, field: request.field, window: request.window, screen: visibleFrame)
             }
         let presentation = SuggestionPresentation(
             request.suggestion, typed: request.typed, selection: request.selection,
@@ -235,6 +234,7 @@ final class SuggestionPanelController {
         panel.hasShadow = false
         // `orderOut` waits out AppKit's fade on the main thread, which would stall every keystroke over a ghost.
         panel.animationBehavior = .none
+        PrivateWindowSharing.apply(to: panel)
         panel.contentView = hostingView
     }
 }

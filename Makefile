@@ -62,9 +62,13 @@ range-test: ## Prove the disclosure audit reads every revision range the pre-pus
 store-permissions: ## Prove nothing writes a local store's files except through PrivateFile. Needs no build.
 	@python3 Scripts/store_permissions_audit.py
 
+.PHONY: uitest-arguments
+uitest-arguments: ## Prove the UI harness refuses a rounds count it cannot run. Compiles it; needs no screen.
+	@python3 Scripts/uitest_arguments_test.py
+
 .PHONY: docs-audit
-docs-audit: ## Prove the documentation still describes this tree. Needs no build.
-	./Scripts/docs_audit.sh
+docs-audit: ## Prove the documentation still describes this tree, including that CLAUDE.md delegates to AGENTS.md. Needs no build.
+	./Scripts/docs_audit.sh --self-test
 
 .PHONY: pii-audit
 pii-audit: ## Prove no personal data is in the tree. Needs no build.
@@ -114,7 +118,7 @@ disclosure-history: ## Scan every commit on every ref. Run before a repo goes pu
 # whose failure cannot be fixed after the fact. A competitor's name in a commit is
 # published the moment the commit is, and no later edit reaches a clone or a cache.
 .PHONY: verify
-verify: pii-audit disclosure-audit docs-audit comment-audit match-audit ratchet-test range-test log-audit store-permissions pasteboard-audit perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, docs, comments, word matches, log privacy, clipboard, energy and memory budget, lint, build, tests, coverage floor, offline audit.
+verify: pii-audit disclosure-audit docs-audit comment-audit match-audit ratchet-test range-test uitest-arguments log-audit store-permissions pasteboard-audit perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, docs, comments, word matches, log privacy, clipboard, energy and memory budget, lint, build, tests, coverage floor, offline audit.
 
 # Hooks are not cloned — .git/hooks is local to a checkout — so this points git at a
 # directory that is. One command per clone, and the gate cannot be forgotten after that.

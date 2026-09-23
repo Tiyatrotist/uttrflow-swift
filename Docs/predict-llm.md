@@ -109,3 +109,28 @@ what follows is what each set out to do.
   read, and both `resolve` and `resolveGenerated` drop what arrives later. A late answer is drawn
   against a fresh read of the field, so a caret that moved is followed and a line that changed is
   not written over.
+
+## Where the weights come from, and who asks for them
+
+`AnonymousHub.client()` is the only hub client this app builds. It names two things that
+`HubClient()` would otherwise decide for itself:
+
+- **`tokenProvider: .none`.** The default is `.environment`, which reads `HF_TOKEN`,
+  `HUGGING_FACE_HUB_TOKEN`, `$HF_TOKEN_PATH`, `$HF_HOME/token`, `~/.cache/huggingface/token` and
+  `~/.huggingface/token`. Uttrflow is not sandboxed, so the last two are the person's own files,
+  and anybody who has run `huggingface-cli login` had their personal token attached to this app's
+  downloads. Uttrflow fetches public weights and has no account on the model host.
+- **`host: HubClient.defaultHost`.** The default is `detectHost()`, which follows `HF_ENDPOINT`.
+
+Each model in `LocalModel.candidates` also names the commit its weights are fetched at, and
+`ModelConfiguration(id:revision:)` uses it, so two installs a day apart run the same model.
+
+**To bump a model revision**, take the repository's current commit:
+
+```bash
+curl -s https://huggingface.co/api/models/<repository> | python3 -c 'import sys,json;print(json.load(sys.stdin)["sha"])'
+```
+
+Put it in `LocalModel`, and say in the pull request what changed. `Scripts/offline_audit.sh` fails
+on a bare `HubClient()`, on any token provider that is not `.none`, on `HF_ENDPOINT`, and on
+`revision: "main"`, so none of these can come back as a default nobody notices in a diff.

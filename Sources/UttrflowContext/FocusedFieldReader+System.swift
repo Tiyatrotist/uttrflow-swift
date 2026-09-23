@@ -107,7 +107,7 @@ public enum FocusedFieldReader {
         )
     }
 
-    /// The same reading, synchronously, which only the queue above calls with an identity read on main.
+    /// The same reading, synchronously, for the queue above and for the capability probe; the identity is read on main.
     static func snapshot(
         app: FrontmostApp, while isWanted: @Sendable () -> Bool = { true }
     ) -> FocusedFieldSnapshot? {

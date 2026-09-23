@@ -15,6 +15,7 @@ enum Telemetry {
     static func report(
         windowStartedAt: Date = noon,
         windowEndedAt: Date = anHourLater,
+        appVersion: TelemetryReport.AppVersion = version,
         osVersionMajor: Int? = 26,
         dictationCount: Int = 1,
         cancelledCount: Int = 0,
@@ -29,7 +30,7 @@ enum Telemetry {
         stages: [TelemetryReport.StageOutcome] = []
     ) -> TelemetryReport? {
         TelemetryReport(
-            windowStartedAt: windowStartedAt, windowEndedAt: windowEndedAt, appVersion: version,
+            windowStartedAt: windowStartedAt, windowEndedAt: windowEndedAt, appVersion: appVersion,
             osVersionMajor: osVersionMajor, dictationCount: dictationCount,
             cancelledCount: cancelledCount, failureCount: failureCount, audioTotalMs: audioTotalMs,
             processingTotalMs: processingTotalMs, charactersInserted: charactersInserted,

@@ -2,16 +2,18 @@
 
 import AppKit
 import Foundation
+import Observation
 import UttrflowClipboard
 
 /// Where a picture clip's thumbnail comes from; injected so the cache is testable without photographs.
-struct PanelThumbnailSource {
-    /// The file and the longest edge to draw it at, in pixels; main-actor, like the cache that calls it.
-    var load: @MainActor (URL, Int) -> NSImage?
+struct PanelThumbnailSource: Sendable {
+    /// The file and the longest edge to draw it at, in pixels; safe off the main actor.
+    var load: @Sendable (URL, Int) -> NSImage?
 }
 
-/// Thumbnails beside image clips, decoded once and bounded in measured bytes. See Docs/clipboard-budget.md.
+/// Thumbnails beside image clips, decoded once off the main thread and bounded in measured bytes. See Docs/clipboard-budget.md.
 @MainActor
+@Observable
 final class PanelThumbnails {
     static let shared = PanelThumbnails()
 
@@ -24,12 +26,15 @@ final class PanelThumbnails {
     private let source: PanelThumbnailSource
     /// The most memory the decoded thumbnails may occupy, in bytes.
     private let budget: Int
-    private var known: [URL: NSImage?] = [:]
+    /// The decoded (or absent) thumbnail for a file that has been asked for; absent entries means a decode is in flight.
+    private(set) var known: [URL: NSImage?] = [:]
     /// What each answer is costing, so the total is kept without measuring the whole cache.
-    private var cost: [URL: Int] = [:]
-    private var held = 0
+    @ObservationIgnored private var cost: [URL: Int] = [:]
+    @ObservationIgnored private var held = 0
     /// Least recently asked for, first; a plain array, because the cache is small.
-    private var order: [URL] = []
+    @ObservationIgnored private var order: [URL] = []
+    /// Decodes in flight; one per file, so a row drawn twice does not decode twice.
+    @ObservationIgnored private var inflight: [URL: Task<Void, Never>] = [:]
 
     init(source: PanelThumbnailSource = .system, budget: Int = PanelThumbnails.defaultBudget) {
         self.source = source
@@ -50,20 +55,44 @@ final class PanelThumbnails {
         }
     }
 
-    /// The thumbnail for a file, or `nil` for a file that has gone, remembered too so it is not re-read.
+    /// The cached thumbnail for `file`, or `nil` while a miss is being decoded off the main actor.
     func thumbnail(for file: URL) -> NSImage? {
         if let remembered = known[file] {
             touch(file)
             return remembered
         }
-        let found = source.load(file, Self.maxPixel)
-        let bytes = Self.bytes(of: found)
-        known[file] = found
-        cost[file] = bytes
-        held += bytes
+        prepare(file)
+        return nil
+    }
+
+    /// Starts an off-main decode for `file`; a no-op if one is already in flight, or the answer is already cached.
+    func prepare(_ file: URL) {
+        if known[file] != nil { return }
+        if inflight[file] != nil { return }
+        let source = self.source
+        let maxPixel = Self.maxPixel
+        inflight[file] = Task.detached(priority: .userInitiated) { [weak self] in
+            let image = source.load(file, maxPixel)
+            await self?.record(file, bytes: Loaded(image: image))
+        }
+    }
+
+    /// Awaits the decode that `prepare(_:)` started for `file`; used by tests, not by the panel.
+    func waitForIdle(file: URL) async {
+        await inflight[file]?.value
+    }
+
+    /// Stored on `known` once the decode completes, even if the file is gone so the answer can be remembered.
+    @MainActor
+    private func record(_ file: URL, bytes: Loaded) {
+        inflight[file] = nil
+        let result = bytes.image
+        let cost = Self.bytes(of: result)
+        known[file] = result
+        self.cost[file] = cost
+        held += cost
         touch(file)
         forgetTheLeastRecent()
-        return found
     }
 
     /// Moves a file to the end of the queue, so it is the last thing forgotten.
@@ -83,4 +112,9 @@ final class PanelThumbnails {
 
     /// What the cache is holding, in bytes. Read by the tests that prove the bound.
     var bytesHeld: Int { held }
+}
+
+/// A wrapper that carries an `NSImage` between actors without `Sendable` conformance.
+struct Loaded: @unchecked Sendable {
+    let image: NSImage?
 }

@@ -172,24 +172,44 @@ failing quietly, where nearly every other write here is best-effort.
 A picture can vanish underneath the app — the folder is on disk and disks are shared with the user
 — so reading one answers `nil`, which is the row's cue to say so rather than draw a blank.
 
+### Who owns the file
+
+`save(_:)` owns a picture's lifetime, and it owned only half of it. It takes the difference between
+the names the previous list held and the names the new one holds, which catches a file the moment it
+stops being referenced — a delete, the retention window, a reset — but cannot see a file that was
+referenced by neither. A picture is written before its clip is recorded, so a clip dropped on
+arrival leaves a file that appears in no list at all: the disk budget evicting a new screenshot
+immediately leaked its PNG every time, and repeated copies consumed disk outside the declared
+budget. `keep(_:forClip:width:height:sha:)` therefore records what it has put on disk, and the next
+write accounts for it — kept when the list names it, deleted when the list does not, whether or not
+the index write itself lands. One rule covers every path that can drop a clip, because the
+difference and the file just written are reconciled in the same place.
+
+A refused index write is the one case where the file stays: the clip is in memory whatever the disk
+said, the panel can still draw its row, and a picture deleted under a visible row is the broken row
+this whole ordering exists to prevent. Nothing on disk names it, so the next launch sweeps it.
+
 ### Orphans
 
-`save(_:)` catches a file the moment it stops being referenced, which handles everything from the
-point that check was written. It cannot handle what is already there: a build that leaked pictures
-leaked them permanently, because no future write drops a name that was already absent from the
-list. `sweepOnce(against:)` reconciles the folder once per launch to cover that.
+`save(_:)` handles everything from the point that check was written. It cannot handle what is
+already there: a build that leaked pictures leaked them permanently, because no future write drops
+a name that was already absent from the list. `sweepOnce()` reconciles the folder once per launch to
+cover that, which is also how the pictures an earlier build orphaned are recovered.
 
 A picture is an orphan only when every file that can name one was read. So the sweep is skipped
 when either file was unreadable at this launch, and on every later launch while a set-aside file
-sits beside it. Checking for an empty list alone was not enough: with only the saved file damaged
-the history still held clips, the list was not empty, and the first read deleted the picture of
-every pinned, aliased and filed clip. Skipping leaks at worst; sweeping on a bad read destroys.
-Once the set-aside file is restored or removed, the next launch sweeps again.
+sits beside it. It is not skipped for an empty list. That test was there because an empty list is
+what a bad read looks like too, and it was the wrong question twice over: with only the saved file
+damaged the history still held clips, the list was not empty, and the first read deleted the picture
+of every pinned, aliased and filed clip — so the trustworthiness check is what actually answers it —
+and a store whose every clip had been evicted could then never reconcile at all. Skipping leaks at
+worst; sweeping on a bad read destroys. Once the set-aside file is restored or removed, the next
+launch sweeps again.
 
-`save(_:)` deletes exactly the files that stopped being referenced by that write, never runs a
-directory scan, and so cannot reach a picture that belongs to a file it failed to read. Earlier the sweep documented itself
-as running after the retention pass and was in fact called from nowhere, so every picture whose
-clip was deleted or aged out stayed on disk for ever; four had accumulated in a morning's testing.
+`save(_:)` never runs a directory scan, and so cannot reach a picture that belongs to a file it
+failed to read. Earlier the sweep documented itself as running after the retention pass and was in
+fact called from nowhere, so every picture whose clip was deleted or aged out stayed on disk for
+ever; four had accumulated in a morning's testing.
 
 ## Ordering
 

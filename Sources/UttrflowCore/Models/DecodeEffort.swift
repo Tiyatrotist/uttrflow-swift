@@ -35,4 +35,13 @@ public struct DecodeEffort: Sendable, Equatable {
             encoderRuns: encoderRuns + retry.encoderRuns,
             retriedWithoutPrompt: true)
     }
+
+    /// One decode's effort with another's, with flags OR'd, since a tail retry decodes a different slice at the same vocabulary.
+    public func adding(_ other: DecodeEffort) -> DecodeEffort {
+        DecodeEffort(
+            fallbacks: fallbacks + other.fallbacks,
+            fallbackSeconds: fallbackSeconds + other.fallbackSeconds,
+            encoderRuns: encoderRuns + other.encoderRuns,
+            retriedWithoutPrompt: retriedWithoutPrompt || other.retriedWithoutPrompt)
+    }
 }

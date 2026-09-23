@@ -43,19 +43,23 @@ public struct RawTranscript: Sendable, Equatable {
     public let segments: [RawSegment]
     /// What the recogniser spent beyond one decode, where it reports it.
     public let effort: DecodeEffort
+    /// How many decoder positions the recogniser consumed, where it reports one — used to detect a decode stopped at the cap.
+    public let tokensUsed: Int
 
     public init(
         text: String,
         languageIdentifier: String? = nil,
         languageProbability: Double? = nil,
         segments: [RawSegment] = [],
-        effort: DecodeEffort = .none
+        effort: DecodeEffort = .none,
+        tokensUsed: Int = 0
     ) {
         self.text = text
         self.languageIdentifier = languageIdentifier
         self.languageProbability = languageProbability
         self.segments = segments
         self.effort = effort
+        self.tokensUsed = tokensUsed
     }
 }
 

@@ -595,7 +595,12 @@ Read them together, because each one alone is misleading in the same direction:
    clipboard round trip races the user's own copy, and this feature fires on a keystroke
    rather than on a held shortcut, so it would race it constantly.
 4. **A secure field draws nothing and learns nothing.** `Quieting` refuses it before any
-   candidate is scored, and capture never records from it. A password field that a
+   candidate is scored, and capture never records from it. Passwords, passcodes,
+   one-time codes, PINs, card numbers, card security codes, social security numbers,
+   account and routing numbers, dates of birth and security answers are treated as
+   secure when the field name, placeholder or description says so. A short all-digit
+   value outside a terminal is also never learned, because a bare OTP, PIN, CVV or
+   compact date has no safe context once it has reached the corpus. A password field that a
    completion has ever seen is a password in a database.
 5. **Self-sourced evidence is discounted.** An entry that reached the corpus because the
    user accepted our own suggestion counts a quarter of one they typed. Without it,

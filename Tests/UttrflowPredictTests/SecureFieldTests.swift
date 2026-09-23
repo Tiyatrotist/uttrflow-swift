@@ -32,12 +32,38 @@ struct SecureFieldTests {
                 description: nil))
     }
 
+    @Test(
+        "Web fields that name one-time codes, card data, PINs and recovery answers are secure.",
+        arguments: [
+            "one-time-code",
+            "otp",
+            "Verification code",
+            "cc-csc",
+            "Card security code",
+            "cc-number",
+            "Credit card number",
+            "PIN",
+            "Security answer",
+            "SSN",
+            "Date of birth",
+        ])
+    func sensitiveWebFieldNamesAreSecure(name: String) {
+        #expect(
+            SecureField.isDeclaredSecure(
+                role: "AXTextField", subrole: nil, identifier: name, placeholder: nil,
+                description: nil))
+    }
+
     @Test("An ordinary field is not secure.")
     func ordinaryIsNotSecure() {
         #expect(
             !SecureField.isDeclaredSecure(
                 role: "AXTextField", subrole: nil, identifier: "search", placeholder: "Search",
                 description: nil))
+        #expect(
+            !SecureField.isDeclaredSecure(
+                role: "AXTextField", subrole: nil, identifier: "shipping_address",
+                placeholder: "Promo code", description: nil))
     }
 
     @Test("A value of mask characters alone reads as masked, so a dots-only field is caught.")

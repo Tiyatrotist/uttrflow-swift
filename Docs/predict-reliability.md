@@ -5,6 +5,10 @@ application, and a silence must always have a reason. This document is the loop 
 the feature to that bar and the running record of what it found. Fixes go to the root cause,
 with tests, and each is gated by `make verify` before it is committed.
 
+What the loop found out about particular applications is collected in
+[compatibility.md](compatibility.md), which this page feeds for `Caret`, `Value`, `Completion`
+and most of the notes. The record below stays the place the cause and the fix are written down.
+
 ## Three kinds of test, and what each can prove
 
 | Kind | Where | Cases | Proves |
