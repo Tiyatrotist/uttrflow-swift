@@ -35,6 +35,13 @@ struct EnvironmentSourceTests {
         #expect(await offered([.file: ["example.md"]], typing: "ex", in: browser).isEmpty)
     }
 
+    @Test("A terminal in a remote session is offered nothing, because this machine holds none of its files.")
+    func remoteSessionIsNotADirectory() async {
+        let remote = Surface(
+            bundleIdentifier: "com.example.terminal", role: "AXTextArea", scope: RemoteSession.scope)
+        #expect(await offered([.file: ["notes.md"]], typing: "cat no", in: remote).isEmpty)
+    }
+
     @Test("A directory written with a tilde is still a directory.")
     func tildeIsADirectory() async {
         let home = Surface(
