@@ -142,6 +142,26 @@ struct MeaningPreservationGuardTests {
                 == "150000, 12000, 1,2, 1,2345")
     }
 
+    @Test(
+        "refuses rewrites that add, drop or change a numeric sign",
+        arguments: [
+            ("temperature fell to -5 degrees", "Temperature fell to 5 degrees."),
+            ("temperature fell to 5 degrees", "Temperature fell to -5 degrees."),
+            ("the balance is +500 dollars", "The balance is 500 dollars."),
+            ("the change was -3.5%", "The change was 3.5%."),
+            ("the refund is -$12.50", "The refund is $12.50."),
+        ]
+    )
+    func rejectsSignChanges(original: String, rewritten: String) {
+        rejected(original, rewritten)
+    }
+
+    @Test("keeps binary subtraction and hyphenated numbers out of sign checking")
+    func subtractionAndHyphensAreNotSigns() {
+        accepted("subtract 5-3 from the total", "Subtract 5-3 from the total.")
+        accepted("ticket-5 is ready", "Ticket-5 is ready.")
+    }
+
     @Test("names the number it objected to, so a failure can be understood")
     func namesTheInventedNumber() {
         let verdict = sut.verdict(original: "meet me tomorrow", rewritten: "Meet me at 3 tomorrow.")
@@ -357,6 +377,20 @@ struct GrammarGuardTests {
             ).isAccepted)
     }
 
+    @Test("rejects moving a negation to another verb inside the same clause")
+    func rejectsNegationMovedWithinClause() {
+        #expect(
+            verdict(
+                "I did not tell Mary to call John",
+                "I did tell Mary not to call John."
+            ) == .rejected(reason: "the rewrite moved a negation", kind: .negationMoved))
+        #expect(
+            verdict(
+                "I did not tell Mary to tell John",
+                "I did tell Mary not to tell John."
+            ) == .rejected(reason: "the rewrite moved a negation", kind: .negationMoved))
+    }
+
     @Test("allows punctuation, case and contraction changes without relocating a negation")
     func acceptsNegationInPlace() {
         #expect(
@@ -368,6 +402,11 @@ struct GrammarGuardTests {
             verdict(
                 "she does not want the early slot",
                 "She doesn't want the early slot."
+            ).isAccepted)
+        #expect(
+            verdict(
+                "I did not tell Mary to call John",
+                "I didn't tell Mary to call John."
             ).isAccepted)
     }
 

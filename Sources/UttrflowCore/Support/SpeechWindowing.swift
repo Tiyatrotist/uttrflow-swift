@@ -1,7 +1,13 @@
 /// Cuts a recording into pieces the recogniser can take one at a time, at pauses. See `Docs/early-transcription.md`.
 public struct SpeechWindowing: Sendable, Equatable {
-    /// Audio a window must hold before any pause is allowed to end it, in seconds.
+    /// Audio collected before the window is checked for a cut, in seconds.
     public var minimumLength: Double
+
+    /// Audio a window must hold before a long early pause may end it, in seconds.
+    public var earlyLength: Double
+
+    /// A pause this long ends a window before ``minimumLength``, in seconds.
+    public var earlyPause: Double
 
     /// A pause this long ends a window that has reached ``minimumLength``, in seconds.
     public var sentencePause: Double
@@ -16,10 +22,13 @@ public struct SpeechWindowing: Sendable, Equatable {
     public var maximumLength: Double
 
     public init(
-        minimumLength: Double = 5, sentencePause: Double = 0.8,
+        minimumLength: Double = 5, earlyLength: Double = 2.5, earlyPause: Double = 1.0,
+        sentencePause: Double = 0.8,
         comfortableLength: Double = 15, anyPause: Double = 0.4, maximumLength: Double = 30
     ) {
         self.minimumLength = minimumLength
+        self.earlyLength = earlyLength
+        self.earlyPause = earlyPause
         self.sentencePause = sentencePause
         self.comfortableLength = comfortableLength
         self.anyPause = anyPause
@@ -47,10 +56,12 @@ public struct SpeechWindowing: Sendable, Equatable {
         let floor = VoiceActivity.percentile(sorted, 0.1)
         let threshold = VoiceActivity.threshold(forFloor: floor)
 
-        let earliest = Int(minimumLength / VoiceActivity.frameDuration)
+        let earliest = Int(Swift.min(earlyLength, minimumLength) / VoiceActivity.frameDuration)
+        let ordinary = Int(minimumLength / VoiceActivity.frameDuration)
         let comfortable = Int(comfortableLength / VoiceActivity.frameDuration)
         if let pause = firstPause(
-            in: loudness, below: threshold, after: earliest, comfortableAt: comfortable)
+            in: loudness, below: threshold, after: earliest, ordinaryAt: ordinary,
+            comfortableAt: comfortable)
         {
             return start + pause * frameLength
         }
@@ -72,35 +83,50 @@ public struct SpeechWindowing: Sendable, Equatable {
         return windows
     }
 
-    /// The middle frame of the first quiet run long enough for where it falls, counting a run still open at the end.
+    /// The middle frame of the first quiet run long enough for where that middle falls, counting a run still open at the end.
     private func firstPause(
-        in loudness: [Float], below threshold: Float, after earliest: Int, comfortableAt comfortable: Int
+        in loudness: [Float], below threshold: Float, after earliest: Int,
+        ordinaryAt ordinary: Int, comfortableAt comfortable: Int
     ) -> Int? {
+        let earlyFrames = Swift.max(1, Int(earlyPause / VoiceActivity.frameDuration))
         let sentenceFrames = Swift.max(1, Int(sentencePause / VoiceActivity.frameDuration))
         let anyFrames = Swift.max(1, Int(anyPause / VoiceActivity.frameDuration))
         var runStart: Int?
+        // Nothing before `earliest` is scanned at all, so a pause that started earlier is only
+        // credited from there — never quite what the speaker made it, but never an absolute cut either.
+        // Every run past that point is measured from where it truly began: a pause is as long as the
+        // speaker made it, wherever the ordinary or comfortable length falls in it.
         for index in earliest..<loudness.count {
             if loudness[index] < threshold {
                 if runStart == nil { runStart = index }
             } else if let began = runStart {
-                if let middle = middle(ofRun: began..<index, comfortable, sentenceFrames, anyFrames) {
+                if let middle = middle(
+                    ofRun: began..<index, ordinary, comfortable, earlyFrames, sentenceFrames, anyFrames)
+                {
                     return middle
                 }
                 runStart = nil
             }
         }
         if let began = runStart {
-            return middle(ofRun: began..<loudness.count, comfortable, sentenceFrames, anyFrames)
+            return middle(
+                ofRun: began..<loudness.count, ordinary, comfortable, earlyFrames, sentenceFrames,
+                anyFrames)
         }
         return nil
     }
 
-    /// The middle of `run` when it is long enough for its position, else `nil`.
+    /// The middle of `run` when a cut may fall there and the pause is long enough for where it falls, else `nil`.
     private func middle(
-        ofRun run: Range<Int>, _ comfortable: Int, _ sentenceFrames: Int, _ anyFrames: Int
+        ofRun run: Range<Int>, _ ordinary: Int, _ comfortable: Int,
+        _ earlyFrames: Int, _ sentenceFrames: Int, _ anyFrames: Int
     ) -> Int? {
-        let required = run.lowerBound >= comfortable ? anyFrames : sentenceFrames
+        let middle = run.lowerBound + run.count / 2
+        let required =
+            middle >= comfortable
+            ? anyFrames
+            : middle >= ordinary ? sentenceFrames : earlyFrames
         guard run.count >= required else { return nil }
-        return run.lowerBound + run.count / 2
+        return middle
     }
 }

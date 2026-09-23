@@ -15,13 +15,13 @@ struct FailureCatalogueTests {
         #expect(PermissionError.everyCase.count == 3)
         #expect(AccountError.everyCase.count == 4)
         #expect(SnippetStoreError.everyCase.count == 4)
-        #expect(AudioCaptureError.everyCase.count == 5)
+        #expect(AudioCaptureError.everyCase.count == 6)
         #expect(SpeechEngineError.everyCase.count == 7)
         #expect(TransformationError.everyCase.count == 3)
         #expect(TextInsertionError.everyCase.count == 5)
         #expect(HotkeyError.everyCase.count == 2)
-        #expect(DictionaryStoreError.everyCase.count == 3)
-        #expect(allFailures.count == 37)
+        #expect(DictionaryStoreError.everyCase.count == 4)
+        #expect(allFailures.count == 39)
     }
 
     /// A backwards link loops and a repeated case hides the one it displaces; both show as a duplicate.
@@ -75,6 +75,7 @@ struct FailurePresentationTests {
         // A policy-restricted microphone cannot be fixed by the user, so an action would be a lie.
         #expect(PermissionError.microphoneRestricted.recovery == nil)
 
+        #expect(AudioCaptureError.microphoneDenied.recovery == .openSystemSettings(.microphone))
         #expect(AudioCaptureError.noInputDevice.recovery == nil)
         #expect(AudioCaptureError.unsupportedInputFormat.recovery == nil)
         #expect(AudioCaptureError.alreadyRecording.recovery == .retry)
@@ -123,6 +124,7 @@ struct FailurePresentationTests {
         // The words still arrive, on the clipboard rather than in the app.
         #expect(PermissionError.accessibilityNotTrusted.severity == .degraded)
 
+        #expect(AudioCaptureError.microphoneDenied.severity == .blocking)
         #expect(AudioCaptureError.noInputDevice.severity == .blocking)
         #expect(AudioCaptureError.unsupportedInputFormat.severity == .blocking)
         #expect(AudioCaptureError.alreadyRecording.severity == .recoverable)

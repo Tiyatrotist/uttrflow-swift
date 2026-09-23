@@ -179,6 +179,10 @@ before this Mac is ever wiped.
 
 A build with `SUFeedURL` set and no usable `SUPublicEDKey` is refused by `bundle.sh`
 check 4a: a feed with nothing to verify against installs whatever it is handed.
+The same check parses the feed URL by scheme and host: `https` with a host is shippable,
+and `http` is accepted only for exact loopback hosts (`127.0.0.1`, `localhost`, `::1`).
+Loopback feeds are for rehearsal builds only; `bundle.sh distribution` and `publish.sh`
+both refuse to publish an app that points installed copies back at the release Mac.
 
 `SUVerifyUpdateBeforeExtraction` is `true` in `Resources/Uttrflow-Info.plist`, so Sparkle
 checks the archive against `SUPublicEDKey` before it unpacks anything. The only substitute

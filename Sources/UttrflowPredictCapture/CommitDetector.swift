@@ -64,6 +64,8 @@ public struct CommitDetector: Sendable, Equatable {
     private var lastKeystroke: Date?
     /// What an idle commit remembered, kept until the field's life ends so the finished line can retire it.
     private var committed: String?
+    /// What `committed` held before the most recent idle, so a failed write can put the field back where it was.
+    private var committedPrior: String?
 
     /// A detector watching a field nothing has been typed into.
     public init() {}
@@ -103,6 +105,13 @@ public struct CommitDetector: Sendable, Equatable {
         pending = ""
         lastKeystroke = nil
         committed = nil
+        committedPrior = nil
+    }
+
+    /// Undoes the most recent idle commit, so a later tick can re-emit the value after a failed write.
+    public mutating func forgetLastIdleCommit() {
+        committed = committedPrior
+        committedPrior = nil
     }
 
     /// Commits and then forgets, for the three events that end the field's life.
@@ -116,6 +125,7 @@ public struct CommitDetector: Sendable, Equatable {
         guard !pending.isEmpty, pending != committed, admits(reason) else { return nil }
         // An idle draft is retired by whatever the line became, even after it was backspaced away.
         let superseded = committed
+        committedPrior = superseded
         committed = pending
         return Commit(text: pending, supersedes: superseded, reason: reason)
     }

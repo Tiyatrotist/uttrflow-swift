@@ -23,6 +23,11 @@ struct PrivateFileTests {
         return try #require(attributes[.posixPermissions] as? Int)
     }
 
+    private func isExcludedFromBackup(_ url: URL) throws -> Bool {
+        let values = try url.resourceValues(forKeys: [.isExcludedFromBackupKey])
+        return values.isExcludedFromBackup == true
+    }
+
     @Test("makes a folder nobody else may enter")
     func directoryIsOwnerOnly() throws {
         let sandbox = Sandbox()
@@ -30,6 +35,7 @@ struct PrivateFileTests {
         try PrivateFile.makeDirectory(at: sandbox.root)
 
         #expect(try mode(of: sandbox.root) == PrivateFile.directoryMode)
+        #expect(try isExcludedFromBackup(sandbox.root))
     }
 
     @Test("makes every folder on the way, not only the last")
@@ -80,6 +86,8 @@ struct PrivateFileTests {
         #expect(try Data(contentsOf: sandbox.file) == Data("kept".utf8))
         #expect(try mode(of: sandbox.file) == PrivateFile.fileMode)
         #expect(try mode(of: sandbox.file.deletingLastPathComponent()) == PrivateFile.directoryMode)
+        #expect(try isExcludedFromBackup(sandbox.file))
+        #expect(try isExcludedFromBackup(sandbox.file.deletingLastPathComponent()))
     }
 
     /// An atomic write replaces the file rather than rewriting it, so a second write is a second mode.

@@ -66,19 +66,68 @@ struct ScoredWordsTests {
         #expect(scored?.last?.confidence == 0.32)
     }
 
-    /// A recogniser punctuates too, and a word wearing a comma must still find its score.
-    @Test("matches a word through the punctuation attached to it")
+    /// The recogniser merges punctuation into the word timing it belongs to, so both sides wear it.
+    @Test("matches a word through the punctuation the recogniser attached to it")
     func punctuation() {
         let scored = transcription(
             "Thanks, Nikhil.",
             words: [
-                TranscribedWord(text: "Thanks", confidence: 0.99),
-                TranscribedWord(text: "Nikhil", confidence: 0.38),
+                TranscribedWord(text: "Thanks,", confidence: 0.99),
+                TranscribedWord(text: "Nikhil.", confidence: 0.38),
             ]
         ).scoredWords
 
         #expect(scored?.count == 2)
         #expect(scored?.last?.confidence == 0.38, "the full stop must not hide the score")
+    }
+
+    /// The recogniser opens a word too, and a word behind a quote or a bracket is the same word.
+    @Test("matches a word the recogniser opened with a quote or a bracket")
+    func openingPunctuation() {
+        let scored = transcription(
+            "Ask (Nikhil) about \u{201C}Nikhil\u{201D}",
+            words: [
+                TranscribedWord(text: "Ask", confidence: 0.99),
+                TranscribedWord(text: "(Nikhil)", confidence: 0.37),
+                TranscribedWord(text: "about", confidence: 0.99),
+                TranscribedWord(text: "\u{201C}Nikhil\u{201D}", confidence: 0.44),
+            ]
+        ).scoredWords
+
+        #expect(scored?.map(\.confidence) == [0.99, 0.37, 0.99, 0.37])
+    }
+
+    /// A word keyed with its comma would sit under a key nothing in the transcript can spell.
+    @Test("finds the score of a word the transcript carries a comma on")
+    func punctuatedWordKeepsItsScore() {
+        let scored = transcription(
+            "Open the tarvock, then check tarvock.",
+            words: [
+                TranscribedWord(text: "Open", confidence: 0.99),
+                TranscribedWord(text: "the", confidence: 0.99),
+                TranscribedWord(text: "tarvock,", confidence: 0.2),
+                TranscribedWord(text: "then", confidence: 0.99),
+                TranscribedWord(text: "check", confidence: 0.99),
+                TranscribedWord(text: "tarvock.", confidence: 0.3),
+            ]
+        ).scoredWords
+
+        #expect(scored?.map(\.confidence) == [0.99, 0.99, 0.2, 0.99, 0.99, 0.2])
+    }
+
+    /// A token that is punctuation and nothing else names no word, so it borrows no word's doubt.
+    @Test("leaves a token that is only punctuation beyond suspicion")
+    func punctuationOnlyToken() {
+        let scored = transcription(
+            "well - maybe",
+            words: [
+                TranscribedWord(text: "well", confidence: 0.99),
+                TranscribedWord(text: "-", confidence: 0.1),
+                TranscribedWord(text: "maybe", confidence: 0.99),
+            ]
+        ).scoredWords
+
+        #expect(scored?.map(\.confidence) == [0.99, 1, 0.99])
     }
 
     /// Case is the recogniser's guess, not the speaker's.

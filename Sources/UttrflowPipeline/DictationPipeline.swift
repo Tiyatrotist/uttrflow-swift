@@ -220,6 +220,8 @@ public actor DictationPipeline {
             transition(to: .recording)
             beginWorkingAhead(mine)
         } catch {
+            // A cancel during the open leaves the pipeline at rest, so no failure is published over it.
+            guard !wasCancelled(mine) else { return }
             transition(to: .failed(DictationFailure(error)))
         }
     }
@@ -250,21 +252,16 @@ public actor DictationPipeline {
             stopwatch = nil
         } catch {
             hasTurn = false
+            // The capture writes the recording before it refuses it, so the audio is claimed here too (#604).
+            await claimRecording(mine)
             // A cancel during the drain leaves the pipeline at rest, so no failure is published over it.
             guard !wasCancelled(mine) else { return }
-            transition(to: .failed(DictationFailure(error)))
+            // Through `fail`, so a refused capture reaches the same rule as every other lost dictation.
+            await fail(DictationFailure(error))
             return
         }
 
-        // Written beside the buffer while the key was held, so it exists before anything can fail.
-        let kept = await recordings.current()
-        // Asked after the lookup, since a cancel can arrive while it is suspended as well as before it.
-        if wasCancelled(mine) {
-            // A cancel cannot see a recording not yet looked up, so it is deleted here instead.
-            if let kept { await recordings.discard(kept.id) }
-        } else {
-            openRecording = kept?.id
-        }
+        await claimRecording(mine)
         // Released with no await before `process` moves the state on, so nothing can enter between.
         hasTurn = false
         await process(audio, mine, delivery: .insert)
@@ -608,8 +605,10 @@ public actor DictationPipeline {
                 } catch SpeechEngineError.audioTooShort {
                     // Alone, a hold too brief to transcribe says so, since the fix is to hold longer.
                     guard window != audio.samples.indices else { throw SpeechEngineError.audioTooShort }
+                    if let failure = Self.untranscribedSpeech(in: slice) { throw failure }
                     return Heard.nothing
                 } catch SpeechEngineError.nothingHeard {
+                    if let failure = Self.untranscribedSpeech(in: slice) { throw failure }
                     // Only when there is nothing else: alone, silence is refused below.
                     guard window != audio.samples.indices else { throw SpeechEngineError.nothingHeard }
                     return Heard.nothing
@@ -620,11 +619,23 @@ public actor DictationPipeline {
         guard let heard else {
             throw SpeechEngineError.transcriptionFailed(description: "the recogniser did not answer")
         }
-        guard case .words(let transcription) = heard, !transcription.isBlank else { return nil }
+        guard case .words(let transcription) = heard else { return nil }
+        guard !transcription.isBlank else {
+            if let failure = Self.untranscribedSpeech(in: slice) { throw failure }
+            return nil
+        }
         // Kept beside the timing, since a re-decode is most of what a long transcription time is.
         await metrics.recordDecoding(transcription.effort)
         if dictationLanguage == nil { dictationLanguage = transcription.detectedLanguage?.code }
         return transcription
+    }
+
+    /// A recogniser that produced no words for audible speech must not let a partial dictation reach the screen.
+    private static func untranscribedSpeech(in audio: AudioSamples) -> SpeechEngineError? {
+        guard VoiceActivity.speechRange(in: audio.samples, sampleRate: audio.sampleRate) != nil else {
+            return nil
+        }
+        return .transcriptionFailed(description: "speech in a recording piece produced no words")
     }
 
     /// What the recogniser made of one window.
@@ -784,6 +795,19 @@ public actor DictationPipeline {
             }
         }
         transition(to: .failed(failure))
+    }
+
+    /// Takes the recording written while the key was held as this dictation's, or deletes a cancelled one.
+    private func claimRecording(_ mine: Int) async {
+        // Written beside the buffer while the key was held, so it exists before anything can fail.
+        let kept = await recordings.current()
+        // Asked after the lookup, since a cancel can arrive while it is suspended as well as before it.
+        guard !wasCancelled(mine) else {
+            // A cancel cannot see a recording not yet looked up, so it is deleted here instead.
+            if let kept { await recordings.discard(kept.id) }
+            return
+        }
+        openRecording = kept?.id
     }
 
     /// Deletes the kept audio of the dictation under way, if there is one.

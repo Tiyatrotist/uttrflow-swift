@@ -5,7 +5,7 @@ private import Synchronization
 
 /// The part that makes noise, excluded from coverage; whether to play lives next door and is tested.
 // MARK: - The part that makes noise
-/// Plays system sounds through AppKit; the cue bleeds into the recording. See Docs/audio-capture.md.
+/// Plays system sounds through AppKit; the start cue lands in the recording, accepted by Docs/audio-capture.md.
 public final class SystemSoundPlayer: SoundPlayer {
     /// Sounds are kept rather than looked up per cue, since a restart is only reliable on the same instance.
     private let sounds = Mutex<[SystemSound: NSSound]>([:])

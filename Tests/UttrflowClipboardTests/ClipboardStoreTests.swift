@@ -52,6 +52,47 @@ struct ClipboardStoreTests {
         #expect(await reopened.clips(keeping: week()).map(\.text) == ["kept"])
     }
 
+    @Test("keeps a secret copy in memory for this session but never writes it to the history file")
+    func secretCopyIsMemoryOnly() async throws {
+        let file = TemporaryFile()
+        let store = ClipboardStore(file: file.url)
+        let secret = Clip(text: "password: correct horse battery staple", kind: .secret, copiedAt: noon)
+
+        #expect(try await store.record(secret, keeping: week()).map(\.text) == [secret.text])
+        #expect(await store.clips(keeping: week()).map(\.text) == [secret.text])
+        #expect(FileManager.default.fileExists(atPath: file.url.path(percentEncoded: false)) == false)
+        #expect(await ClipboardStore(file: file.url).clips(keeping: week()).isEmpty)
+    }
+
+    @Test("writes ordinary history around a secret without putting the secret bytes on disk")
+    func secretCopyIsSkippedWhenOtherHistoryIsWritten() async throws {
+        let file = TemporaryFile()
+        let store = ClipboardStore(file: file.url)
+        let secret = Clip(text: "api_key = ff00aa11ff00aa11ff00aa11", kind: .secret, copiedAt: noon)
+
+        try await store.record(clip("before"), keeping: week())
+        try await store.record(secret, keeping: week())
+        let clips = try await store.record(clip("after"), keeping: week())
+
+        #expect(clips.map(\.text) == ["after", secret.text, "before"])
+        let bytes = try Data(contentsOf: file.url)
+        let payload = try #require(String(data: bytes, encoding: .utf8))
+        #expect(!payload.contains(secret.text))
+        #expect(
+            await ClipboardStore(file: file.url).clips(keeping: week()).map(\.text) == ["after", "before"])
+    }
+
+    @Test("drops secrets found in an older history file instead of rehydrating them")
+    func oldPersistedSecretsAreNotLoaded() async throws {
+        let file = TemporaryFile()
+        let oldSecret = Clip(text: "client_secret = abc123def456", kind: .secret, copiedAt: noon)
+        try FileManager.default.createDirectory(
+            at: file.url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode([oldSecret]).write(to: file.url)
+
+        #expect(await ClipboardStore(file: file.url).clips(keeping: week()).isEmpty)
+    }
+
     /// An unreadable file costs the user their clipboard, not their app.
     @Test("opens on nothing when the file has been mangled")
     func corruption() async throws {
@@ -84,6 +125,47 @@ struct ClipboardStoreTests {
         await #expect(throws: ClipboardStoreError.couldNotWrite) {
             try await store.record(clip("nowhere to go"), keeping: week())
         }
+    }
+
+    /// The picture is written first so a clip never points at a file that is missing; this is that write failing.
+    @Test("reports a disk that refuses a copied picture, and keeps no clip pointing at it")
+    func pictureWriteFailure() async throws {
+        let folder = try TemporaryFolder()
+        // A regular file where the Images folder belongs, so creating the folder cannot succeed.
+        try Data("in the way".utf8).write(
+            to: folder.url.appending(path: "Images", directoryHint: .notDirectory))
+        let noticed = NoticedClip(
+            clip: Clip(text: "", kind: .image, copiedAt: Date()),
+            picture: (Data(repeating: 0x89, count: 4_096), 1024, 768))
+
+        await #expect(throws: ClipboardStoreError.couldNotWrite) {
+            try await folder.store.record(noticed, keeping: folder.retention)
+        }
+        #expect(await folder.store.clips(keeping: folder.retention).isEmpty)
+    }
+
+    /// A list is written atomically so a pin is never replaced by half of one; this is that write failing.
+    @Test("reports a disk that refuses a list write, and leaves the list already saved readable")
+    func listWriteFailure() async throws {
+        let folder = try TemporaryFolder()
+        #expect(try await folder.store.record(clip("the first one"), keeping: week()).count == 1)
+
+        // The folder is there and readable, so the file is `missing` rather than unreplaceable, and unwritable.
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: folder.url.path)
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o700], ofItemAtPath: folder.url.path)
+        }
+
+        let store = ClipboardStore(
+            file: folder.url.appending(path: "clipboard.json", directoryHint: .notDirectory))
+        await #expect(throws: ClipboardStoreError.couldNotWrite) {
+            try await store.record(clip("the second one"), keeping: week())
+        }
+        // Read fresh from disk: the point is that the atomic write left the saved list whole.
+        let reopened = ClipboardStore(
+            file: folder.url.appending(path: "clipboard.json", directoryHint: .notDirectory))
+        #expect(await reopened.clips(keeping: week()).map(\.text) == ["the first one"])
     }
 
     // MARK: - Refusing nothing

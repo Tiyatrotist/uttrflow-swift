@@ -311,6 +311,18 @@ struct ArgumentOptionsTests {
         #expect(await options(for: "vim .env.v", machine: [.file: [".env", "src"]]) == .none)
     }
 
+    @Test("A command word stays open while executables have answered but aliases have not.")
+    func staysOpenWhileAliasesAreUnanswered() async {
+        // Only .executable is in the stub's answers, so .alias reads come back nil (unanswered) forever.
+        #expect(await options(for: "zz", machine: [.executable: ["git"]]) == .open)
+    }
+
+    @Test("An alias genuinely absent, as opposed to unanswered, still lets executables decide the word.")
+    func emptyAliasAnswerDiffersFromUnanswered() async {
+        #expect(
+            await options(for: "gi", machine: [.executable: ["git"], .alias: []]) == .among(["git"]))
+    }
+
     @Test("A path is finished from the directory it points into, as whole words the line can take.")
     func pathsAreFinishedWhereTheyPoint() async {
         let machine: [EnvironmentKind: [String]] = [

@@ -18,6 +18,11 @@ struct RecordingStoreTests {
 
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
+    private func isExcludedFromBackup(_ url: URL) throws -> Bool {
+        let values = try url.resourceValues(forKeys: [.isExcludedFromBackupKey])
+        return values.isExcludedFromBackup == true
+    }
+
     @Test("the recording that just finished is the current one, and the current one is not waiting")
     func finishedBecomesCurrent() async throws {
         let sandbox = Sandbox()
@@ -84,6 +89,17 @@ struct RecordingStoreTests {
         let audio = try await store.audio(of: finished.id)
         #expect(audio.samples.count == 1_600)
         #expect(abs((audio.samples.first ?? 0) - 0.3) < 0.001)
+    }
+
+    @Test("the recordings directory and its wavs are kept out of backups")
+    func recordingsAreExcludedFromBackup() async throws {
+        let sandbox = Sandbox()
+        let store = RecordingStore(directory: sandbox.directory)
+        let writer = try #require(await store.begin(at: now))
+        _ = await store.finish(writer)
+
+        #expect(try isExcludedFromBackup(sandbox.directory))
+        #expect(try isExcludedFromBackup(writer.url))
     }
 
     @Test("asking for audio that is gone fails rather than answering silence")

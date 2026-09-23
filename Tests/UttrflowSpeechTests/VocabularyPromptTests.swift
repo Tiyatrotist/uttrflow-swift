@@ -85,22 +85,33 @@ struct VocabularyPromptTests {
 
     // MARK: The shape the decoder actually listens to
 
+    @Test("two adjacent words carry nothing between them the decoder can copy")
+    func adjacentWordsAreNotPunctuated() throws {
+        let tokens = try #require(
+            VocabularyPrompt.tokens(for: ["Mirvella", "Ostrander"], using: tokenizer))
+        let prompt = tokenizer.read(tokens)
+
+        // The prompt is read as the transcript before this one, so a mark between two words returns between them. See issue 567.
+        #expect(prompt == " The words used here are Mirvella Ostrander.")
+        #expect(prompt.dropLast().rangeOfCharacter(from: .punctuationCharacters) == nil)
+    }
+
     @Test("the words are offered as a sentence, not as a list")
     func promptIsASentence() {
         let tokens = VocabularyPrompt.tokens(
             for: ["Uttrflow", "Nikhil", "PaymentSheet"], using: tokenizer)
 
         // Measured, not chosen: as a bare run these words left the recogniser hearing "KidPit".
-        #expect(tokenizer.read(tokens) == " The words used here are Uttrflow, Nikhil, PaymentSheet.")
+        #expect(tokenizer.read(tokens) == " The words used here are Uttrflow Nikhil PaymentSheet.")
     }
 
     @Test("a word dropped for want of room takes its separator with it")
-    func droppedWordLeavesNoComma() {
+    func droppedWordLeavesNoGap() {
         let monster = String(repeating: "z", count: 400)
         let tokens = VocabularyPrompt.tokens(for: ["Uttrflow", monster, "Nikhil"], using: tokenizer)
 
-        // The comma belongs to the word after it, so a gap in the ranking cannot leave ", ,".
-        #expect(tokenizer.read(tokens) == " The words used here are Uttrflow, Nikhil.")
+        // The space belongs to the word after it, so a gap in the ranking cannot leave two of them.
+        #expect(tokenizer.read(tokens) == " The words used here are Uttrflow Nikhil.")
     }
 
     // MARK: The budget
@@ -128,7 +139,7 @@ struct VocabularyPromptTests {
         let tokens = try #require(VocabularyPrompt.tokens(for: words, using: tokenizer))
 
         // WhisperKit keeps the *last* 111 tokens, so what survives here must be the front of the ranking.
-        #expect(tokenizer.read(tokens).hasPrefix(" The words used here are supercalifragilistic0,"))
+        #expect(tokenizer.read(tokens).hasPrefix(" The words used here are supercalifragilistic0 "))
         #expect(!tokenizer.read(tokens).contains("supercalifragilistic400"))
     }
 

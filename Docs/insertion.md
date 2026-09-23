@@ -3,6 +3,10 @@
 Three strategies in order — write into the focused element, paste, leave it on the
 clipboard — and each of the first two has a failure that reports success.
 
+Which applications do which of these is collected in [compatibility.md](compatibility.md); this
+page feeds its `AX write`, `Paste`, `Confirmed` and `Full route` columns, and the secure-field
+row, and keeps the reasoning behind each.
+
 ## The Accessibility write that changes nothing
 
 Electron applications (Claude's own desktop app among them) publish a focused text

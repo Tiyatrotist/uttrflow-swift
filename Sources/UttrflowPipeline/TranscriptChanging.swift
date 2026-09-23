@@ -28,7 +28,8 @@ extension Transcription {
 
         var scores: [String: Double] = [:]
         for word in segments.flatMap(\.words) {
-            let key = word.text.lowercased()
+            // Both sides reduce a word the same way, or a word wearing a comma never finds its score.
+            let key = SpokenToken(word.text).scoreKey
             guard !key.isEmpty else { continue }
             // Lowest wins where a word repeats: the doubtful reading is the one worth acting on.
             scores[key] = min(scores[key] ?? word.confidence, word.confidence)
@@ -36,9 +37,8 @@ extension Transcription {
         guard !scores.isEmpty else { return nil }
 
         return spoken.map { word in
-            let key = word.trimmingCharacters(in: .punctuationCharacters).lowercased()
             // An unscored word gets 1, "no reason to doubt it", which keeps it out of reach of condition one.
-            return ScoredWord(text: word, confidence: scores[key] ?? 1)
+            ScoredWord(text: word, confidence: scores[SpokenToken(word).scoreKey] ?? 1)
         }
     }
 }

@@ -71,7 +71,7 @@ APP_CSS = """
     .track > i { display: block; height: 100%; border-radius: 4px; background: var(--accent-light); }
 """
 
-TAILS = {"Corrections": "7"}
+TAILS = {"Corrections": "4"}
 
 
 def iconbtn(glyph, size=13, width=1.6):
@@ -254,16 +254,13 @@ dictionary_empty = f"""<div class="empty">
 
 
 # =====================================================================
-# Corrections — what was changed, and why.
+# Corrections — dictionary-backed substitutions, and why.
 # =====================================================================
 CHANGES = [
-    ("utter flow", "Uttrflow", "Your dictionary", "4:12 PM", "Slack", None),
-    ("um, I think we should", "I think we should", "Filler removed", "4:12 PM", "Slack", None),
     ("a sink p g", "asyncpg", "Seen on screen", "2:30 PM", "Code", None),
-    ("mein", "main", "Hinglish spelling", "3:48 PM", "Notes", None),
-    ("naveen bhat", "Naveen Bhatt", "Your dictionary", "11:05 AM", "Mail", None),
-    ("postgress", "Postgres", "Common misspelling", "2:30 PM", "Code", None),
-    ("your late", "you&rsquo;re late", "Grammar", "9:41 AM", "Slack", "undone"),
+    ("naveen bhat", "Naveen Bhatt", "You said it clearly elsewhere", "11:05 AM", "Mail", None),
+    ("s q l", "SQL", "Heard as stray letters", "10:18 AM", "Code", None),
+    ("data base", "database", "Heard as several words", "9:41 AM", "Slack", "undone"),
 ]
 
 
@@ -296,25 +293,25 @@ def change_rows():
 corrections = f"""<div class="callout" style="margin-bottom: 12px">
           <span style="flex:none; color: var(--accent-text); margin-top:1px">
             {icon(SWAP, size=14, width=1.7)}</span>
-          <span>Every word Uttrflow changed today, and why. A product that quietly rewrites
-            what you said owes you this page &mdash; nothing here happened without a reason,
-            and nothing here is permanent.</span>
+          <span>Dictionary-backed word substitutions Uttrflow made today, and why. Each row
+            names what it heard, what it wrote from your Dictionary, and the undo that teaches
+            that word when to retire.</span>
         </div>
-        <p class="daylabel">Today &middot; 7 changes across 34 dictations</p>
+        <p class="daylabel">Today &middot; 4 corrections across 34 dictations</p>
         <div class="card" style="overflow: hidden">{change_rows()}</div>
-        <div class="foot">Undo teaches Uttrflow. Undo the same change three times and it stops
-          making it &mdash; the word retires itself in your Dictionary.</div>"""
+        <div class="foot">Undo teaches Uttrflow. Undo a word more often than you keep it and it
+          stops being applied &mdash; the word retires itself in your Dictionary.</div>"""
 
 corrections_empty = f"""<div class="empty">
           <div class="ring">{icon(SWAP, size=34, width=1.4)}</div>
-          <h3>Uttrflow changed nothing you said today</h3>
-          <p>It only changes a word when it has a reason it can name: a word in your
-            dictionary, a term it could see on your screen, a filler word, or punctuation.
-            When it does, the change is listed here with what it heard, what it wrote,
-            and an undo.</p>
+          <h3>No dictionary corrections today</h3>
+          <p>This page lists word substitutions backed by your Dictionary: a term visible on
+            screen, a spelling heard clearly elsewhere, stray letters, or several spoken words
+            joined into one entry. Cleanup such as filler removal, punctuation, layout, and
+            grammar does not appear here.</p>
           <div class="chips">
             <div class="chip"><div class="cv">34</div><div class="ck">dictations today</div></div>
-            <div class="chip"><div class="cv">0</div><div class="ck">words changed</div></div>
+            <div class="chip"><div class="cv">0</div><div class="ck">dictionary corrections</div></div>
           </div>
         </div>
         <div class="foot" style="text-align: center">An empty page here is the good outcome,
@@ -610,12 +607,13 @@ account = f"""<div class="card" style="padding: 14px 15px">
         <div class="callout" style="margin-top: 12px">
           <span style="flex:none; color: var(--green); margin-top:1px">
             {icon(LOCK, size=15, width=1.7)}</span>
-          <span>The account is an identity and nothing more. Your recordings, transcripts,
-            Dictionary, Corrections and Snippets are files on this Mac &mdash; signing out
-            leaves every one of them exactly where it is.</span>
+          <span>The account is an identity and nothing more. Your transcripts, Dictionary,
+            Corrections and Snippets are files on this Mac &mdash; signing out leaves every
+            one of them exactly where it is. Audio is discarded as it becomes text.</span>
         </div>
-        <div class="foot">Uttrflow reaches the network to sign you in, and for nothing else.
-          Turn Wi-Fi off afterwards and dictation carries on working.</div>"""
+        <div class="foot">Sign-in, profile refreshes and update checks may reach the network,
+          and model setup or repair may download speech assets. Dictation itself runs on this
+          Mac once the model is installed, so losing Wi-Fi does not stop you from speaking.</div>"""
 
 
 # =====================================================================
@@ -629,9 +627,9 @@ SCREENS = [
     ("Main-Dictionary-Empty", "Dictionary",
      tools(searchbox("Search words"), addbtn("Add Word")), dictionary_empty, RECENT, None),
     ("Main-Corrections", "Corrections",
-     tools(pop("All changes"), searchbox("Search")), corrections, RECENT, TAILS),
+     tools(pop("All corrections"), searchbox("Search")), corrections, RECENT, TAILS),
     ("Main-Corrections-Empty", "Corrections",
-     tools(pop("All changes"), searchbox("Search")), corrections_empty, RECENT, None),
+     tools(pop("All corrections"), searchbox("Search")), corrections_empty, RECENT, None),
     ("Main-Insights", "Insights", tools(pop("Last 14 days")), insights, RECENT, TAILS),
     ("Main-Insights-Empty", "Insights", tools(pop("Since 21 August")), insights_empty,
      RECENT_NONE, None),

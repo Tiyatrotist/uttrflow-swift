@@ -28,6 +28,11 @@ func store(_ corpus: borrowing Corpus) throws -> PredictStore {
     try PredictStore(path: corpus.path)
 }
 
+private func isExcludedFromBackup(_ url: URL) throws -> Bool {
+    let values = try url.resourceValues(forKeys: [.isExcludedFromBackupKey])
+    return values.isExcludedFromBackup == true
+}
+
 private let terminal = Surface(bundleIdentifier: "com.example.terminal", role: "AXTextArea")
 private let moment = Date(timeIntervalSince1970: 1_800_000_000)
 
@@ -41,6 +46,15 @@ struct RecordingTests {
         let found = try await store.candidates(for: terminal, matching: "git c")
         #expect(found.map(\.text) == ["git commit -m"])
         #expect(found.first?.evidence?.count == 1)
+    }
+
+    @Test("the corpus database is kept out of backups")
+    func databaseIsExcludedFromBackup() async throws {
+        let corpus = Corpus()
+        let store = try store(corpus)
+        try await store.record("git commit -m", in: terminal, at: moment)
+
+        #expect(try isExcludedFromBackup(URL(fileURLWithPath: corpus.path)))
     }
 
     @Test("Entering the same thing twice counts twice rather than storing it twice.")
@@ -369,6 +383,16 @@ struct ForgettingTests {
         #expect(try await store.candidates(for: elsewhere, matching: "some").count == 1)
     }
 
+    @Test("Forgetting one application uses the same key as learning under it.")
+    func oneApplicationWithMixedCaseIdentifier() async throws {
+        let corpus = Corpus()
+        let store = try store(corpus)
+        let mixed = Surface(bundleIdentifier: "com.example.Terminal", role: "AXTextArea")
+        try await store.record("git push", in: mixed, at: moment)
+        try await store.forget(bundleIdentifier: "com.example.terminal")
+        #expect(try await store.entryCount() == 0)
+    }
+
     @Test("The reset in Settings leaves nothing behind.")
     func everything() async throws {
         let corpus = Corpus()
@@ -532,6 +556,71 @@ struct RecoveryTests {
         let indexes = try database.rows("PRAGMA index_list(entry)", { _ in }) { $0.text(1) }
         #expect(indexes.contains("entry_recent"))
         let version = try database.rows("SELECT version FROM schema_version", { _ in }) { $0.integer(0) }
+        #expect(version == [Schema.version])
+    }
+
+    @Test("A version four file folds mixed-case application rows into one surface.")
+    func migratesMixedCaseApplicationKeys() async throws {
+        let corpus = Corpus()
+        do {
+            let database = try Database(path: corpus.path)
+            try Schema.migrate(database)
+            try database.run("UPDATE schema_version SET version = ?") { $0.bind(1, Int64(4)) }
+            for bundle in ["com.example.terminal", "com.example.Terminal"] {
+                try database.run("INSERT INTO surface (bundle_id, role) VALUES (?, ?)") {
+                    $0.bind(1, bundle)
+                    $0.bind(2, "AXTextArea")
+                }
+            }
+            let entries: [(Int64, String, Int64, Int64, Int64)] = [
+                (1, "git push", 2, 1, 0), (2, "git push", 3, 0, 1), (2, "git status", 1, 0, 0),
+            ]
+            for (surface, text, count, accepted, rejected) in entries {
+                try database.run(
+                    """
+                    INSERT INTO entry (surface_id, text, text_lower, count, accepted, rejected, last_used)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """
+                ) {
+                    $0.bind(1, surface)
+                    $0.bind(2, text)
+                    $0.bind(3, text.lowercased())
+                    $0.bind(4, count)
+                    $0.bind(5, accepted)
+                    $0.bind(6, rejected)
+                    $0.bind(7, moment.timeIntervalSince1970)
+                }
+            }
+            for (surface, previous, next, count) in [
+                (Int64(1), "git commit", "git push", Int64(1)),
+                (2, "git commit", "git push", 2),
+                (2, "git status", "git log", 1),
+            ] {
+                try database.run(
+                    "INSERT INTO succession (surface_id, previous, next, count) VALUES (?, ?, ?, ?)"
+                ) {
+                    $0.bind(1, surface)
+                    $0.bind(2, previous)
+                    $0.bind(3, next)
+                    $0.bind(4, count)
+                }
+            }
+        }
+
+        let store = try store(corpus)
+        let push = try await store.candidates(for: terminal, matching: "git p").first?.evidence
+        #expect(push?.count == 5)
+        #expect(push?.accepted == 1)
+        #expect(push?.rejected == 1)
+        #expect(try await store.entryCount() == 2)
+        #expect(try await store.successors(for: terminal, after: "git commit").map(\.text) == ["git push"])
+        let rows = try Database(path: corpus.path).rows(
+            "SELECT bundle_id, COUNT(*) FROM surface GROUP BY bundle_id", { _ in }
+        ) { [$0.text(0), String($0.integer(1))] }
+        #expect(rows == [["com.example.terminal", "1"]])
+        let version = try Database(path: corpus.path).rows("SELECT version FROM schema_version", { _ in }) {
+            $0.integer(0)
+        }
         #expect(version == [Schema.version])
     }
 

@@ -180,7 +180,8 @@ extension LocalModel {
         }
         guard let downloader else { throw WeightsNotOnDisk(identifier: identifier) }
         let resolved = try await resolve(
-            configuration: ModelConfiguration(id: identifier), from: downloader(), useLatest: false,
+            configuration: ModelConfiguration(id: identifier, revision: revision),
+            from: downloader(), useLatest: false,
             progressHandler: { onProgress($0.fractionCompleted) })
         return resolved.modelDirectory
     }
