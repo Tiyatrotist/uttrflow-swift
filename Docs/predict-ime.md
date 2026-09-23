@@ -6,6 +6,10 @@ This is what was measured, what works, and what it costs where it does not.
 
 Re-run any of it with `uttrflow-dev probe ime`.
 
+Which application publishes what is collected in [compatibility.md](compatibility.md); this page
+feeds its `Marked text` column, and the table under "How far it travels" stays here because the
+reach of one attribute is this page's whole subject.
+
 **Summary.** A real state signal exists and is public — `AXTextInputMarkedRange` — but it
 only reaches AppKit multi-line text views. Everywhere else the answer is a capability
 guess from the selected input source, which is a stopgap and is stated as one below.

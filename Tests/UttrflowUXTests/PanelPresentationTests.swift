@@ -290,7 +290,9 @@ struct PanelChromeTests {
 
     @Test("the panel teaches the three keystrokes under the list")
     func hint() {
-        #expect(PanelFixture.page().hint == "↑↓ to choose · ⏎ to paste · esc to close")
+        #expect(
+            PanelFixture.page().hint
+                == "↑↓ to choose · ⏎ to paste · ⌘⏎ plain · ⌘Z undo · esc to close")
     }
 
     /// Promising ↑↓ and ⏎ over an empty list is a small lie, and the panel is most people's only lesson.

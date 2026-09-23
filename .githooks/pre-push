@@ -61,18 +61,53 @@ done
 # every diff, which is where this class of mistake lives and where no file audit looks.
 # A branch cut before this script existed does not carry it, and blocking that push would
 # be the hook failing rather than the branch. The commit-msg hook guards the same way.
-if ((${#pushed[@]})) && [[ -f Scripts/disclosure_audit.py ]]; then
+#
+# The script is resolved beside the hook rather than beside the push, because
+# `core.hooksPath` is one absolute path for the whole repository, and every worktree runs
+# this same hook against the script that is *here* in the main checkout. A path relative
+# to the pushing worktree would be a script on a different commit from the hook, and the
+# two halves would disagree in a way this hook cannot reconcile — #1030 changed both
+# together and a worktree on the old pair hit it. A `$0`-relative path makes the pair
+# travel as one, and is the only resolution the hook can trust.
+hook_dir="$(cd "$(dirname "$0")" && pwd)"
+audit_script="$hook_dir/../Scripts/disclosure_audit.py"
+if [[ ! -f "$audit_script" ]]; then
+    printf '\n\033[31mpre-push: disclosure audit not found beside the hook\033[0m\n'
+    printf '  Looked at: %s\n' "$audit_script"
+    printf '  Reinstall with: make hooks\n\n'
+    exit 1
+fi
+
+if ((${#pushed[@]})); then
     printf '\n\033[1mpre-push: checking what is about to be published\033[0m\n'
     for range in "${pushed[@]}"; do
-        # Quoted: a new-branch range carries git's own flags, which the script splits itself.
-        if ! python3 Scripts/disclosure_audit.py --range "$range"; then
-            printf '\n\033[31m  nothing was pushed\033[0m\n'
-            printf '  A commit message or an added line carries text that must not be\n'
-            printf '  published. See AGENTS.md, "What must never reach a tracked file".\n'
-            printf '  Amend or rewrite the commit — the branch has not left this machine,\n'
-            printf '  so this is still fixable. After a push it is not.\n\n'
+        # Quoted: a new-branch range carries git's own flags ("--not --remotes=…"), which
+        # the script splits with shlex.split so argparse sees one clean --range value.
+        # Stderr is captured so a usage error can be told apart from a real refusal.
+        audit_log="$(mktemp -t uttrflow-prepush-audit)"
+        if ! python3 "$audit_script" --range "$range" 2> "$audit_log"; then
+            # An argparse failure prints "usage:" and "error:" to stderr — that's a script
+            # the hook could not invoke, not a branch the script refused. The two have to
+            # be told apart; otherwise a toolchain mismatch prints the disclosure refusal
+            # for text that is clean, and the gate becomes the wall it is trying not to be.
+            if grep -qE '^(usage:|.+: error:)' "$audit_log"; then
+                printf '\n\033[31mpre-push: disclosure audit could not be run\033[0m\n'
+                printf '  The hook is at %s\n' "$hook_dir"
+                printf '  The audit (%s) refused its arguments. Full output:\n\n' "$audit_script"
+                sed 's/^/  /' "$audit_log"
+                printf '\n  A clean branch must not be refused by a gate that never ran.\n'
+                printf '  Reinstall with: make hooks\n\n'
+            else
+                printf '\n\033[31m  nothing was pushed\033[0m\n'
+                printf '  A commit message or an added line carries text that must not be\n'
+                printf '  published. See AGENTS.md, "What must never reach a tracked file".\n'
+                printf '  Amend or rewrite the commit — the branch has not left this machine,\n'
+                printf '  so this is still fixable. After a push it is not.\n\n'
+            fi
+            rm -f "$audit_log"
             exit 1
         fi
+        rm -f "$audit_log"
     done
 fi
 

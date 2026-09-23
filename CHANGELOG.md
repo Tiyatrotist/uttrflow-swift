@@ -12,6 +12,82 @@ Each released version is a git tag and a build at
 ## [Unreleased]
 
 ### Fixed
+- **Inline ghost stops at the host window's edge when the field's frame is unusable.** When the
+  focused field's Accessibility frame was a caret-shaped 3pt rectangle or the caret was scrolled
+  outside it, the ghost ran all the way to the screen's right edge, painting over the host
+  window's chrome and controls. The host window's rectangle is now the second rung of the bound
+  ladder, between the field and the screen, and a caret-shaped field frame is no longer taken
+  as a real field at all (#1101).
+- **Copy Diagnostics no longer puts dictated words on the clipboard.** When the AI clean-up refused
+  an answer, the copied report quoted the words it refused over — a name, a number, whatever was
+  said — though the report promises it counts and never quotes. It now names the kind of refusal
+  and not the words. The Diagnostics page on your Mac still shows the full reason (#645).
+- **Uttrflow no longer sends your Hugging Face token when it downloads the AI suggestion model.**
+  If you had ever signed in to Hugging Face on this Mac, the app attached your personal token to
+  its own downloads. It now asks for public files as nobody, and ignores `HF_ENDPOINT` (#666).
+- **The AI suggestion models and the speech tokenizer are pinned to exact versions.** A new install
+  gets the version this release was tested against rather than whatever was published since, and
+  the tokenizer is checked against a recorded hash before it is used (#666).
+- **Forgetting what AI suggestions learned now removes it from disk straight away.** The lines
+  were deleted from the store but stayed readable in a file beside it until you quit Uttrflow, so
+  a backup taken in between still held them. If that file cannot be emptied, forgetting now says
+  so rather than reporting success (#642).
+- **Turning AI suggestions off for an app now also stops it being learned from.** The switch filed
+  its answer under one spelling of the app's identifier and the capture side looked it up under
+  another, so for any app whose identifier has a capital letter the second of the two checks
+  answered "carry on". A file holding both spellings is read as the refusal (#668).
+- **What Uttrflow keeps about you is now readable only by you.** The clipboard list, copied
+  pictures, the dictation history, the personal dictionary, your snippets, what AI suggestions
+  learned and the folder they all sit in were created readable by anything else running on the
+  Mac, and are now the owner's alone. Existing files are tightened the next time they are
+  written (#656).
+- **Typing over an AI suggestion no longer waits half a second per key.** The ghost panel hides
+  without AppKit's fade, which held the main thread until it finished; Tab inserts at once (#954).
+- **The clipboard panel no longer closes under you after "Copied — press ⌘V".** Any key or click
+  after a notice keeps it open, and an open sheet is never closed by the notice (#868).
+- **A copy another app has not delivered yet no longer keeps the clipboard panel shut.** ⇧⌘V opens
+  from what is already stored, a promised or Universal Clipboard read is given up on after 2 s, and
+  the clip appears when it arrives (#895).
+- **An AI suggestion pass no longer walks the other app's window twice for one line.** The
+  alternatives pass reuses the context the first pass built, and an unchanged window is walked at
+  most once a second (#879).
+- **Typing a new line in a field with a lot of learned history is no longer slower with every
+  keystroke.** Lines too short to match are ruled out in SQL, and only a line that matches is built
+  up and checked for being destructive (#870).
+- **The recent-lines read for AI suggestions no longer groups every learned line of every folder or
+  conversation.** Each scope is read through its index and the few lines shown are chosen in Swift (#880).
+- **An AI suggestion appears sooner after a pause.** The 120 ms quiet is now counted from the last
+  key rather than from the work that follows it, and the two context reads run side by side (#878).
+- **AI suggestions no longer read the focused field in applications where they are off or paused.**
+  The per-application switch and the pause are checked before any Accessibility call (#903).
+- **AI suggestions step aside while you dictate.** No suggestion model pass starts while a dictation
+  records, recognises, tidies or inserts, and a drawn ghost is withdrawn when recording begins (#881).
+- **The speech log now says what a piece cost beyond one decode** — temperature fallbacks, their
+  seconds, encoder runs, and whether the empty-result retry ran — so a slow dictation can name its
+  cause (#871).
+- **AI suggestions in a terminal stop re-scanning PATH and re-listing a program's verbs in every
+  directory.** Those answers are now cached once for the machine, and a listing that keeps timing
+  out is left alone for longer each time, up to ten minutes (#890).
+- **A field read that a turn gave up on no longer delays the next one.** Reads queued behind a stall
+  are dropped when a newer one arrives, and a read past its deadline stops sending messages (#888).
+- **The first dictation after an idle spell is tidied by a session warmed during that dictation.**
+  A prepared session older than a minute is replaced at key-down instead of being used cold (#876).
+- **`uttrflow-dev bench` can idle between jobs** with `--idle-before`, so a cold tidier session is
+  reproducible, and each `clean` line names the steps that changed something and any refused
+  answer (#916).
+
+### Changed
+- **Suggestions is now called AI suggestions.** The Settings tab and its heading, the menu
+  bar switch, the notes on that screen and what VoiceOver reads for a suggestion all use the
+  new name. Nothing you chose there changes: every setting is kept as it was.
+
+### Fixed
+- **A copied picture the clipboard does not keep no longer leaves its file on disk.** A
+  screenshot dropped the moment it arrives, because the pictures folder is already at its
+  limit, used to leave a PNG behind that nothing ever deleted, so repeated copies grew the
+  folder past the limit it declares. Pictures left behind by an earlier version are removed
+  the next time Uttrflow starts; no clip refers to them, so nothing you can still see goes
+  with them (#777).
 - **Hiding an AI suggestion that is already hidden no longer redraws the panel.** Each keystroke
   with nothing drawn used to rebuild the view and look up the screens two or three times on the
   main thread (#889).
@@ -39,62 +115,6 @@ Each released version is a git tag and a build at
   listed.** The six-rows-per-group cap no longer hides a match that typing more could not reach (#898).
 - **Copying one enormous decorated character no longer hangs clipboard history.** Text with tens
   of KB of combining marks or joined emoji in a single character is classified in milliseconds (#896).
-- **AI suggestions no longer read the focused field in applications where they are off or paused.**
-  The per-application switch and the pause are checked before any Accessibility call (#903).
-- **AI suggestions step aside while you dictate.** No suggestion model pass starts while a dictation
-  records, recognises, tidies or inserts, and a drawn ghost is withdrawn when recording begins (#881).
-- **The speech log now says what a piece cost beyond one decode** — temperature fallbacks, their
-  seconds, encoder runs, and whether the empty-result retry ran — so a slow dictation can name its
-  cause (#871).
-- **AI suggestions in a terminal stop re-scanning PATH and re-listing a program's verbs in every
-  directory.** Those answers are now cached once for the machine, and a listing that keeps timing
-  out is left alone for longer each time, up to ten minutes (#890).
-- **A field read that a turn gave up on no longer delays the next one.** Reads queued behind a stall
-  are dropped when a newer one arrives, and a read past its deadline stops sending messages (#888).
-- **The first dictation after an idle spell is tidied by a session warmed during that dictation.**
-  A prepared session older than a minute is replaced at key-down instead of being used cold (#876).
-- **`uttrflow-dev bench` can idle between jobs** with `--idle-before`, so a cold tidier session is
-  reproducible, and each `clean` line names the steps that changed something and any refused
-  answer (#916).
-- **Typing over an AI suggestion no longer waits half a second per key.** The ghost panel hides
-  without AppKit's fade, which held the main thread until it finished; Tab inserts at once (#954).
-- **The clipboard panel no longer closes under you after "Copied — press ⌘V".** Any key or click
-  after a notice keeps it open, and an open sheet is never closed by the notice (#868).
-- **A copy another app has not delivered yet no longer keeps the clipboard panel shut.** ⇧⌘V opens
-  from what is already stored, a promised or Universal Clipboard read is given up on after 2 s, and
-  the clip appears when it arrives (#895).
-- **An AI suggestion pass no longer walks the other app's window twice for one line.** The
-  alternatives pass reuses the context the first pass built, and an unchanged window is walked at
-  most once a second (#879).
-- **Typing a new line in a field with a lot of learned history is no longer slower with every
-  keystroke.** Lines too short to match are ruled out in SQL, and only a line that matches is built
-  up and checked for being destructive (#870).
-- **The recent-lines read for AI suggestions no longer groups every learned line of every folder or
-  conversation.** Each scope is read through its index and the few lines shown are chosen in Swift (#880).
-- **An AI suggestion appears sooner after a pause.** The 120 ms quiet is now counted from the last
-  key rather than from the work that follows it, and the two context reads run side by side (#878).
-- **Copy Diagnostics no longer puts dictated words on the clipboard.** When the AI clean-up refused
-  an answer, the copied report quoted the words it refused over — a name, a number, whatever was
-  said — though the report promises it counts and never quotes. It now names the kind of refusal
-  and not the words. The Diagnostics page on your Mac still shows the full reason (#645).
-- **Forgetting what AI suggestions learned now removes it from disk straight away.** The lines
-  were deleted from the store but stayed readable in a file beside it until you quit Uttrflow, so
-  a backup taken in between still held them. If that file cannot be emptied, forgetting now says
-  so rather than reporting success (#642).
-- **Turning AI suggestions off for an app now also stops it being learned from.** The switch filed
-  its answer under one spelling of the app's identifier and the capture side looked it up under
-  another, so for any app whose identifier has a capital letter the second of the two checks
-  answered "carry on". A file holding both spellings is read as the refusal (#668).
-- **What Uttrflow keeps about you is now readable only by you.** The clipboard list, copied
-  pictures, the dictation history, the personal dictionary, your snippets, what AI suggestions
-  learned and the folder they all sit in were created readable by anything else running on the
-  Mac, and are now the owner's alone. Existing files are tightened the next time they are
-  written (#656).
-
-### Changed
-- **Suggestions is now called AI suggestions.** The Settings tab and its heading, the menu
-  bar switch, the notes on that screen and what VoiceOver reads for a suggestion all use the
-  new name. Nothing you chose there changes: every setting is kept as it was.
 
 ## [2026.9.14] — 2026-09-14
 

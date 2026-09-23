@@ -31,7 +31,7 @@ public actor MLXCleanupModel: CleanupModel {
         guard container == nil else { return }
         do {
             let directory = try await model.weightsDirectory(
-                cache: HubCache.default.cacheDirectory, downloader: { #hubDownloader() },
+                cache: HubCache.default.cacheDirectory, downloader: { #hubDownloader(AnonymousHub.client()) },
                 onProgress: onProgress)
             container = try await QuantizedLoad.container(
                 from: directory, using: #huggingFaceTokenizerLoader())

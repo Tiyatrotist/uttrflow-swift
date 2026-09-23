@@ -18,6 +18,18 @@ struct PhoneticIndexTests {
         #expect(index.candidates(soundingLike: "kubectl").isEmpty)
     }
 
+    @Test("finds accented Latin names from either spelling")
+    func findsAccentedLatinNames() {
+        let accented = PhoneticIndex(entries: [word("Émile", from: .added)])
+        let plain = PhoneticIndex(entries: [word("Emile", from: .added)])
+
+        #expect(accented.candidates(soundingLike: "Emile").map(\.word) == ["Émile"])
+        #expect(plain.candidates(soundingLike: "Émile").map(\.word) == ["Emile"])
+        #expect(
+            PhoneticIndex(entries: [word("Müller", from: .added)])
+                .candidates(soundingLike: "Muller").map(\.word) == ["Müller"])
+    }
+
     /// Quotes or brackets a recogniser put around a word still find the entry the bare word would.
     @Test(
         "finds an entry when the heard word is quoted or bracketed",

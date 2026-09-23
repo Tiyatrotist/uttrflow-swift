@@ -47,8 +47,9 @@ synchronous Accessibility call that will not notice a cancellation; the point is
 dictation stops waiting, and the Accessibility layer's own messaging timeout is what eventually
 frees the thread. That timeout is set on each element read — the application, its focused
 window and its focused field — and never on the system-wide element, whose timeout is
-process-wide and would be overwritten by whichever caller set it last (#887). The loser turning up late must therefore be harmless — `Deadline` resumes the
-caller once and ignores whichever side arrives second.
+process-wide and would be overwritten by whichever caller set it last (#887). The loser turning up
+late must therefore be harmless: `Deadline` resumes the caller once, and `MacContextEngine` lets
+only the latest uncancelled read update the remembered application behind Uttrflow.
 
 That blocking read runs on a dispatch queue of its own rather than the cooperative pool, because a
 napped application measurably does not answer for a tenth of a second and holding a pool thread
