@@ -787,14 +787,14 @@ else
     )"
 fi
 
-# 7. The audio-input entitlement made it into the signature. Inert in a local build,
-#    which does not enable the hardened runtime — but rehearsal and distribution both
-#    do, where its absence is a silent microphone denial, so it is checked on every
-#    build while the failure is still cheap.
-codesign -d --entitlements - --xml "$APP" 2>/dev/null \
-    | grep -q 'com.apple.security.device.audio-input' \
+# 7. The audio-input entitlement made it into the signature, set to true. Inert today,
+#    because we do not enable the hardened runtime — but the day someone does, an absent
+#    or false-valued entitlement is a silent microphone denial, so it is checked now
+#    while the failure is still cheap.
+AUDIO_ENTITLEMENT_ERROR="$(codesign -d --entitlements - --xml "$APP" 2>/dev/null \
+    | python3 "$SCRIPT_DIR/entitlement_gate.py" require-true com.apple.security.device.audio-input 2>&1)" \
     || fail "$(
-        printf 'com.apple.security.device.audio-input is not in the embedded entitlements.\n'
+        printf '%s\n' "$AUDIO_ENTITLEMENT_ERROR"
         printf '  Under the hardened runtime this ships an app whose microphone returns\n'
         printf '  silence on any Mac that has not already granted it — with no prompt, no\n'
         printf '  error and no TCC record. Do not ship without it.'

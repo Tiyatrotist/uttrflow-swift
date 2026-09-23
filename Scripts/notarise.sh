@@ -50,6 +50,7 @@
 set -euo pipefail
 
 PACKAGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$PACKAGE_ROOT/Scripts"
 cd "$PACKAGE_ROOT"
 
 fail() {
@@ -149,18 +150,23 @@ check_app() {
         printf '    ./Scripts/bundle.sh distribution "Developer ID Application: NAME (TEAMID)"'
     )"
 
-    printf '%s\n' "$entitlement_info" | grep -q 'com.apple.security.device.audio-input' || fail "$(
-        printf 'com.apple.security.device.audio-input is missing from %s.\n' "$app"
-        printf '  Apple would notarise this build. It would also have no microphone on any\n'
-        printf '  Mac that has not already granted this identifier: no prompt, no error, and\n'
-        printf '  every captured sample exactly zero. Refusing to ship it.'
-    )"
+    local audio_entitlement_error
+    audio_entitlement_error="$(printf '%s\n' "$entitlement_info" \
+        | python3 "$SCRIPT_DIR/entitlement_gate.py" require-true com.apple.security.device.audio-input 2>&1)" \
+        || fail "$(
+            printf '%s\n' "$audio_entitlement_error" | sed "s|embedded entitlements|embedded entitlements of $app|"
+            printf '  Apple would notarise this build. It would also have no microphone on any\n'
+            printf '  Mac that has not already granted this identifier: no prompt, no error, and\n'
+            printf '  every captured sample exactly zero. Refusing to ship it.'
+        )"
 
     printf '%s\n' "$signing_info" | grep -q '^Timestamp=' \
         || fail "$app carries no secure timestamp; notarisation rejects that. Re-sign with the network up."
 
-    if printf '%s\n' "$entitlement_info" | grep -q 'com.apple.security.get-task-allow'; then
-        fail "com.apple.security.get-task-allow is embedded in $app; notarisation rejects debuggable builds"
+    local debug_entitlement_error
+    if ! debug_entitlement_error="$(printf '%s\n' "$entitlement_info" \
+        | python3 "$SCRIPT_DIR/entitlement_gate.py" forbid-true com.apple.security.get-task-allow 2>&1)"; then
+        fail "$debug_entitlement_error in $app; notarisation rejects debuggable builds"
     fi
 
     printf '%s\n' "$signing_info" | grep -q 'Authority=Developer ID Application:' || fail "$(
