@@ -133,6 +133,9 @@ version of the list that has been applied. Two things follow, and both are delib
 user deletes does not reappear on the next launch, and a later build that adds a word bumps
 `ShippedWords.version` to seed the new one without re-seeding what has already been thrown away.
 The record is named after the dictionary file, so two dictionaries in one directory never share it.
+If the record is present but unreadable, seeding stops without changing the dictionary or replacing
+the record. Launch logs the failure so the damaged marker can be diagnosed; only an absent record
+is treated as a new dictionary.
 
 The record is written after the words, never before. If the dictionary write fails, nothing is
 recorded and the next launch seeds again; if the record write fails after the words landed, the

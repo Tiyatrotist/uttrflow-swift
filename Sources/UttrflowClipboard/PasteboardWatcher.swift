@@ -131,6 +131,7 @@ public actor PasteboardWatcher {
 
         // K4 — a picture, asked first because the branch below returns for anything textless.
         if copied == nil, let picture = await bounded({ [source] in source.image() }) ?? nil {
+            guard !markers.contains(.concealed) else { return nil }
             return NoticedClip(
                 clip: Clip(
                     text: "", kind: .image, copiedAt: date,

@@ -65,6 +65,36 @@ struct DestructiveCommandTests {
     }
 
     @Test(
+        "Quoting or escaping the executable does not hide a destructive command.",
+        arguments: [
+            #""rm" -rf build"#, "'rm' -rf build", #"r\m -rf build"#,
+            #"sudo "rm" -rf build"#, "env FOO=1 'rm' build", #"find . -exec "rm" {} +"#,
+        ])
+    func quotedDestroyers(_ line: String) {
+        #expect(DestructiveCommand.matches(line), "\(line) should be destructive")
+    }
+
+    @Test(
+        "Quoted ordinary commands and quoted separators are not destructive.",
+        arguments: [
+            #""ls" -la"#, "'git' status", #"echo "rm -rf /""#,
+            #"echo "done; rm -rf build""#,
+        ])
+    func quotedOrdinaryCommands(_ line: String) {
+        #expect(!DestructiveCommand.matches(line), "\(line) should be ordinary")
+    }
+
+    @Test("Unresolved terminal syntax is refused without treating ordinary prose as destructive.")
+    func unresolvedSyntax() {
+        #expect(DestructiveCommand.matches(#""$COMMAND" -rf build"#, failClosedOnUnresolved: true))
+        #expect(DestructiveCommand.matches("echo $(rm -rf build)", failClosedOnUnresolved: true))
+        #expect(DestructiveCommand.matches("git push $FLAGS", failClosedOnUnresolved: true))
+        #expect(!DestructiveCommand.matches("The result (if available) is ready."))
+        #expect(!DestructiveCommand.matches("SELECT * FROM users"))
+        #expect(!DestructiveCommand.matches(#""ls" build"#, failClosedOnUnresolved: true))
+    }
+
+    @Test(
         "Commands that only look like a destroying one are left alone.",
         arguments: [
             "git branch -d merged", "git branch --delete merged", "git restore --staged Sources",

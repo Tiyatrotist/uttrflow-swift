@@ -354,6 +354,24 @@ struct PasteOnlyApplicationTests {
     }
 }
 
+/// #1310: a real Accessibility write that lands can still leave the field's whole value looking untouched.
+@Suite("Replacing a selection with the words already there")
+struct IdenticalSelectionInsertionTests {
+    @Test("writes once through Accessibility, and never falls to a paste that would duplicate the words")
+    func doesNotDuplicateViaPaste() async throws {
+        let field = SelectionWriter(field: FakeSelectionField("same", caret: 0, length: 4))
+        let keystrokes = FakeKeystrokeSender()
+        let coordinator = TextInsertion.coordinator(
+            focus: FakeFocus(field: field, somethingFocused: true),
+            pasteboard: FakePasteboard(), keystrokes: keystrokes)
+
+        let attempt = try await coordinator.insert("same")
+
+        #expect(attempt.method == .accessibility, "the Accessibility write succeeded and must not be doubted")
+        #expect(keystrokes.pasteCount == 0, "a successful same-text replacement must not also be pasted")
+    }
+}
+
 @Suite("The assembled strategies")
 struct TextInsertionAssemblyTests {
     /// The keystroke is refused, so the chain is driven all the way to the floor this suite exercises.

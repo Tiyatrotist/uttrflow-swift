@@ -45,7 +45,6 @@ DESCRIPTIONS = (
 
 # Public descriptions of values whose every case is fixed wording, each with the reason printed on every run.
 DESCRIBED = {
-    ("Sources/Uttrflow/AppDelegate.swift", "String(describing: method)"): "an InsertionArrival, a case with no payload",
     ("Sources/Uttrflow/AppDelegate.swift", "String(describing: became)"): "a LaunchAtLoginStatus, a case with no payload",
     ("Sources/Uttrflow/Suggestion/SuggestionCoordinator.swift", "String(describing: read?.placement)"): (
         "a SuggestionPlacement, a case with no payload"
@@ -175,21 +174,50 @@ def described(value):
     return any(pattern.search(value) for pattern in DESCRIPTIONS)
 
 
-def findings_in(path, builders=(), text=None):
-    """Yields (line, value, names) for each interpolation in a log message that carries user text or a public description; a builder's own calls are trusted, since its file is scanned whole."""
-    if text is None:
-        text = open(path, errors="ignore").read()
+def log_interpolations(path, text):
+    """Yields (offset, expression, whole) for every interpolation inside a log message in a file; `whole` marks a builder's file, which is scanned whole."""
     builder = BUILDER_FILE.search(path) is not None
     spans = [(0, len(text), True)] if builder else []
     spans += [(match.end() - 1, call_end(text, match.end() - 1), False) for match in LOGGER_CALL.finditer(text)]
     for start, end, whole in spans:
         for offset, expression in interpolations(text, start, end):
-            value = value_of(expression)
-            names = user_text_names(value, builders)
-            if names and (path, value) not in ALLOWED:
-                yield text.count("\n", 0, offset) + 1, value, names
-            elif (whole or is_public(expression)) and described(value) and (path, value) not in DESCRIBED:
-                yield text.count("\n", 0, offset) + 1, value, ["public description"]
+            yield offset, expression, whole
+
+
+def log_values(path, text):
+    """The interpolated values the log messages in a file carry, which is what an exception must name to be checkable."""
+    return {value_of(expression) for _, expression, _ in log_interpolations(path, text)}
+
+
+def findings_in(path, builders=(), text=None):
+    """Yields (line, value, names) for each interpolation in a log message that carries user text or a public description; a builder's own calls are trusted, since its file is scanned whole."""
+    if text is None:
+        text = open(path, errors="ignore").read()
+    for offset, expression, whole in log_interpolations(path, text):
+        value = value_of(expression)
+        names = user_text_names(value, builders)
+        if names and (path, value) not in ALLOWED:
+            yield text.count("\n", 0, offset) + 1, value, names
+        elif (whole or is_public(expression)) and described(value) and (path, value) not in DESCRIBED:
+            yield text.count("\n", 0, offset) + 1, value, ["public description"]
+
+
+def read_source(path):
+    """The text of a file in the tree, or None when the exception names a path that is not there."""
+    return open(path, errors="ignore").read() if os.path.isfile(path) else None
+
+
+def stale_exceptions(exceptions, text_of=read_source):
+    """Yields (path, value, why) for every exception key the audit cannot check: its file is gone, or no log message in that file still carries the interpolation it names."""
+    carried = {}
+    for path, value in sorted(exceptions):
+        if path not in carried:
+            text = text_of(path)
+            carried[path] = None if text is None else log_values(path, text)
+        if carried[path] is None:
+            yield path, value, "no longer exists"
+        elif value not in carried[path]:
+            yield path, value, "carries no such interpolation in a log message"
 
 
 def swift_files():
@@ -218,13 +246,27 @@ SELF_TEST = (
 )
 
 
+# Invented exceptions and the file each names, `None` for no such file, with whether the audit must call it stale.
+STALE_SELF_TEST = (
+    ("Sources/A.swift", "clip.id", 'log.notice("kept \\(clip.id, privacy: .public)")', False),
+    ("Sources/A.swift", "clip.id", 'log.notice("kept \\(clip.name, privacy: .public)")', True),
+    ("Sources/A.swift", "clip.id", 'let note = "clip.id \\(clip.id)"  // clip.id\n', True),
+    ("Sources/ALog.swift", "String(describing: error)", 'static func f() -> String { "x \\(String(describing: error))" }', False),
+    ("Sources/Gone.swift", "clip.id", None, True),
+)
+
+
 def self_test():
-    """Whether every invented call is reported exactly when it should be; prints each one that is not."""
+    """Whether every invented call is reported, and every invented exception called stale, exactly when it should be; prints each one that is not."""
     wrong = [
         (path, text) for path, text, expected in SELF_TEST if bool(list(findings_in(path, ["SuggestionLog"], text))) != expected
     ]
     for path, text in wrong:
         print(f"  ✗ self-test: {path}  {text}", file=sys.stderr)
+    for path, value, text, expected in STALE_SELF_TEST:
+        if bool(list(stale_exceptions({(path, value)}, lambda _, text=text: text))) != expected:
+            wrong.append((path, value))
+            print(f"  ✗ self-test: the stale check on {path}  \\({value})", file=sys.stderr)
     return not wrong
 
 
@@ -242,6 +284,17 @@ def main():
         print("log privacy audit: no Swift sources found; refusing to report a clean scan of nothing.")
         return 1
 
+    # Refuse before printing anything reassuring: an exception the audit cannot check is not an
+    # exception it has checked, and every line below would read as though it had been.
+    stale = list(stale_exceptions({*ALLOWED, *DESCRIBED}))
+    if stale:
+        print("\n  ✗ the audit cannot check its own exceptions, so it reports nothing:", file=sys.stderr)
+        for path, value, why in stale:
+            print(f"    {path}  \\({value})  {why}", file=sys.stderr)
+        print("    Drop the exception, or name the interpolation the log message now carries so a", file=sys.stderr)
+        print("    reviewer decides afresh; see `Docs/logging.md`.", file=sys.stderr)
+        return 1
+
     print("\nWhat a log message may carry")
     print("  Allowed despite the name, with the reason:")
     for (path, value), reason in sorted(ALLOWED.items()):
@@ -257,9 +310,6 @@ def main():
     trusted = [os.path.basename(path)[: -len(".swift")] for path in builders]
     sys.stdout.flush()
     failures = [(path, line, value, names) for path in files for line, value, names in findings_in(path, trusted)]
-    stale = [key for key in (*ALLOWED, *DESCRIBED) if not os.path.isfile(key[0])]
-    for path, value in stale:
-        print(f"\n  ✗ the allow-list names {path}, which no longer exists", file=sys.stderr)
 
     if failures:
         print(f"\n  ✗ {len(failures)} log interpolation(s) carry text a person typed, read or said, or a public description:", file=sys.stderr)
@@ -268,8 +318,6 @@ def main():
         print("    The unified log keeps what it is given, and `.private` is readable on a Mac set to", file=sys.stderr)
         print("    reveal it. Log a length or a count instead (`.count`, `!= nil`), and an error by its type and", file=sys.stderr)
         print("    case (`SuggestionLog.failure`); see `Docs/logging.md`.", file=sys.stderr)
-        return 1
-    if stale:
         return 1
 
     print(f"\nlog privacy audit: {len(files)} files, no log message carries user text.\n")

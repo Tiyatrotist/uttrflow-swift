@@ -250,6 +250,25 @@ struct SurroundingsTests {
         #expect(visits.count <= Surroundings.maximumElements)
     }
 
+    /// #1300: a very wide sibling array must not cost more pending-step storage than the cap allows, at any width.
+    @Test(
+        "A very wide sibling array still builds no more pending steps than the element allowance",
+        arguments: [500, 5_000, 50_000])
+    func widthDoesNotGrowThePendingWork(width: Int) {
+        let many = (0..<width).map { label(1_000 + $0, "row \($0)") }
+        let window = Node(
+            id: 0, role: "AXWindow", children: [Node(id: 40, children: [compose] + many)])
+        let tally = SurroundingsStepTally()
+        let read = Surroundings.$stepTally.withValue(tally) {
+            Surroundings.collect(
+                around: compose, in: FakeTree(root: window), windowTitle: nil, deadline: unhurried)
+        }
+        #expect(!(lines(read).isEmpty))
+        #expect(
+            tally.count <= Surroundings.maximumElements,
+            "\(width) siblings built \(tally.count) pending steps")
+    }
+
     @Test("A text element's value is taken once, not again from its children, and blank text is nothing.")
     func textElementsAreLeaves() {
         let field = Node(

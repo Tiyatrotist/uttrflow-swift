@@ -26,10 +26,11 @@ extension PermissionError: CataloguedFailure {
 }
 
 extension AudioCaptureError: CataloguedFailure {
-    public static var firstCase: Self { .noInputDevice }
+    public static var firstCase: Self { .microphoneDenied }
 
     public var caseAfter: Self? {
         switch self {
+        case .microphoneDenied: .noInputDevice
         case .noInputDevice: .alreadyRecording
         case .alreadyRecording: .notRecording
         case .notRecording: .unsupportedInputFormat
@@ -85,7 +86,8 @@ extension DictionaryStoreError: CataloguedFailure {
 
     public var caseAfter: Self? {
         switch self {
-        case .couldNotWrite: .wordIsEmpty
+        case .couldNotWrite: .couldNotReadSeedRecord
+        case .couldNotReadSeedRecord: .wordIsEmpty
         case .wordIsEmpty: .wordAlreadyKnown
         case .wordAlreadyKnown: nil
         }
@@ -122,7 +124,8 @@ extension TextInsertionError: CataloguedFailure {
         switch self {
         case .noFocusedTextField: .accessibilityDenied
         case .accessibilityDenied: .clipboardUnavailable
-        case .clipboardUnavailable: .insertionRejected(description: "")
+        case .clipboardUnavailable: .insertionTimedOut
+        case .insertionTimedOut: .insertionRejected(description: "")
         case .insertionRejected: nil
         }
     }

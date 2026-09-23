@@ -1,17 +1,22 @@
 /// Recognises command lines that destroy data or the machine, so they are never learned or auto-offered.
 public enum DestructiveCommand {
     /// Whether taking this line as a completion could do irreversible harm, judged conservatively.
-    public static func matches(_ text: String) -> Bool {
+    public static func matches(_ text: String, failClosedOnUnresolved: Bool = false) -> Bool {
         // A fork bomb carries no ordinary tokens, so it is matched on the whitespace-stripped text.
         if text.lowercased().filter({ !$0.isWhitespace }).contains(":(){:|:&};:") { return true }
-        // Each clause is judged on its own words, so a later command is read and an earlier one's flags are not borrowed.
-        return clauses(of: text).contains(where: destroys)
-    }
-
-    /// The line cut where one command ends and the next begins.
-    private static func clauses(of text: String) -> [String] {
-        text.split(whereSeparator: { $0 == ";" || $0 == "&" || $0 == "|" || $0.isNewline })
-            .map(String.init)
+        let lower = text.lowercased()
+        if lower.contains("of=/dev/") || lower.contains("/dev/sd") || lower.contains("/dev/disk") {
+            return true
+        }
+        guard let clauses = ShellWords.commands(in: text, home: "") else { return failClosedOnUnresolved }
+        return clauses.contains { clause in
+            if failClosedOnUnresolved,
+                (clause.words + clause.inputs).contains(where: \.isUnresolved)
+            {
+                return true
+            }
+            return destroys(clause.words, failClosedOnUnresolved: failClosedOnUnresolved)
+        }
     }
 
     /// Words that run the command after them, with the flags of theirs that take a value.
@@ -29,37 +34,45 @@ public enum DestructiveCommand {
         "poweroff",
     ]
 
-    /// The program a clause runs, read past a path to it, a backslash that skips an alias, and every wrapper.
-    private static func command(in tokens: [String]) -> (name: String, arguments: [String])? {
+    private enum Command {
+        case none
+        case unresolved
+        case named(String, [String])
+    }
+
+    /// The program a parsed clause runs, read past assignments and every wrapper.
+    private static func command(in tokens: [ShellWord]) -> Command {
         var rest = tokens[...]
         while let first = rest.first {
-            let name = programName(first)
-            if name.contains("="), rest.count > 1 {
+            guard !first.isUnresolved else { return .unresolved }
+            let name = programName(first.text)
+            if TerminalLineCheck.isAssignment(first.text), rest.count > 1 {
                 rest.removeFirst()
                 continue
             }
             guard let flags = wrappers[name], rest.count > 1 else {
-                return (name, Array(rest.dropFirst()))
+                return .named(name, Array(rest.dropFirst().map(\.text)))
             }
             rest.removeFirst()
-            while let flag = rest.first, flag.count > 1, flag.hasPrefix("-") {
+            while let flag = rest.first, flag.text.count > 1, flag.text.hasPrefix("-") {
+                guard !flag.isUnresolved else { return .unresolved }
                 rest.removeFirst()
-                if flags.contains(flag), !rest.isEmpty { rest.removeFirst() }
+                if flags.contains(flag.text), !rest.isEmpty { rest.removeFirst() }
             }
         }
-        return nil
+        return .none
     }
 
-    /// A command word as the program it names, lowercased.
+    /// A parsed command word as the program it names, lowercased.
     private static func programName(_ word: String) -> String {
-        let unescaped = word.hasPrefix("\\") ? String(word.dropFirst()) : word
-        return (unescaped.split(separator: "/").last.map(String.init) ?? unescaped).lowercased()
+        (word.split(separator: "/").last.map(String.init) ?? word).lowercased()
     }
 
     /// Whether one clause destroys data or the machine.
-    private static func destroys(_ clause: String) -> Bool {
-        let tokens = clause.split { $0 == " " || $0 == "\t" }.map(String.init)
-        guard let (command, arguments) = command(in: tokens) else { return false }
+    private static func destroys(_ tokens: [ShellWord], failClosedOnUnresolved: Bool) -> Bool {
+        let parsed = command(in: tokens)
+        if case .unresolved = parsed { return failClosedOnUnresolved }
+        guard case .named(let command, let arguments) = parsed else { return false }
         let lowered = arguments.map { $0.lowercased() }
         if destroyers.contains(command) || command.hasPrefix("mkfs.") { return true }
         switch command {
@@ -91,13 +104,11 @@ public enum DestructiveCommand {
             break
         }
 
-        let lower = clause.lowercased()
-        let words = Set(lower.split { $0 == " " || $0 == "\t" }.map(String.init))
+        let words = Set(tokens.map { $0.text.lowercased() })
         // SQL that drops or empties a table, wherever the verb sits in the clause.
         if words.contains("drop"), words.contains(where: droppableObject) { return true }
         if words.contains("truncate") { return true }
-        // Writing onto a raw device node overwrites the disk behind it.
-        return lower.contains("of=/dev/") || lower.contains("/dev/sd") || lower.contains("/dev/disk")
+        return false
     }
 
     /// Whether a git clause throws work away for good: a forced or deleting push, a hard reset, a forced clean, a forced branch deletion, a dropped stash or discarded changes.

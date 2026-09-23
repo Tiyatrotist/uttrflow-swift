@@ -83,14 +83,17 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     /// Keeps the window hidden rather than released, so the shortcut recorder's state survives.
     func windowWillClose(_ notification: Notification) {
-        model.cancelRecordingShortcut()
+        model.shortcutRecordingSurfaceDidLoseFocus()
         // The main window's sidebar lights its Settings row while this is open.
         onClose?()
     }
 
-    /// Recording owns the key-down only while Settings is the active/key interaction surface, so a keystroke meant for the next app cannot be saved as Uttrflow's shortcut. See `Docs/app-settings-controls.md`.
     func windowDidResignKey(_ notification: Notification) {
-        model.cancelRecordingShortcut()
+        model.shortcutRecordingSurfaceDidLoseFocus()
+    }
+
+    func windowDidResignMain(_ notification: Notification) {
+        model.shortcutRecordingSurfaceDidLoseFocus()
     }
 
     /// The window has gone; nothing was necessarily altered, but what the interface shows has.

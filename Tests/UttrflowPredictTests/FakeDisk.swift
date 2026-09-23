@@ -57,7 +57,7 @@ final class FakeDisk: FileSystemProbing {
 
     func kind(atPath path: String) -> PathKind {
         asked.withLock { $0.append(.stat(path)) }
-        return kinds[path] ?? .missing
+        return kinds[Self.collapse(path)] ?? .missing
     }
 
     func contents(ofFile path: String, limit: Int) -> String? {
@@ -67,12 +67,26 @@ final class FakeDisk: FileSystemProbing {
 
     func names(inDirectory path: String, limit: Int) -> [String]? {
         asked.withLock { $0.append(.list(path)) }
-        guard kinds[path] == .directory else { return nil }
-        let prefix = path == "/" ? "/" : path + "/"
+        let here = Self.collapse(path)
+        guard kinds[here] == .directory else { return nil }
+        let prefix = here == "/" ? "/" : here + "/"
         let names = kinds.keys.filter { $0.hasPrefix(prefix) && $0.count > prefix.count }
             .map { String($0.dropFirst(prefix.count).prefix { $0 != "/" }) }
         let distinct = Array(Set(names)).sorted()
         return distinct.count <= limit ? distinct : nil
+    }
+
+    /// Folds the empty, `.`, and `..` components the kernel would, so a fake without symlinks still answers the way the real one does.
+    private static func collapse(_ path: String) -> String {
+        var kept: [Substring] = []
+        for component in path.split(separator: "/", omittingEmptySubsequences: true) {
+            switch component {
+            case ".": continue
+            case "..": _ = kept.popLast()
+            default: kept.append(component)
+            }
+        }
+        return "/" + kept.joined(separator: "/")
     }
 }
 

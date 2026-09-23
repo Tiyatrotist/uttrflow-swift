@@ -3,6 +3,10 @@
 Three strategies in order — write into the focused element, paste, leave it on the
 clipboard — and each of the first two has a failure that reports success.
 
+Which applications do which of these is collected in [compatibility.md](compatibility.md); this
+page feeds its `AX write`, `Paste`, `Confirmed` and `Full route` columns, and the secure-field
+row, and keeps the reasoning behind each.
+
 ## The Accessibility write that changes nothing
 
 Electron applications (Claude's own desktop app among them) publish a focused text
@@ -71,6 +75,11 @@ Four answers, and only one of them is a fact:
 - **Cancelled** — the task waiting was cancelled, which is what a stage timeout does. It stops
   at once, between reads or in the middle of a wait, without reading the field again, and is
   reported upwards as unconfirmed, never as landed.
+
+If the insertion stage itself times out, no strategy is known to have reached the clipboard.
+The failure therefore points to the saved transcript under Recent, not to a manual paste that
+could insert an older clipboard item. A completed clipboard fallback still reports its own
+delivery and can offer manual paste.
 
 The dictation sits in ``DictationState/inserting`` throughout, which the floating button draws
 as work in progress. That state exists so that the tick is a claim about the words rather than

@@ -6,6 +6,8 @@ public enum TextInsertionError: UttrflowFailure {
     case accessibilityDenied
     /// The clipboard itself refused the text.
     case clipboardUnavailable
+    /// The insertion deadline passed before any delivery result was confirmed.
+    case insertionTimedOut
     /// The focused app refused the text, which is on the clipboard instead.
     case insertionRejected(description: String)
 
@@ -18,6 +20,8 @@ public enum TextInsertionError: UttrflowFailure {
             "Accessibility access is required to insert text into other applications."
         case .clipboardUnavailable:
             "The text couldn't be inserted or copied. It's kept under Recent in the menu bar."
+        case .insertionTimedOut:
+            "The application did not respond. Your dictation is saved under Recent in the menu bar."
         case .insertionRejected:
             "The text couldn't be inserted here. It's been copied, so press ⌘V to paste it."
         }
@@ -30,6 +34,7 @@ public enum TextInsertionError: UttrflowFailure {
         case .accessibilityDenied: .openSystemSettings(.accessibility)
         // The clipboard failed, so "paste" would point at the one place the words are not.
         case .clipboardUnavailable: .showRecentDictations
+        case .insertionTimedOut: .showRecentDictations
         case .insertionRejected: .pasteManually
         }
     }
@@ -40,7 +45,8 @@ public enum TextInsertionError: UttrflowFailure {
         // Nothing on screen took the text this once; the next attempt, with something focused, does.
         case .noFocusedTextField: .recoverable
         // The words exist and the user can reach them; they only missed where they were aimed.
-        case .accessibilityDenied, .clipboardUnavailable, .insertionRejected: .degraded
+        case .accessibilityDenied, .clipboardUnavailable, .insertionTimedOut, .insertionRejected:
+            .degraded
         }
     }
 }

@@ -43,13 +43,16 @@ public struct PasteConfirmation: Sendable {
         self.interval = interval
     }
 
-    /// Watches the caret until `text` sits behind it, answering how long that took.
-    public func waitFor(_ text: String) async -> Outcome {
+    /// Watches the caret until `text` sits behind it; `before` is the pre-paste tail, so an unchanged match does not count.
+    public func waitFor(_ text: String, before: FieldTail? = nil) async -> Outcome {
         let elapsed = Self.stopwatch(from: clock)
         guard !Task.isCancelled else { return .cancelled(.zero) }
         let wanted = Self.wanted(from: text)
         // A field that will not answer now will not answer in a second either, so nothing is waited for.
         guard !wanted.isEmpty, focus.tail(upTo: Self.readLength) != .unreadable else { return .notReported }
+        let priorText = Self.priorText(matching: wanted, before: before)
+        // Set once the caret has read as anything but the pre-paste text, so a later match is trusted even if it settles back on it.
+        var hasChangedSincePaste = priorText == nil
 
         var waited = Duration.zero
         while waited < budget {
@@ -59,9 +62,17 @@ public struct PasteConfirmation: Sendable {
             guard case .text(let seen) = focus.tail(upTo: Self.readLength) else { return .notReported }
             // Read from the clock rather than tallied from the sleeps, so each read is charged to the budget.
             waited = elapsed()
-            if Self.collapsed(seen).hasSuffix(wanted) { return .landed(waited) }
+            if seen != priorText { hasChangedSincePaste = true }
+            // A caret unchanged since before the paste proves nothing, however well it matches.
+            if Self.collapsed(seen).hasSuffix(wanted), hasChangedSincePaste { return .landed(waited) }
         }
         return .gaveUp(waited)
+    }
+
+    /// The pre-paste tail, kept only when it already carried the words this call is waiting for.
+    private static func priorText(matching wanted: String, before: FieldTail?) -> String? {
+        guard case .text(let seen) = before, collapsed(seen).hasSuffix(wanted) else { return nil }
+        return seen
     }
 
     /// Opens the existential clock, which is what lets an instant be held on to.

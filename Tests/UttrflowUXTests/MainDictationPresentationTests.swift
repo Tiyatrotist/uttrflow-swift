@@ -143,6 +143,13 @@ struct DictationPageTests {
         #expect(HistoryFixture.dictation(entries: [HistoryFixture.entry()]).footnote != nil)
         #expect(HistoryFixture.dictation().footnote == nil)
     }
+
+    @Test("the footnote names the keyboard as well as the pointer, since the row controls take focus")
+    func footnoteNamesTheKeyboard() {
+        let footnote = HistoryFixture.dictation(entries: [HistoryFixture.entry()]).footnote
+        #expect(footnote?.contains("Tab") == true)
+        #expect(footnote?.contains("Point at a row") == false)
+    }
 }
 
 @Suite("The badge that leads to Corrections")

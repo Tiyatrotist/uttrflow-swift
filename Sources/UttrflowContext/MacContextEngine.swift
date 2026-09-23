@@ -64,8 +64,13 @@ public final class MacContextEngine: ContextEngine, Sendable {
     private let ownProcessIdentifier: Int32
     private let clock: any Clock<Duration>
 
-    /// The last application in front of the user that was not Uttrflow, which macOS will not be asked for.
-    private let appBehind = Mutex<FrontmostApplication?>(nil)
+    /// The latest read and the last other application, changed under one lock so old reads cannot replace it.
+    private struct AppMemory {
+        var requestNumber: UInt64 = 0
+        var appBehind: FrontmostApplication?
+    }
+
+    private let memory = Mutex(AppMemory())
 
     /// Substitutes both readings; `MacContextEngine+System.swift` wires up the real ones.
     init(
@@ -84,11 +89,15 @@ public final class MacContextEngine: ContextEngine, Sendable {
 
     public func currentContext() async -> AppContext {
         let reading = Reading()
+        let requestNumber = memory.withLock { memory in
+            memory.requestNumber &+= 1
+            return memory.requestNumber
+        }
 
         await withinBudget { [self] in
             // Identity first and banked the moment it arrives, since everything after it can hang.
             let frontmost = await readFrontmostApplication()
-            guard let subject = subject(inFrontOf: frontmost) else { return }
+            guard let subject = subject(inFrontOf: frontmost, for: requestNumber) else { return }
             reading.record(application: subject)
 
             // Uttrflow's own window in front means the focused window is Uttrflow's, and belongs to nobody else.
@@ -116,13 +125,19 @@ public final class MacContextEngine: ContextEngine, Sendable {
     }
 
     /// Which application the context is about, which is never Uttrflow. See `Docs/context-accessibility.md`.
-    private func subject(inFrontOf frontmost: FrontmostApplication?) -> FrontmostApplication? {
+    private func subject(
+        inFrontOf frontmost: FrontmostApplication?, for requestNumber: UInt64
+    ) -> FrontmostApplication? {
         guard let frontmost else { return nil }
-        guard isOurselves(frontmost) else {
-            appBehind.withLock { $0 = frontmost }
-            return frontmost
+        guard !isOurselves(frontmost) else {
+            return memory.withLock { $0.appBehind }
         }
-        return appBehind.withLock { $0 }
+        memory.withLock { memory in
+            if memory.requestNumber == requestNumber, !Task.isCancelled {
+                memory.appBehind = frontmost
+            }
+        }
+        return frontmost
     }
 
     /// Two ways to recognise ourselves, because either can be missing.

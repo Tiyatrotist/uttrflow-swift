@@ -23,8 +23,10 @@ Either way macOS eventually offers Force Quit, which is what users reported doin
 **A recording is finished rather than waited on.** It is waiting on the user, not on the
 app, and finishing it keeps the words — which is the whole point of waiting at all.
 
-**The wait is bounded**, at fifteen seconds, and the reply is sent on every path. An
-unanswered `.terminateLater` is an application that cannot be quit, which is a worse
+**The wait is bounded**, at fifteen seconds from the quit request, and the reply is sent
+on every path. That budget covers flushing held clipboard uses, finishing a recording,
+and waiting for transcription, clean-up and insertion to leave the pipeline busy state.
+An unanswered `.terminateLater` is an application that cannot be quit, which is a worse
 failure than the one the wait exists to prevent.
 
 ## What that costs

@@ -24,6 +24,13 @@ private final class Folder {
         try Data(contents.utf8).write(to: URL(filePath: "\(path)/\(name)"))
     }
 
+    /// Makes a symlink under the folder at `name`, pointing to `target`.
+    func symlink(_ name: String, to target: String) throws {
+        try directory((name as NSString).deletingLastPathComponent)
+        try FileManager.default.createSymbolicLink(
+            atPath: "\(path)/\(name)", withDestinationPath: target)
+    }
+
     deinit {
         try? FileManager.default.removeItem(atPath: path)
     }
@@ -134,6 +141,61 @@ struct TerminalPathGateTests {
         let standing = await verifier.standing(
             ["git push --force origin main", "git push origin main"], after: "git p", in: prose, now: moment)
         #expect(standing == ["git push origin main"])
+    }
+
+    @Test("A symlink is followed before `..`, so a file unreachable through the link is refused.")
+    func symlinkFollowedBeforeParentRefuses() async throws {
+        let folder = try Folder()
+        try folder.directory("target/nested")
+        try folder.file("wrong")
+        try folder.symlink("link", to: "target/nested")
+        #expect(await kept(["cat link/../wrong"], in: shell(in: folder.path)) == [])
+    }
+
+    @Test("A symlink followed before `..` reaches a file the lexical path never could, so the line is kept.")
+    func symlinkFollowedBeforeParentKeeps() async throws {
+        let folder = try Folder()
+        try folder.directory("target/nested")
+        try folder.file("target/wrong")
+        try folder.symlink("link", to: "target/nested")
+        #expect(await kept(["cat link/../wrong"], in: shell(in: folder.path)) == ["cat link/../wrong"])
+    }
+
+    @Test("A remembered quoted destructive executable is refused before display.")
+    func quotedDestructive() async throws {
+        let folder = try Folder()
+        try folder.directory("build")
+        let lines = [#""rm" -rf build"#, "'rm' -rf build", #"sudo "rm" -rf build"#, #""ls" build"#]
+
+        #expect(await kept(lines, in: shell(in: folder.path)) == [#""ls" build"#])
+
+        let verifier = Verifier(index: EnvironmentIndex(reader: StubEnvironment([:])))
+        for source in CandidateSource.allCases {
+            let candidates = lines.map { Candidate(text: $0, source: source) }
+            let verified = await verifier.verified(
+                candidates, in: shell(in: folder.path), typed: "", now: moment)
+            #expect(verified.map(\.text) == [#""ls" build"#])
+        }
+        let generated = await verifier.standing(
+            [#""rm" -rf build"#, #"echo $(rm -rf build)"#, #""ls" build"#], after: "",
+            in: shell(in: folder.path), now: moment)
+        #expect(generated == [#""ls" build"#])
+    }
+
+    @Test("A line in a remote session is not suggested, and this Mac's disk is not asked about it.")
+    func remoteSessionIsNotThisDisk() async throws {
+        let disk = FakeDisk(
+            directories: ["/Users/someone/api"], files: ["/Users/someone/api/README.md"],
+            executables: ["/usr/bin/cat"])
+        let verifier = Verifier(index: EnvironmentIndex(reader: StubEnvironment([:])), files: disk)
+        let lines = ["cat README.md", "cat /Users/someone/api/README.md"]
+        let candidates = lines.map { Candidate(text: $0, source: .personal) }
+        let remote = shell(in: RemoteSession.scope)
+        #expect(await verifier.verified(candidates, in: remote, typed: "", now: moment).isEmpty)
+        #expect(await verifier.standing(lines, after: "cat", in: remote, now: moment).isEmpty)
+        #expect(disk.operations.isEmpty)
+        let here = shell(in: "/Users/someone/api")
+        #expect(await verifier.verified(candidates, in: here, typed: "", now: moment).map(\.text) == lines)
     }
 
     @Test("A model's line with a path that is not here is dropped before the machine has answered.")

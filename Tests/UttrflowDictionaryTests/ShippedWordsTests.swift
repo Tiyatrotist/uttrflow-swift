@@ -57,6 +57,25 @@ struct ShippedWordsTests {
         #expect(await relaunched.allEntries().isEmpty)
     }
 
+    @Test("does not restore a deleted shipped word when its seed record is damaged")
+    func damagedRecordDoesNotResurrectADeletedWord() async throws {
+        let sandbox = Sandbox()
+        let store = PersonalDictionaryStore(file: sandbox.file)
+        try await store.seedShippedWords(at: epoch)
+        let seeded = try #require(await store.allEntries().first)
+        try await store.remove(seeded.id)
+        let record = sandbox.folder.appending(path: "dictionary.v1.seeded.json")
+        let damaged = Data("not JSON".utf8)
+        try damaged.write(to: record)
+
+        let relaunched = PersonalDictionaryStore(file: sandbox.file)
+        await #expect(throws: DictionaryStoreError.couldNotReadSeedRecord) {
+            try await relaunched.seedShippedWords(at: epoch)
+        }
+        #expect(await relaunched.allEntries().isEmpty)
+        #expect(try Data(contentsOf: record) == damaged)
+    }
+
     @Test("leaves a word the user added under their own name alone")
     func doesNotDuplicateAWordAlreadyKnown() async throws {
         let sandbox = Sandbox()
@@ -130,14 +149,14 @@ struct ShippedWordsTests {
     func retriesAfterTheRecordFailsToWrite() async throws {
         let sandbox = Sandbox()
         let record = sandbox.folder.appending(path: "dictionary.v1.seeded.json")
-        // A folder where the record goes, which no write can replace.
-        try FileManager.default.createDirectory(at: record, withIntermediateDirectories: true)
+        try PrivateFile.write(Data(#"{"version":0}"#.utf8), to: record)
+        try setImmutable(record, true)
         let store = PersonalDictionaryStore(file: sandbox.file)
 
         await #expect(throws: DictionaryStoreError.couldNotWrite) {
             try await store.seedShippedWords(at: epoch)
         }
-        try FileManager.default.removeItem(at: record)
+        try setImmutable(record, false)
 
         let relaunched = PersonalDictionaryStore(file: sandbox.file)
         #expect(try await relaunched.seedShippedWords(at: epoch).isEmpty)

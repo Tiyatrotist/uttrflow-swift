@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 import UttrflowCore
-import UttrflowInput
 import UttrflowUX
 
 /// Whatever a row asked for, drawn as one switch over a closed set. See `Docs/app-settings-controls.md`.
@@ -182,15 +181,13 @@ struct SettingsShortcutField: View {
     let keys: [String]
     let model: SettingsViewModel
 
-    @State private var listening = false
-
     /// Recording belongs to one row, so the others keep showing their keys.
     private var isRecording: Bool {
         model.session.recorder.isRecording && model.session.recorder.action == action
     }
 
-    /// The one keyboard source, which reports every key including Fn.
-    @State private var keyboard = SystemKeyboard()
+    /// The local monitor that owns candidate keystrokes before the menu or responder chain sees them.
+    @State private var monitor: Any?
 
     var body: some View {
         HStack(spacing: 8) {
@@ -242,22 +239,68 @@ struct SettingsShortcutField: View {
     }
 
     private func startListening() {
-        guard !listening else { return }
-        listening = true
-        // One source, and the recorder decides what each stroke means. Nothing here judges a key.
-        do {
-            try keyboard.start(
-                { stroke in
-                    Task { @MainActor in model.receive(stroke) }
-                }, consumeKeyDown: true)
-        } catch {
-            model.shortcutSourceRefused()
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
+            handle(event)
         }
     }
 
     private func stopListening() {
-        keyboard.stop()
-        listening = false
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+    }
+
+    private func handle(_ event: NSEvent) -> NSEvent? {
+        guard isRecording else { return event }
+        switch Self.route(event) {
+        case .recordAndConsume(let stroke):
+            model.receive(stroke)
+            return nil
+        case .recordAndPass(let stroke):
+            model.receive(stroke)
+            return event
+        case .pass:
+            return event
+        }
+    }
+
+    static func route(_ event: NSEvent) -> ShortcutRecorderEventRoute {
+        switch event.type {
+        case .keyDown:
+            .recordAndConsume(stroke(from: event, phase: .down))
+        case .flagsChanged:
+            .recordAndPass(stroke(from: event, phase: .modifiersChanged))
+        default:
+            .pass
+        }
+    }
+
+    static func stroke(from event: NSEvent, phase: KeyPhase) -> KeyStroke {
+        let modifiers = modifiers(from: event.modifierFlags)
+        let isFunctionDown = event.modifierFlags.contains(.function)
+        let keyCode = UInt16(event.keyCode)
+        return KeyStroke(
+            keyCode: keyCode, modifiers: modifiers, isFunctionDown: isFunctionDown, phase: phase,
+            isKeyDown: isDown(
+                keyCode: keyCode, phase: phase, modifiers: modifiers,
+                isFunctionDown: isFunctionDown))
+    }
+
+    static func isDown(
+        keyCode: UInt16, phase: KeyPhase, modifiers: Set<HotkeyModifier>, isFunctionDown: Bool
+    ) -> Bool {
+        switch phase {
+        case .down: true
+        case .up: false
+        case .modifiersChanged:
+            if keyCode == HotkeyBinding.functionKeyCode {
+                isFunctionDown
+            } else if let named = HotkeyBinding.modifier(ofKeyCode: keyCode) {
+                modifiers.contains(named)
+            } else {
+                false
+            }
+        }
     }
 
     /// Cocoa's flags reduced to the four the product recognises; the rest is window-server noise.
@@ -269,4 +312,10 @@ struct SettingsShortcutField: View {
         if flags.contains(.shift) { modifiers.insert(.shift) }
         return modifiers
     }
+}
+
+enum ShortcutRecorderEventRoute: Equatable {
+    case recordAndConsume(KeyStroke)
+    case recordAndPass(KeyStroke)
+    case pass
 }
