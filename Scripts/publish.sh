@@ -158,6 +158,9 @@ ditto -c -k --sequesterRsrc --keepParent "$APP" "$ARCHIVE_STAGE/$ARCHIVE" \
 hdiutil detach "$MOUNTED" -quiet; MOUNTED=""
 
 SIZE="$(stat -f%z "$IMAGE")"
+# Computed here, not beside the appcast, so a rerun can compare it against an
+# already-uploaded release before deciding whether to resume.
+ARCHIVE_SIZE="$(stat -f%z "$ARCHIVE_STAGE/$ARCHIVE")"
 
 # The archive's own signature and length, which is what an appcast enclosure carries.
 # Signed with the EdDSA key in this Mac's login keychain — see Docs/releasing.md ("Updating"). An
@@ -267,18 +270,34 @@ if [[ "$NOTARISED" != "yes" ]]; then
     printf '               macOS will call it damaged; every visitor needs the xattr command\n'
 fi
 
-# Refuses to publish over an existing tag rather than working out which of the two files
-# is the real one afterwards.
+# A tag can already exist because a previous run created the release and its two assets
+# and then failed before the manifest or appcast were written — the retry this script
+# documents. Resume in that case rather than refusing outright: only when both assets on
+# the existing release are exactly the ones this run would upload, so a genuinely
+# different release is never mistaken for the one being resumed.
+RESUME=no
 if gh release view "$TAG" --repo "$DOWNLOADS_REPO" >/dev/null 2>&1; then
-    fail "$(
-        printf '%s already exists in %s.\n' "$TAG" "$DOWNLOADS_REPO"
-        printf '  Bump CFBundleShortVersionString, or delete the release first:\n'
-        printf '    gh release delete %s --repo %s --cleanup-tag' "$TAG" "$DOWNLOADS_REPO"
-    )"
+    REMOTE_ASSETS="$(gh release view "$TAG" --repo "$DOWNLOADS_REPO" --json assets \
+        -q '.assets[] | .name + " " + (.size|tostring)')"
+    REMOTE_ASSET_SIZE="$(printf '%s\n' "$REMOTE_ASSETS" | awk -v n="$ASSET" '$1 == n { print $2 }')"
+    REMOTE_ARCHIVE_SIZE="$(printf '%s\n' "$REMOTE_ASSETS" | awk -v n="$ARCHIVE" '$1 == n { print $2 }')"
+    if [[ "$REMOTE_ASSET_SIZE" == "$SIZE" && "$REMOTE_ARCHIVE_SIZE" == "$ARCHIVE_SIZE" ]]; then
+        RESUME=yes
+    else
+        fail "$(
+            printf '%s already exists in %s with different assets.\n' "$TAG" "$DOWNLOADS_REPO"
+            printf '  Bump CFBundleShortVersionString, or delete the release first:\n'
+            printf '    gh release delete %s --repo %s --cleanup-tag' "$TAG" "$DOWNLOADS_REPO"
+        )"
+    fi
 fi
 
 if [[ "$DRY_RUN" == "yes" ]]; then
-    printf '\nDry run — nothing was published.\n'
+    if [[ "$RESUME" == "yes" ]]; then
+        printf '\nDry run — %s already published with matching assets; only the manifest and appcast would be written.\n' "$TAG"
+    else
+        printf '\nDry run — nothing was published.\n'
+    fi
     exit 0
 fi
 
@@ -286,19 +305,23 @@ fi
 # Publish
 # ---------------------------------------------------------------------------
 
-step "Publishing"
+if [[ "$RESUME" == "yes" ]]; then
+    step "$TAG already published with matching assets; resuming the feed update"
+else
+    step "Publishing"
 
-STAGE="$(mktemp -d -t uttrflow-publish)"
-cp "$IMAGE" "$STAGE/$ASSET"
+    STAGE="$(mktemp -d -t uttrflow-publish)"
+    cp "$IMAGE" "$STAGE/$ASSET"
 
-cp "$ARCHIVE_STAGE/$ARCHIVE" "$STAGE/$ARCHIVE"
+    cp "$ARCHIVE_STAGE/$ARCHIVE" "$STAGE/$ARCHIVE"
 
-gh release create "$TAG" "$STAGE/$ASSET" "$STAGE/$ARCHIVE" \
-    --repo "$DOWNLOADS_REPO" \
-    --title "Uttrflow $VERSION" \
-    --notes "$NOTES" \
-    ${PRERELEASE[@]+"${PRERELEASE[@]}"} \
-    || fail "could not create the release"
+    gh release create "$TAG" "$STAGE/$ASSET" "$STAGE/$ARCHIVE" \
+        --repo "$DOWNLOADS_REPO" \
+        --title "Uttrflow $VERSION" \
+        --notes "$NOTES" \
+        ${PRERELEASE[@]+"${PRERELEASE[@]}"} \
+        || fail "could not create the release"
+fi
 
 # ---------------------------------------------------------------------------
 # The manifest
@@ -359,7 +382,6 @@ PY
 # archives that later releases have replaced.
 step "Writing the appcast"
 
-ARCHIVE_SIZE="$(stat -f%z "$ARCHIVE_STAGE/$ARCHIVE")"
 NOTES_URL="https://github.com/$DOWNLOADS_REPO/releases/tag/$TAG"
 
 ARCHIVE_SIZE="$ARCHIVE_SIZE" ARCHIVE_NAME="$ARCHIVE" SIGNATURE="$SIGNATURE" \

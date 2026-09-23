@@ -136,6 +136,10 @@ release-order-test: ## Prove `make release` keeps its stages in order under -j. 
 e2e-predict-cleanup-test: ## Prove the live prediction harness removes its scratch directory and helper on exit. Needs no build.
 	./Scripts/e2e_predict_cleanup_test.sh
 
+.PHONY: publish-resume-test
+publish-resume-test: ## Prove a rerun after release creation resumes the feed update instead of failing or duplicating. Needs no build.
+	./Scripts/publish_resume_test.sh
+
 .PHONY: bundle-requirement-test
 bundle-requirement-test: ## Prove every bundle-signing mode has a designated requirement. Needs no build.
 	./Scripts/bundle.sh --requirement-self-test
@@ -166,7 +170,7 @@ disclosure-history: ## Scan every commit on every ref. Run before a repo goes pu
 # whose failure cannot be fixed after the fact. A competitor's name in a commit is
 # published the moment the commit is, and no later edit reaches a clone or a cache.
 .PHONY: verify
-verify: pii-audit disclosure-audit issue-template-audit docs-audit comment-audit match-audit ratchet-test range-test hits-test pre-push-test update-feed-test entitlement-gate-test issue-template-test uitest-arguments uitest-result-path log-audit store-permissions pasteboard-audit bundle-requirement-test release-tag-test release-order-test e2e-predict-cleanup-test offline-audit-tokenizer-test perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, issue template prompts, docs, comments, word matches, log privacy, clipboard, bundle signing, release tags, release stage order, offline tokenizer gate, energy and memory budget, lint, build, tests, coverage floor, offline audit.
+verify: pii-audit disclosure-audit issue-template-audit docs-audit comment-audit match-audit ratchet-test range-test hits-test pre-push-test update-feed-test entitlement-gate-test issue-template-test uitest-arguments uitest-result-path log-audit store-permissions pasteboard-audit bundle-requirement-test release-tag-test release-order-test e2e-predict-cleanup-test publish-resume-test offline-audit-tokenizer-test perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, issue template prompts, docs, comments, word matches, log privacy, clipboard, bundle signing, release tags, release stage order, publish resumability, offline tokenizer gate, energy and memory budget, lint, build, tests, coverage floor, offline audit.
 
 # Hooks are not cloned — .git/hooks is local to a checkout — so this points git at a
 # directory that is. One command per clone, and the gate cannot be forgotten after that.
