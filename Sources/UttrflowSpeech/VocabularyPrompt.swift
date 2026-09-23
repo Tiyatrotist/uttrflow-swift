@@ -29,8 +29,8 @@ enum VocabularyPrompt {
 
         var body: [Int] = []
         for word in words {
-            // The separator belongs to the word, so dropping one leaves no comma behind.
-            let piece = ids(of: (body.isEmpty ? " " : ", ") + word, using: tokenizer)
+            // Spaced rather than punctuated: the decoder copies a mark between two listed words into the transcript.
+            let piece = ids(of: " " + word, using: tokenizer)
             guard !piece.isEmpty,
                 opening.count + body.count + piece.count + closing.count <= maximumTokens
             else { continue }
