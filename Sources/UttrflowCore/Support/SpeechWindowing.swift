@@ -72,35 +72,42 @@ public struct SpeechWindowing: Sendable, Equatable {
         return windows
     }
 
-    /// The middle frame of the first quiet run long enough for where it falls, counting a run still open at the end.
+    /// The middle frame of the first quiet run long enough for where that middle falls, counting a run still open at the end.
     private func firstPause(
         in loudness: [Float], below threshold: Float, after earliest: Int, comfortableAt comfortable: Int
     ) -> Int? {
         let sentenceFrames = Swift.max(1, Int(sentencePause / VoiceActivity.frameDuration))
         let anyFrames = Swift.max(1, Int(anyPause / VoiceActivity.frameDuration))
         var runStart: Int?
-        for index in earliest..<loudness.count {
+        // Every run is measured from where it truly began: a pause is as long as the speaker made it, wherever the minimum falls in it.
+        for index in loudness.indices {
             if loudness[index] < threshold {
                 if runStart == nil { runStart = index }
             } else if let began = runStart {
-                if let middle = middle(ofRun: began..<index, comfortable, sentenceFrames, anyFrames) {
+                if let middle = middle(
+                    ofRun: began..<index, earliest, comfortable, sentenceFrames, anyFrames)
+                {
                     return middle
                 }
                 runStart = nil
             }
         }
         if let began = runStart {
-            return middle(ofRun: began..<loudness.count, comfortable, sentenceFrames, anyFrames)
+            return middle(
+                ofRun: began..<loudness.count, earliest, comfortable, sentenceFrames, anyFrames)
         }
         return nil
     }
 
-    /// The middle of `run` when it is long enough for its position, else `nil`.
+    /// The middle of `run` when a cut may fall there and the pause is long enough for where it falls, else `nil`.
     private func middle(
-        ofRun run: Range<Int>, _ comfortable: Int, _ sentenceFrames: Int, _ anyFrames: Int
+        ofRun run: Range<Int>, _ earliest: Int, _ comfortable: Int, _ sentenceFrames: Int,
+        _ anyFrames: Int
     ) -> Int? {
-        let required = run.lowerBound >= comfortable ? anyFrames : sentenceFrames
+        let middle = run.lowerBound + run.count / 2
+        guard middle >= earliest else { return nil }
+        let required = middle >= comfortable ? anyFrames : sentenceFrames
         guard run.count >= required else { return nil }
-        return run.lowerBound + run.count / 2
+        return middle
     }
 }

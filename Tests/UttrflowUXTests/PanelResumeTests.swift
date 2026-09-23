@@ -29,17 +29,15 @@ struct PanelResumeTests {
 
     @Test("A3 · the tab comes back, not Home")
     func theTabComesBack() {
-        let panel = PanelSnapshot.opening(
-            clips: Self.clips, now: Self.now, resuming: Self.resume())
+        let panel = PanelFixture.opened(Self.clips, now: Self.now, resuming: Self.resume())
 
         #expect(panel.category == "Work")
     }
 
     @Test("A3 · and so does the row that was highlighted")
     func thePlaceComesBack() {
-        let panel = PanelSnapshot.opening(
-            clips: Self.clips, now: Self.now,
-            resuming: Self.resume(selection: Self.clips[1].id))
+        let panel = PanelFixture.opened(
+            Self.clips, now: Self.now, resuming: Self.resume(selection: Self.clips[1].id))
 
         #expect(panel.results.selected?.id == Self.clips[1].id)
     }
@@ -47,8 +45,8 @@ struct PanelResumeTests {
     @Test("A7 · a half-typed alias is still there")
     func theDraftSurvives() {
         let sheet = PanelSheet.aliasing(Self.clips[0].id, draft: "pgpr")
-        let panel = PanelSnapshot.opening(
-            clips: Self.clips, now: Self.now, resuming: Self.resume(sheet: sheet))
+        let panel = PanelFixture.opened(
+            Self.clips, now: Self.now, resuming: Self.resume(sheet: sheet))
 
         #expect(panel.sheet == sheet)
     }
@@ -56,8 +54,8 @@ struct PanelResumeTests {
     /// A panel that remembered for an hour would open in a collection the user had forgotten choosing.
     @Test("but only for as long as a dismissal counts as an accident")
     func theWindowExpires() {
-        let panel = PanelSnapshot.opening(
-            clips: Self.clips, now: Self.now, resuming: Self.resume(secondsAgo: 120))
+        let panel = PanelFixture.opened(
+            Self.clips, now: Self.now, resuming: Self.resume(secondsAgo: 120))
 
         #expect(panel.category == nil)
         #expect(panel.sheet == nil)
@@ -65,7 +63,7 @@ struct PanelResumeTests {
 
     @Test("a first open, with nothing to resume, is Home")
     func firstOpenIsHome() {
-        let panel = PanelSnapshot.opening(clips: Self.clips, now: Self.now)
+        let panel = PanelFixture.opened(Self.clips, now: Self.now)
 
         #expect(panel.category == nil)
         #expect(panel.query.isEmpty)
@@ -74,8 +72,8 @@ struct PanelResumeTests {
     /// Restoring a collection whose last clip has aged out would open on an empty list under a chip.
     @Test("a collection that no longer exists is not restored")
     func vanishedCollection() {
-        let panel = PanelSnapshot.opening(
-            clips: [Self.clips[2]], now: Self.now, resuming: Self.resume())
+        let panel = PanelFixture.opened(
+            [Self.clips[2]], now: Self.now, resuming: Self.resume())
 
         #expect(panel.category == nil)
     }
@@ -83,8 +81,8 @@ struct PanelResumeTests {
     @Test("nor a question about a clip that has gone")
     func vanishedSubject() {
         let sheet = PanelSheet.confirmingDelete(Self.clips[0].id)
-        let panel = PanelSnapshot.opening(
-            clips: [Self.clips[2]], now: Self.now, resuming: Self.resume(sheet: sheet))
+        let panel = PanelFixture.opened(
+            [Self.clips[2]], now: Self.now, resuming: Self.resume(sheet: sheet))
 
         #expect(panel.sheet == nil)
     }
@@ -93,8 +91,8 @@ struct PanelResumeTests {
     @Test("a secret revealed before the dismissal is masked again")
     func revealsDoNotSurvive() {
         let secret = PanelFixture.clip("sk-live-abcdef", kind: .secret, minutesAgo: 1)
-        let panel = PanelSnapshot.opening(
-            clips: [secret], now: Self.now, resuming: Self.resume(category: nil))
+        let panel = PanelFixture.opened(
+            [secret], now: Self.now, resuming: Self.resume(category: nil))
 
         #expect(panel.revealed.isEmpty)
         #expect(PanelPresenter.present(panel).rows[0].isMasked)
@@ -103,8 +101,7 @@ struct PanelResumeTests {
     /// Resuming is about where the user was, not what they were looking for, so the query is dropped.
     @Test("the search field always starts empty")
     func searchDoesNotSurvive() {
-        let panel = PanelSnapshot.opening(
-            clips: Self.clips, now: Self.now, resuming: Self.resume())
+        let panel = PanelFixture.opened(Self.clips, now: Self.now, resuming: Self.resume())
 
         #expect(panel.query.isEmpty)
     }

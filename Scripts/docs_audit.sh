@@ -23,11 +23,11 @@
 # this file exist, does this link resolve, is this number still true — and nothing about
 # whether the prose around them is accurate, which no script can answer. It needs no build.
 #
-# Usage:  ./Scripts/docs_audit.sh        (belongs in `make verify`, ahead of the build)
+# Usage:  ./Scripts/docs_audit.sh            (belongs in `make verify`, ahead of the build)
+#         ./Scripts/docs_audit.sh --self-test   also runs the CLAUDE.md delegation fixture
 set -euo pipefail
 
 PACKAGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$PACKAGE_ROOT"
 
 failures=0
 
@@ -41,6 +41,102 @@ fail() {
 }
 
 pass() { printf '  ✓ %s\n' "$1"; }
+
+# The CLAUDE.md delegation check, factored so `--self-test` can call it against fixtures.
+# Sets `claude_md_problem` (the failure reason, empty on pass) and returns 0/1.
+claude_md_problem=""
+check_claude_md_delegation() {
+    local root="$1"
+    claude_md_problem=""
+    if [[ ! -e "$root/CLAUDE.md" ]]; then
+        return 0
+    fi
+    if [[ -L "$root/CLAUDE.md" ]]; then
+        local target
+        target="$(readlink "$root/CLAUDE.md")"
+        if [[ "$target" != "AGENTS.md" ]]; then
+            claude_md_problem="CLAUDE.md is a symlink, but to '$target', not AGENTS.md"
+            return 1
+        fi
+        if [[ ! -e "$root/AGENTS.md" ]]; then
+            claude_md_problem="CLAUDE.md is a symlink to AGENTS.md, but $root/AGENTS.md is not there"
+            return 1
+        fi
+        return 0
+    fi
+    local first
+    first="$(grep -vE '^[[:space:]]*(#|$)' "$root/CLAUDE.md" | head -n1 | tr -d '\r' || true)"
+    if [[ "$first" != "@AGENTS.md" ]]; then
+        if [[ -z "$first" ]]; then
+            claude_md_problem="CLAUDE.md is empty; it should be an '@AGENTS.md' import or a real symlink"
+        else
+            claude_md_problem="CLAUDE.md is neither an '@AGENTS.md' import nor a symlink to AGENTS.md (first non-blank, non-comment line: '$first')"
+        fi
+        return 1
+    fi
+    if [[ ! -e "$root/AGENTS.md" ]]; then
+        claude_md_problem="CLAUDE.md imports AGENTS.md, but $root/AGENTS.md is not there"
+        return 1
+    fi
+    return 0
+}
+
+# `--self-test` runs the CLAUDE.md delegation fixture before the normal scan, so the
+# audit's checks themselves fail noisily when they stop biting. Same pattern as
+# log_privacy_audit.py and perf_budget_audit.py.
+if [[ "${1:-}" == "--self-test" ]]; then
+    work="$(mktemp -d -t uttrflow-docs-audit.XXXXXX)"
+    trap 'rm -rf "$work"' EXIT
+
+    declare -a cases=(
+        "no-file:absent::0"
+        "at-import:at-import:@AGENTS.md\\n:0"
+        "symlink:symlink::0"
+        "markdown-link:markdown-link:See [AGENTS.md](AGENTS.md).\\n:1"
+        "prose-blurb:prose-blurb:Read AGENTS.md for the rules.\\n:1"
+        "empty:empty::1"
+        "hash-only:hash-only:# heading\\n:1"
+        "missing-target:missing-target:@AGENTS.md\\n:1"
+    )
+
+    printf 'CLAUDE.md delegation fixture\n'
+
+    for case in "${cases[@]}"; do
+        IFS=':' read -r label slug body expect_fail <<<"$case"
+        case_dir="$work/$slug"
+        mkdir -p "$case_dir"
+        case "$label" in
+            no-file) ;;
+            missing-target) printf '%b' "$body" > "$case_dir/CLAUDE.md" ;;
+            symlink) : > "$case_dir/AGENTS.md"; ln -s AGENTS.md "$case_dir/CLAUDE.md" ;;
+            *) : > "$case_dir/AGENTS.md"; printf '%b' "$body" > "$case_dir/CLAUDE.md" ;;
+        esac
+
+        if check_claude_md_delegation "$case_dir"; then
+            actual="pass"
+        else
+            actual="fail"
+        fi
+        expected="pass"; [[ "$expect_fail" == "1" ]] && expected="fail"
+
+        if [[ "$actual" == "$expected" ]]; then
+            pass "$label ($body → $actual)"
+        else
+            fail "self-test case '$label' was expected to $expected but the audit said $actual" \
+                "body written into CLAUDE.md: $body" \
+                "claude_md_problem: ${claude_md_problem:-<none>}"
+        fi
+    done
+
+    if [[ "$failures" -gt 0 ]]; then
+        printf '\ndocs audit self-test: %s case(s) did not match.\n\n' "$failures" >&2
+        exit 1
+    fi
+    printf '\ndocs audit self-test: every fixture case behaved as expected.\n\n'
+    failures=0
+fi
+
+cd "$PACKAGE_ROOT"
 
 # ---------------------------------------------------------------------------
 # 0. The scan must actually be looking at something.
@@ -316,10 +412,51 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 4. CLAUDE.md, if it exists, delegates to AGENTS.md by import or symlink.
+# ---------------------------------------------------------------------------
+#
+# A tracked CLAUDE.md is a claim about what Claude Code will load as project memory: with
+# default Project instructions, Claude Code reads CLAUDE.md before any tool call and does
+# not consult AGENTS.md on its own. A CLAUDE.md that holds a prose pointer at AGENTS.md
+# therefore loads the pointer sentence and stops — the 491 lines of operating rules in
+# AGENTS.md are injected only if the model decides, on its own, to follow the link.
+#
+# Three contents pass, in this order:
+#
+#   1. CLAUDE.md is absent. There is no claim to police, and AGENTS.md loads directly.
+#   2. CLAUDE.md is a real filesystem symlink whose resolved target is `AGENTS.md`. The
+#      file Claude Code reads is AGENTS.md, full stop — the indirection is at the FS layer
+#      rather than at the prose layer.
+#   3. CLAUDE.md's first non-blank, non-comment line is `@AGENTS.md`. That is Claude
+#      Code's import syntax; the file is read and its contents are merged into the
+#      project memory for the session.
+#
+# Any other content is a failure. The Markdown-link pointer that lived here until #1125
+# was the trap: the link rendered, the model received one sentence, and the rules were not
+# injected without a separate Read-tool decision the model could equally skip.
+printf '\nCLAUDE.md delegation\n'
+
+if check_claude_md_delegation "$PACKAGE_ROOT"; then
+    if [[ -e CLAUDE.md ]]; then
+        pass "CLAUDE.md delegates to AGENTS.md"
+    else
+        pass "no CLAUDE.md to check"
+    fi
+else
+    fail "$claude_md_problem" \
+        "A tracked CLAUDE.md is loaded by Claude Code as project memory ahead of any tool." \
+        "Prose that points at AGENTS.md — Markdown link or otherwise — is one sentence the" \
+        "model receives, not an import; the 491 lines of operating rules in AGENTS.md are" \
+        "not injected unless the model decides, on its own, to open the file." \
+        "Replace the body with a single '@AGENTS.md' line, or delete CLAUDE.md and let" \
+        "AGENTS.md load directly, or turn CLAUDE.md into a real symlink to AGENTS.md."
+fi
+
+# ---------------------------------------------------------------------------
 printf '\n'
 if [[ "$failures" -gt 0 ]]; then
     printf 'docs audit: %s check(s) failed. The documentation contradicts the tree.\n\n' "$failures" >&2
     exit 1
 fi
 
-printf 'docs audit: the paths, links and test count in %s documents all check out.\n\n' "$DOC_COUNT"
+printf 'docs audit: the paths, links, test count and CLAUDE.md delegation in %s documents all check out.\n\n' "$DOC_COUNT"

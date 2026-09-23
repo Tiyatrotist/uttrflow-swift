@@ -21,15 +21,34 @@ enum SearchFolding {
         "\u{2010}", "\u{2011}", "\u{2012}", "\u{2013}", "\u{2014}", "\u{2212}",
     ]
 
+    /// The lowest scalar this folding rewrites, below which only whitespace can need it.
+    private static let lowestRewritten: UInt32 = 0x2010
+
+    /// Whether this scalar is whitespace: by value inside ASCII, and outside it only where Unicode puts one, since the property lookup costs more than the rest of the scan.
+    private static func isWhitespace(_ scalar: Unicode.Scalar) -> Bool {
+        guard scalar.value >= 0x80 else {
+            return scalar.value == 0x20 || (scalar.value >= 0x09 && scalar.value <= 0x0D)
+        }
+        switch scalar.value {
+        case 0x85, 0xA0, 0x1680, 0x2000...0x202F, 0x205F, 0x3000:
+            return scalar.properties.isWhitespace
+        default: return false
+        }
+    }
+
+    /// Whether this scalar is one of the marks straightened here; every one of them is well above ASCII.
+    private static func isRewritten(_ scalar: Unicode.Scalar) -> Bool {
+        guard scalar.value >= lowestRewritten else { return false }
+        return apostrophes.contains(scalar) || quotes.contains(scalar) || dashes.contains(scalar)
+    }
+
     /// The text with curly quotes straightened, dashes as `-` and whitespace runs as one space; `nil` if unchanged.
     static func folded<S: StringProtocol>(_ text: S) -> String? {
         var needsFolding = false
         var previousWasSpace = false
         for scalar in text.unicodeScalars {
-            let isSpace = scalar.properties.isWhitespace
-            if apostrophes.contains(scalar) || quotes.contains(scalar) || dashes.contains(scalar)
-                || (isSpace && (scalar != " " || previousWasSpace))
-            {
+            let isSpace = isWhitespace(scalar)
+            if isRewritten(scalar) || (isSpace && (scalar != " " || previousWasSpace)) {
                 needsFolding = true
                 break
             }
@@ -39,12 +58,16 @@ enum SearchFolding {
         var out = String.UnicodeScalarView()
         previousWasSpace = false
         for scalar in text.unicodeScalars {
-            if scalar.properties.isWhitespace {
+            if isWhitespace(scalar) {
                 if !previousWasSpace { out.append(" ") }
                 previousWasSpace = true
                 continue
             }
             previousWasSpace = false
+            guard scalar.value >= lowestRewritten else {
+                out.append(scalar)
+                continue
+            }
             if apostrophes.contains(scalar) {
                 out.append("'")
             } else if quotes.contains(scalar) {

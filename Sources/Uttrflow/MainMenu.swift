@@ -55,6 +55,10 @@ enum MainMenu {
         menu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         menu.addItem(
             withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        menu.addItem(.separator())
+        // Where every Mac app keeps it, so ⌘F reaches the page's search field without being learnt.
+        menu.addItem(
+            withTitle: "Find", action: #selector(AppDelegate.findFromMenu(_:)), keyEquivalent: "f")
         return menu
     }
 

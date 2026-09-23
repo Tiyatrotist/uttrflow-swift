@@ -30,6 +30,13 @@ struct ScreenCandidatesTests {
         #expect(found == ["Cache"])
     }
 
+    @Test("offers an accented Latin name shown on screen for its plain spelling")
+    func matchesAccentedName() async {
+        let found = await source.candidates(
+            for: Draft.Word("Muller", confidence: 0.3), in: .showing(title: "Müller"))
+        #expect(found == ["Müller"])
+    }
+
     @Test("offers nothing when the window shows nothing that sounds or spells alike")
     func offersNothing() async {
         #expect(await source.candidates(for: word, in: .showing(title: "#ios-bugs")).isEmpty)

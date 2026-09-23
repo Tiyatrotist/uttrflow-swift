@@ -62,17 +62,77 @@ private func drawOffscreen(_ view: some View, size: CGSize) {
 @Suite("A window's model is released with its window", .timeLimit(.minutes(1)))
 struct WindowLifetimeTests {
     /// The controller the app builds at launch, over stores that touch nothing on this Mac.
-    private func onboardingController() -> OnboardingWindowController {
+    private func onboardingController(settingsStore: (any SettingsStore)? = nil) -> OnboardingWindowController
+    {
         let defaults = MemoryDefaults()
         let service = InMemoryAuthenticationService()
         return OnboardingWindowController(
-            settingsStore: UserDefaultsSettingsStore(store: defaults),
+            settingsStore: settingsStore ?? UserDefaultsSettingsStore(store: defaults),
             record: NeverFinished(),
             account: OnboardingAccountLayer(
                 authentication: service,
                 profiles: UserDefaultsProfileCache(storage: defaults, verifier: service.verifier),
                 local: InMemoryLocalAccountStore()),
             network: AlwaysReachable())
+    }
+
+    @Test("finishing onboarding reloads settings after closing releases its owner")
+    func finishingOnboardingKeepsFinishCallback() throws {
+        let settingsStore = UserDefaultsSettingsStore(store: MemoryDefaults())
+        var saved = Settings()
+        saved.showsFloatingButton = false
+        settingsStore.save(saved)
+
+        var owner: OnboardingWindowController? = onboardingController(settingsStore: settingsStore)
+        let controller = try #require(owner)
+        var closeCount = 0
+        var finishCount = 0
+        var runtimeSettings = Settings()
+        owner?.onClose = {
+            closeCount += 1
+            // Synchronous close can tear down the owner's finish callback before close returns.
+            owner?.onFinish = nil
+            owner = nil
+        }
+        owner?.onFinish = { _ in
+            finishCount += 1
+            runtimeSettings = settingsStore.load()
+        }
+
+        controller.finish(.ready) {
+            controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+        }
+
+        #expect(closeCount == 1)
+        #expect(finishCount == 1)
+        #expect(owner == nil)
+        #expect(runtimeSettings.showsFloatingButton == false)
+    }
+
+    @Test("closing onboarding without finishing never invokes its finish callback")
+    func closingOnboardingDoesNotFinish() {
+        let controller = onboardingController()
+        var closeCount = 0
+        var finishCount = 0
+        controller.onClose = { closeCount += 1 }
+        controller.onFinish = { _ in finishCount += 1 }
+
+        controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+
+        #expect(closeCount == 1)
+        #expect(finishCount == 0)
+    }
+
+    @Test("the flow finish event calls the controller's finish callback")
+    func flowFinishCallsController() throws {
+        let controller = onboardingController()
+        let flow = try #require(stored("flow", of: controller, as: OnboardingFlow.self))
+        var finishCount = 0
+        controller.onFinish = { _ in finishCount += 1 }
+
+        flow.onFinish?(.ready)
+
+        #expect(finishCount == 1)
     }
 
     @Test("the onboarding controller built only to read isRequired releases its flow")

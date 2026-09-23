@@ -71,7 +71,7 @@ public struct DictationOutcome: Sendable, Equatable {
     public let insertedIntoIdentifier: String?
     /// How long the speaker talked; not a stage measurement, since it is the user's choice, not a cost.
     public let spokenFor: Duration?
-    /// Everything Uttrflow changed about what the user said, carried out so nothing is applied silently.
+    /// Dictionary corrections and snippet firings carried with the inserted dictation.
     public let changes: AppliedChanges
     /// Whether this comes from a kept recording rather than the microphone, and is copied, not typed.
     public let isFromRecording: Bool

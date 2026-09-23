@@ -1,4 +1,5 @@
 // Every reason a finished value may not be learned, and the answer the capture path asks for.
+private import Foundation
 private import UttrflowClipboard
 private import UttrflowPredict
 
@@ -12,6 +13,8 @@ public enum CaptureRefusal: String, Sendable, Equatable, CaseIterable {
     case consentDeclined
     /// The value has the shape of a credential.
     case looksLikeSecret
+    /// The value is a short all-digit code in an application that is not a terminal.
+    case sensitiveValue
     /// The value would destroy data if it were ever completed and run.
     case destructive
     /// The value is too short to ever be worth completing.
@@ -37,6 +40,7 @@ public enum CaptureGate {
         case .proceed: break
         }
         guard text.count >= minimumLength else { return .tooShort }
+        if looksLikeSensitiveValue(text, from: reading) { return .sensitiveValue }
         if looksLikeSecret(text) { return .looksLikeSecret }
         // A destructive command is never stored, so it can never be one keystroke from running.
         return DestructiveCommand.matches(text) ? .destructive : nil
@@ -44,4 +48,11 @@ public enum CaptureGate {
 
     /// Whether a value has the shape of a credential, asked of the rules the clipboard already uses.
     public static func looksLikeSecret(_ text: String) -> Bool { SecretShapes.matches(text) }
+
+    /// Whether a value looks like a one-time code, PIN, CVV or compact date in a form field.
+    public static func looksLikeSensitiveValue(_ text: String, from reading: FieldReading) -> Bool {
+        guard !TerminalApplications.contains(reading.bundleIdentifier) else { return false }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (2...8).contains(trimmed.count) && trimmed.allSatisfy { $0.isNumber }
+    }
 }

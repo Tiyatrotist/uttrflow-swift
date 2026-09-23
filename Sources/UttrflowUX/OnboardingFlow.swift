@@ -222,6 +222,9 @@ public final class OnboardingFlow {
         let status = await gate(for: kind).request()
         if status.isGranted {
             await moveOn(after: state.step)
+        } else if status == .denied, !kind.reportsNotDetermined {
+            // macOS's own Accessibility prompt is the one that opens Settings, so the user is already on the way.
+            set(detail: .awaitingSystemSettings)
         } else {
             set(detail: .permission(status))
         }
