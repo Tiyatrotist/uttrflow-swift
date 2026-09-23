@@ -1838,8 +1838,8 @@ the order it was said.
 
 The field the user is typing into finishes itself, from what this Mac has typed into that
 same field before. Nine phases, each ending in something a person can run. Phases 0 to 7
-are built and the app now runs them behind a defaults key that is off by default; phase 8
-— the settings screen, the resets and the onboarding — is what is left.
+are built and the app now runs them behind a defaults key that is off by default; phase 8's
+settings screen and resets are built too, and onboarding is what is left.
 
 | # | Phase | Status |
 |---|-------|--------|
@@ -1849,14 +1849,10 @@ are built and the app now runs them behind a defaults key that is off by default
 | 3 | Capture and measure — record what is committed, per field | ✅ **Done** |
 | 4 | Accept — Tab, the insertion, and what acceptance is worth | ✅ **Done** |
 | 5 | Surface — the ghost, the chip, the strip, and drawing nothing | ✅ **Done** |
-| 2 | Store — the corpus on disk, and matching what was nearly typed | ✅ **Done** |
-| 3 | Capture and measure — record what is committed, per field | ✅ **Done** |
-| 4 | Accept — Tab, the insertion, and what acceptance is worth | ✅ **Done** |
-| 5 | Surface — the ghost, the chip, the strip, and drawing nothing | ✅ **Done** |
 | 6 | Verify — the four gates that put correctness above habit | ✅ **Done**, wired |
 | 6b | The numbers, on the Insights page | **Not started** |
 | 7 | Generate — prose at an idle pause | **Deferred** until phase 3's numbers justify it |
-| 8 | Ship — settings, the resets, onboarding | **Settings wired**; the resets and onboarding are not |
+| 8 | Ship — settings, the per-app counts, the resets, onboarding | **Settings, counts and resets wired**; onboarding is not |
 
 ### What the wiring delivered
 
@@ -1871,11 +1867,12 @@ of the ranking to be verified, `Verifier` judges it against one deadline for the
 keystroke, and the second `resolve` draws what survived — corrected silently where the
 machine knew better, dropped where it did not, and reported to the corpus either way.
 
-Still open after it: nothing draws the numbers on the Insights page (phase 6b); the settings
-window does not reach the corpus, so the per-application counts and the "forget what this
-application taught" buttons never appear (phase 8); consent per application is an `NSAlert`
+Still open after it: nothing draws the numbers on the Insights page (phase 6b); onboarding
+does not yet introduce the feature (phase 8); consent per application is an `NSAlert`
 rather than anything designed; and the placement ladder is still chosen from what each
-field answers rather than from a sweep that has been run.
+field answers rather than from a sweep that has been run. The settings window does reach
+the corpus: it shows each application's learned-suggestion count and a "forget what this
+application taught" button, and both a per-application and a full reset remove it.
 
 The runbook and the rules that hold across all nine are in
 [Docs/predict.md](Docs/predict.md); phase 0's measurements are in
