@@ -1272,11 +1272,17 @@ Each clip run all at once, with the shipping router.
 | UK English | 27 | 2.3% | 2.4% |
 | Indian English | 26 | 3.5% | 3.3% |
 
+**The two noise rows below predate #1266 and are stale.** The generator mixed noise at
+roughly double the labelled power (measured ~16.7 dB and ~6.7 dB against the 20 and 10 dB
+labels) until that issue's fix normalised the AR(1) noise to the SNR its label states. The
+rows are kept for the categories they cover, not as a current number; do not compare a
+post-#1266 run under the same "20 dB SNR" / "10 dB SNR" labels against these figures.
+
 | audio, over the same ten clips | raw | final |
 |---|---|---|
 | as synthesised | 2.4% | 2.4% |
-| brown noise, 20 dB SNR | 2.1% | 2.1% |
-| brown noise, 10 dB SNR | 2.7% | 2.9% |
+| brown noise, 20 dB SNR (stale, see above) | 2.1% | 2.1% |
+| brown noise, 10 dB SNR (stale, see above) | 2.7% | 2.9% |
 | 24 dB quieter | 2.9% | 2.9% |
 | 12 dB hotter, clipping | 3.4% | 3.4% |
 
