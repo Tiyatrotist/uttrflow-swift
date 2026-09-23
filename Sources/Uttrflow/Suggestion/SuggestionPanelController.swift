@@ -234,6 +234,7 @@ final class SuggestionPanelController {
         panel.hasShadow = false
         // `orderOut` waits out AppKit's fade on the main thread, which would stall every keystroke over a ghost.
         panel.animationBehavior = .none
+        PrivateWindowSharing.apply(to: panel)
         panel.contentView = hostingView
     }
 }

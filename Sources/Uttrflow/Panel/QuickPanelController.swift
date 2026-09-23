@@ -304,6 +304,7 @@ final class QuickPanelController: NSObject, NSWindowDelegate {
         panel.acceptsMouseMovedEvents = true
         // Three keystrokes cannot feel instant from behind a fade.
         panel.animationBehavior = .none
+        PrivateWindowSharing.apply(to: panel)
         panel.contentView = hostingView
     }
 }

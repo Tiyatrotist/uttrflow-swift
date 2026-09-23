@@ -180,6 +180,7 @@ final class MainWindowController {
         window.contentMinSize = MainMetrics.minimumWindowSize
         // Kept rather than released, so reopening returns the user to the page they left.
         window.isReleasedWhenClosed = false
+        PrivateWindowSharing.apply(to: window)
         let hosting = NSHostingView(
             rootView: MainWindowView(
                 model: model,

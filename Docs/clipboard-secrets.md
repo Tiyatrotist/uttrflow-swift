@@ -5,6 +5,13 @@ harmless: the row shows dots, Return still pastes it, one keystroke reveals it. 
 negative leaves a production password legible on a panel opened in meetings and on recorded
 calls.
 
+The clipboard panel, the main window and the suggestion overlay set `NSWindow.sharingType` to
+`.none`. That is the default privacy decision for windows that draw clipboard contents,
+transcripts or learned suggestions: a capture client that honours AppKit window sharing must not
+receive those windows. This is partial protection, because system screenshots, ScreenCaptureKit
+clients and video-call apps have not all honoured AppKit's sharing policy on every macOS release;
+the manual checks in `Docs/ui-tests.md` record what each release actually hides.
+
 ## Shapes, cheapest first
 
 1. A PEM header (`-----BEGIN`). Certificates are masked with keys; telling them apart by label

@@ -57,3 +57,21 @@ and is what makes a keyboard test repeatable.
 
 Selectors are titles the presenters produce. When a pane is renamed, this suite is where it is
 felt, which is the cost of testing what the user sees rather than what the code returns.
+
+## Screen capture privacy
+
+The clipboard panel, the main window and the suggestion overlay set `NSWindow.sharingType` to
+`.none`; `WindowSharingTests` covers that AppKit configuration. Before a release on a new macOS
+minor version, check the actual capture tools below because not every capture path has honoured
+that setting on every release.
+
+| macOS | Screenshot | QuickTime recording | Video-call share | Notes |
+|---|---|---|---|---|
+| 14 | not checked | not checked | not checked | Record the app version and capture tool used. |
+| 15 | not checked | not checked | not checked | Record the app version and capture tool used. |
+| 26 | not checked | not checked | not checked | Record the app version and capture tool used. |
+
+For each row, open the quick panel on copied text and a copied picture, open the History page
+with a recent dictation visible, and show an inline suggestion in another app. The captured
+output should omit those Uttrflow windows; if a tool still captures them, record that limit here
+and keep ordinary secret masking as the fallback protection.
