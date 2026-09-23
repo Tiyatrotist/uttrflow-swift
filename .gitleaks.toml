@@ -1,6 +1,6 @@
 # What gitleaks is allowed to find and not fail on.
 #
-# Two files in this tree contain things shaped exactly like credentials, on purpose:
+# Three files in this tree contain things shaped exactly like credentials, on purpose:
 #
 #   SecretDetectionTests.swift    the fixtures for the clipboard's secret detector. Its
 #                                 whole job is to recognise an AWS key, a GitHub token, a
@@ -13,6 +13,13 @@
 #                                 Ed25519 key at run time and issues a profile at
 #                                 @uttrflow.invalid. Nothing it produces exists off the
 #                                 machine that ran it.
+#   SpeechModel.swift             the speech-model catalogue. It lists a pinned
+#                                 tokenizerRevision and the SHA-256 digest of each file
+#                                 the install must verify, so a published digest is the
+#                                 only way to prove the file is the one that was pinned.
+#                                 A SHA-256 string looks indistinguishable from a high-
+#                                 entropy API key to gitleaks' default rules, but is
+#                                 integrity evidence, not a credential. #666.
 #
 # One value is allowed by itself: the updater's EdDSA public key, which ships in every
 # app's Info.plist and which UpdateConfigurationTests pins. It is the public half, the
@@ -38,6 +45,7 @@ useDefault = true
     '''Tests/UttrflowClipboardTests/SecretDetectionTests\.swift''',
     '''Sources/UttrflowAccount/InMemoryAuthenticationService\.swift''',
     '''Tests/UttrflowAccountTests/AccountSupport\.swift''',
+    '''Sources/UttrflowSpeech/SpeechModel\.swift''',
   ]
   regexes = [
     '''^apWgly8fYgdo1U2MUj56SuqUqZ4QHv5GRZIbuLT0PGE=$''',

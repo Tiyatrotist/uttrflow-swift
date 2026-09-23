@@ -67,8 +67,8 @@ uitest-arguments: ## Prove the UI harness refuses a rounds count it cannot run. 
 	@python3 Scripts/uitest_arguments_test.py
 
 .PHONY: docs-audit
-docs-audit: ## Prove the documentation still describes this tree. Needs no build.
-	./Scripts/docs_audit.sh
+docs-audit: ## Prove the documentation still describes this tree, including that CLAUDE.md delegates to AGENTS.md. Needs no build.
+	./Scripts/docs_audit.sh --self-test
 
 .PHONY: pii-audit
 pii-audit: ## Prove no personal data is in the tree. Needs no build.
