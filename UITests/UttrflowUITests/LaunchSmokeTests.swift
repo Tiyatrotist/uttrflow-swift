@@ -20,7 +20,7 @@ final class LaunchSmokeTests: XCTestCase {
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
 
         app.menuBars.menuBarItems["Uttrflow"].click()
-        app.menuItems["Settings..."].click()
+        app.menuItems["Settings…"].click()
 
         let settings = app.windows["Uttrflow Settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 10), "Settings never opened")

@@ -21,9 +21,18 @@
 #                                 entropy API key to gitleaks' default rules, but is
 #                                 integrity evidence, not a credential. #666.
 #
-# One value is allowed by itself: the updater's EdDSA public key, which ships in every
-# app's Info.plist and which UpdateConfigurationTests pins. It is the public half, the
-# exact string and nothing near it, so any other value in any file still fails.
+# Two value shapes are allowed by themselves: the updater's EdDSA public key, which
+# ships in every app's Info.plist and which UpdateConfigurationTests pins, and the
+# 40-hex / 64-hex strings this repository publishes as git revisions and SHA-256
+# content digests. The EdDSA key is a public half; the hex strings are content
+# identifiers, not credentials. Each is matched on its exact shape (`^…$`), so any
+# value that surrounds or embeds one still fails.
+#
+# One invented clipboard-fixture string (`abc123def456`) is allowed for the same
+# reason: `Tests/UttrflowClipboardTests/ClipboardStoreTests.swift` past commit
+# `dcc06a51` writes it into a fake "old secret" file to prove the store does not
+# rehydrate such clips, and the value is too short to retag with a hex regex. The
+# exact match means a real credential beside it still fails.
 #
 # One source spelling is allowed by itself: `Curve25519.Signing.PrivateKey`, which is a
 # Swift type name. It has triggered the default generic-api-key rule in account code and
