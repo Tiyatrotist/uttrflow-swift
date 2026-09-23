@@ -377,6 +377,20 @@ struct GrammarGuardTests {
             ).isAccepted)
     }
 
+    @Test("rejects moving a negation to another verb inside the same clause")
+    func rejectsNegationMovedWithinClause() {
+        #expect(
+            verdict(
+                "I did not tell Mary to call John",
+                "I did tell Mary not to call John."
+            ) == .rejected(reason: "the rewrite moved a negation", kind: .negationMoved))
+        #expect(
+            verdict(
+                "I did not tell Mary to tell John",
+                "I did tell Mary not to tell John."
+            ) == .rejected(reason: "the rewrite moved a negation", kind: .negationMoved))
+    }
+
     @Test("allows punctuation, case and contraction changes without relocating a negation")
     func acceptsNegationInPlace() {
         #expect(
@@ -388,6 +402,11 @@ struct GrammarGuardTests {
             verdict(
                 "she does not want the early slot",
                 "She doesn't want the early slot."
+            ).isAccepted)
+        #expect(
+            verdict(
+                "I did not tell Mary to call John",
+                "I didn't tell Mary to call John."
             ).isAccepted)
     }
 

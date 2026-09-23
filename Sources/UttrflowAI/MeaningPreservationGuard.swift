@@ -401,24 +401,65 @@ public struct MeaningPreservationGuard: Sendable {
         }
         guard keptNegations.count == writtenNegations.count else { return .accepted }
 
-        let keptClauses = negationClauses(in: kept)
-        let rewrittenClauses = negationClauses(in: rewritten)
-        guard keptClauses.count == rewrittenClauses.count else { return .accepted }
-        guard keptClauses == rewrittenClauses else {
+        let keptPlaces = negationPlaces(in: kept)
+        let rewrittenPlaces = negationPlaces(in: rewritten)
+        guard keptPlaces.count == rewrittenPlaces.count else { return .accepted }
+        guard
+            zip(keptPlaces, rewrittenPlaces).allSatisfy({ original, answer in
+                original.clause == answer.clause
+                    && sameAnchor(original.before, answer.before)
+                    && sameAnchor(original.after, answer.after)
+            })
+        else {
             return .rejected(reason: "the rewrite moved a negation", kind: .negationMoved)
         }
         return .accepted
     }
 
-    /// The clause ordinal of each plain negator, using coordinators as the stable clause boundaries.
-    private static func negationClauses(in tokens: [GrammarToken]) -> [Int] {
+    /// The clause and its nearest content words around one negation.
+    private struct NegationPlace {
+        let clause: Int
+        let before: GrammarToken?
+        let after: GrammarToken?
+    }
+
+    /// Whether a neighbouring word survived as the same word or inside an identifier.
+    private static func sameAnchor(_ first: GrammarToken?, _ second: GrammarToken?) -> Bool {
+        switch (first, second) {
+        case (nil, nil): return true
+        case (let first?, let second?):
+            return survives(first.matching, as: second) || survives(second.matching, as: first)
+        default: return false
+        }
+    }
+
+    /// Coordinators bound clauses; the content words beside a negation locate its scope.
+    private static func negationPlaces(in tokens: [GrammarToken]) -> [NegationPlace] {
         var clause = 0
-        var result: [Int] = []
-        for token in tokens where token.isPlain {
-            if ["but", "and", "or"].contains(token.matching) { clause += 1 }
-            if negatingWords.contains(token.matching) { result.append(clause) }
+        var clauseStart = 0
+        var result: [NegationPlace] = []
+        for index in tokens.indices where tokens[index].isPlain {
+            let token = tokens[index]
+            if ["but", "and", "or"].contains(token.matching) {
+                clause += 1
+                clauseStart = index
+            }
+            if negatingWords.contains(token.matching) {
+                let clauseEnd =
+                    tokens[(index + 1)...].firstIndex {
+                        ["but", "and", "or"].contains($0.matching)
+                    } ?? tokens.endIndex
+                let before = tokens[clauseStart..<index].last(where: isAnchor)
+                let after = tokens[(index + 1)..<clauseEnd].first(where: isAnchor)
+                result.append(NegationPlace(clause: clause, before: before, after: after))
+            }
         }
         return result
+    }
+
+    /// Negations and function words do not identify the proposition a negation belongs to.
+    private static func isAnchor(_ token: GrammarToken) -> Bool {
+        token.isPlain && !negatingWords.contains(token.matching) && !FunctionWords.holds(token.lookup)
     }
 
     /// Whether an identifier is spelled wholly from said words, every part of it one of them and in the order they were said.
