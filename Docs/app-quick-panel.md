@@ -214,9 +214,10 @@ delete, spoken as "Deleted. Press Command-Z to put it back." A copy-only choice 
 2.5 s later, which is sooner than VoiceOver focus reaches the notice bar, so drawing it is not
 enough.
 
-`PanelPresenter` decides the words (`PanelPresentation.announcements`); the view only posts each
-line once, when it first appears, as an `AccessibilityNotification.Announcement` at high priority
-so the panel closing does not cut it off.
+`PanelPresenter` decides the words (`PanelPresentation.announcements`); the controller posts each
+line once when it appears during an opening, then posts it again if the panel closes and reopens
+with the same notice. Unrelated redraws do not repeat it. Each post is an
+`AccessibilityNotification.Announcement` at high priority so the panel closing does not cut it off.
 
 A row's VoiceOver hint follows the same decision as Return: "Pastes where you were typing" when a
 paste can be attempted, and a hint saying it copies when the panel knows it can only copy.
