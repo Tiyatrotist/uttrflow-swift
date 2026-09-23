@@ -7,7 +7,7 @@ import Testing
 @testable import UttrflowInput
 
 /// A text field held in memory that answers its selection attributes as scripted and records every write.
-private final class FakeSelectionField: SelectionAttributes, Sendable {
+final class FakeSelectionField: SelectionAttributes, Sendable {
     struct State: Sendable {
         var text: String
         var location: Int
@@ -79,6 +79,15 @@ struct SelectionWriterTests {
         try SelectionWriter(field: field).replaceSelection(with: "world")
         #expect(field.text == "Hello world")
         #expect(field.selection == 11..<11)
+    }
+
+    @Test("accepts replacing a selection with the same text, since the caret still moved")
+    func sameTextReplacementIsNotAFailure() throws {
+        let field = FakeSelectionField("same", caret: 0, length: 4)
+        try SelectionWriter(field: field).replaceSelection(with: "same")
+        #expect(field.text == "same")
+        #expect(field.selection == 4..<4, "a genuine write still collapses the selection to a caret past it")
+        #expect(field.textWrites == ["same"], "no fallback should have written a second time")
     }
 
     @Test("refuses a field that accepts the text and does not change")
