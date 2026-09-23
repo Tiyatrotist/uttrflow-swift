@@ -4,6 +4,10 @@ Measurements taken before any of the feature was built, so the design rests on n
 from this machine rather than on estimates. Re-run everything here with
 `uttrflow-dev probe`.
 
+The surface sweep here is the widest single reading of other applications in the repository, and
+it feeds the `Published`, `Caret` and `Value` columns of
+[compatibility.md](compatibility.md).
+
 Apple M5 Pro, release build, SQLite 3.53.2. Every timing is a median of 100 runs after
 20 warm-up runs.
 
