@@ -47,4 +47,16 @@ enum PanelFixture {
             clips: clips, query: query, filter: filter, category: category, revealed: revealed,
             now: now, locale: locale)
     }
+
+    /// A panel opened the way the app opens one: shown before the store answers, the list installed after.
+    static func opened(
+        _ clips: [Clip] = clips,
+        now: Date = now,
+        locale: Locale = locale,
+        resuming resume: PanelResume? = nil
+    ) -> PanelSnapshot {
+        var snapshot = PanelSnapshot.opening(now: now, locale: locale, resuming: resume)
+        snapshot.install(clips, missingImages: [], formattableLanguages: [])
+        return snapshot
+    }
 }

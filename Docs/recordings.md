@@ -44,6 +44,10 @@ The folder is `Application Support/Uttrflow/recordings/`, one `<uuid>.wav` per t
 file's creation date is set to the recording's start time, so a later launch knows how
 old it is without a sidecar.
 
+The folder and each WAV are marked `isExcludedFromBackup`. A recording exists only as a
+one-day retry buffer, so backup tools that honour Finder's exclusion flag should skip it rather
+than carry failed or crashed dictations onto another disk.
+
 ## When the pipeline keeps it
 
 `DictationPipeline.fail` decides, and the rule is one sentence: **the audio is kept

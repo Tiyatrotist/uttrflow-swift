@@ -7,6 +7,7 @@ public import struct Foundation.Data
 public import class Foundation.FileManager
 public import class Foundation.JSONDecoder
 public import class Foundation.JSONEncoder
+public import struct Foundation.CocoaError
 
 /// The words this user says that a general model would not expect. See `Docs/app-dictionary-store.md`.
 public actor PersonalDictionaryStore {
@@ -82,7 +83,7 @@ public actor PersonalDictionaryStore {
     /// Writes the words this build ships knowing, once ever; a word the user then deletes stays deleted.
     @discardableResult
     public func seedShippedWords(at moment: Date) throws(DictionaryStoreError) -> [DictionaryEntry] {
-        guard seededVersion() < ShippedWords.version else { return [] }
+        guard try seededVersion() < ShippedWords.version else { return [] }
         let existing = load()
         let known = Set(existing.map { $0.word.lowercased() })
         let seeded = ShippedWords.entries(at: moment).filter { !known.contains($0.word.lowercased()) }
@@ -92,12 +93,20 @@ public actor PersonalDictionaryStore {
         return seeded
     }
 
-    /// The newest shipped list this dictionary has been given, or zero for one that has had none.
-    private func seededVersion() -> Int {
-        guard let data = try? Data(contentsOf: seedRecord),
-            let record = try? JSONDecoder().decode([String: Int].self, from: data)
-        else { return 0 }
-        return record["version"] ?? 0
+    /// A missing record is new; an unreadable one is not evidence that a deleted word may return.
+    private func seededVersion() throws(DictionaryStoreError) -> Int {
+        let data: Data
+        do {
+            data = try Data(contentsOf: seedRecord)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            return 0
+        } catch {
+            throw .couldNotReadSeedRecord
+        }
+        guard let record = try? JSONDecoder().decode([String: Int].self, from: data),
+            let version = record["version"], version >= 0
+        else { throw .couldNotReadSeedRecord }
+        return version
     }
 
     /// Notes which shipped list has been applied, which is what stops a deleted word returning.

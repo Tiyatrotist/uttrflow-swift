@@ -15,13 +15,13 @@ struct FailureCatalogueTests {
         #expect(PermissionError.everyCase.count == 3)
         #expect(AccountError.everyCase.count == 4)
         #expect(SnippetStoreError.everyCase.count == 4)
-        #expect(AudioCaptureError.everyCase.count == 5)
+        #expect(AudioCaptureError.everyCase.count == 6)
         #expect(SpeechEngineError.everyCase.count == 7)
         #expect(TransformationError.everyCase.count == 3)
-        #expect(TextInsertionError.everyCase.count == 4)
+        #expect(TextInsertionError.everyCase.count == 5)
         #expect(HotkeyError.everyCase.count == 2)
-        #expect(DictionaryStoreError.everyCase.count == 3)
-        #expect(allFailures.count == 36)
+        #expect(DictionaryStoreError.everyCase.count == 4)
+        #expect(allFailures.count == 39)
     }
 
     /// A backwards link loops and a repeated case hides the one it displaces; both show as a duplicate.
@@ -75,6 +75,7 @@ struct FailurePresentationTests {
         // A policy-restricted microphone cannot be fixed by the user, so an action would be a lie.
         #expect(PermissionError.microphoneRestricted.recovery == nil)
 
+        #expect(AudioCaptureError.microphoneDenied.recovery == .openSystemSettings(.microphone))
         #expect(AudioCaptureError.noInputDevice.recovery == nil)
         #expect(AudioCaptureError.unsupportedInputFormat.recovery == nil)
         #expect(AudioCaptureError.alreadyRecording.recovery == .retry)
@@ -90,6 +91,7 @@ struct FailurePresentationTests {
 
         #expect(TextInsertionError.noFocusedTextField.recovery == .retry)
         #expect(TextInsertionError.accessibilityDenied.recovery == .openSystemSettings(.accessibility))
+        #expect(TextInsertionError.insertionTimedOut.recovery == .showRecentDictations)
         #expect(TextInsertionError.insertionRejected(description: "x").recovery == .pasteManually)
 
         #expect(HotkeyError.observationNotPermitted.recovery == .openSystemSettings(.accessibility))
@@ -105,6 +107,15 @@ struct FailurePresentationTests {
         #expect(failure.userMessage.contains("Recent"))
     }
 
+    @Test("an unconfirmed insertion offers the saved transcript, not an assumed clipboard copy")
+    func insertionTimeoutDoesNotOfferAPaste() {
+        let failure = TextInsertionError.insertionTimedOut
+        #expect(failure.recovery == .showRecentDictations)
+        #expect(failure.userMessage.contains("Recent"))
+        #expect(!failure.userMessage.contains("copied"))
+        #expect(!failure.userMessage.contains("⌘V"))
+    }
+
     /// Only the error itself knows whether it cost the user their dictation or a second of their time.
     @Test("says what each failure actually costs")
     func severities() {
@@ -113,6 +124,7 @@ struct FailurePresentationTests {
         // The words still arrive, on the clipboard rather than in the app.
         #expect(PermissionError.accessibilityNotTrusted.severity == .degraded)
 
+        #expect(AudioCaptureError.microphoneDenied.severity == .blocking)
         #expect(AudioCaptureError.noInputDevice.severity == .blocking)
         #expect(AudioCaptureError.unsupportedInputFormat.severity == .blocking)
         #expect(AudioCaptureError.alreadyRecording.severity == .recoverable)
@@ -132,6 +144,7 @@ struct FailurePresentationTests {
         #expect(TextInsertionError.noFocusedTextField.severity == .recoverable)
         #expect(TextInsertionError.accessibilityDenied.severity == .degraded)
         #expect(TextInsertionError.clipboardUnavailable.severity == .degraded)
+        #expect(TextInsertionError.insertionTimedOut.severity == .degraded)
         #expect(TextInsertionError.insertionRejected(description: "x").severity == .degraded)
     }
 

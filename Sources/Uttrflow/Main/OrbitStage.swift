@@ -82,7 +82,7 @@ struct OrbitStage: View {
                     Text(presentation.status.text.uppercased())
                         .font(.system(size: MainMetrics.footnoteSize, weight: .medium))
                         .tracking(1.4)
-                        .foregroundStyle(Color.warningInk)
+                        .foregroundStyle(Color.stageWarningInk)
                 }
             }
             Text(presentation.greeting)
@@ -210,6 +210,8 @@ extension Color {
     static let stageWell = Color(rgb: BrandPalette.Surface.well)
     /// Text on the stage's fixed dark ground; unlike page text, it must not follow Light appearance ink.
     static let stageText = Color(rgb: BrandPalette.Text.primary.dark)
+    /// The not-ready status text on the stage's fixed dark ground; a fixed value, since `warningInk` follows Light appearance.
+    static let stageWarningInk = Color(rgb: BrandPalette.Semantic.warning)
     /// The brand teal deepened until white sits legibly on it, for the monogram.
     static let stageTealDeep = Color(rgb: BrandPalette.Teal.deeper)
 }

@@ -234,6 +234,46 @@ struct AccuracyBaselineTests {
         #expect(comparison.reason?.contains("normalisation") == true)
     }
 
+    /// #1306: an empty rule list is still a different scoring definition from the standard one.
+    @Test("refuses a verdict when the run dropped normalisation the baseline used")
+    func droppedNormalisation() {
+        let before = report([sample("a", errors: 5)])
+        let unnormalised = PassageScore(
+            caseID: "a", language: .english, stressor: .everyday,
+            wordErrorRate: .measure(reference: ["one"], hypothesis: ["one"]),
+            answeredIn: .latin, scoredAgainst: .latin, normalisation: [])
+        let comparison = AccuracyBaseline.capture(before, at: moment)
+            .compare(with: report([unnormalised]))
+        #expect(comparison.verdict == .incomparable)
+        #expect(comparison.reason?.contains("normalisation") == true)
+    }
+
+    /// The same mismatch the other way: the baseline is the one with no rules.
+    @Test("refuses a verdict when the baseline has no rules and the run has the standard ones")
+    func baselineWithNoNormalisation() {
+        let unnormalised = PassageScore(
+            caseID: "a", language: .english, stressor: .everyday,
+            wordErrorRate: .measure(reference: ["one"], hypothesis: ["one"]),
+            answeredIn: .latin, scoredAgainst: .latin, normalisation: [])
+        let comparison = AccuracyBaseline.capture(report([unnormalised]), at: moment)
+            .compare(with: report([sample("a", errors: 5)]))
+        #expect(comparison.verdict == .incomparable)
+        #expect(comparison.reason?.contains("normalisation") == true)
+    }
+
+    /// Two runs that both intentionally score without normalisation are still comparable to each other.
+    @Test("gives a verdict when both runs intentionally use no normalisation rules")
+    func bothRunsHaveNoNormalisation() {
+        let unnormalised = PassageScore(
+            caseID: "a", language: .english, stressor: .everyday,
+            wordErrorRate: .measure(reference: ["one"], hypothesis: ["one"]),
+            answeredIn: .latin, scoredAgainst: .latin, normalisation: [])
+        let comparison = AccuracyBaseline.capture(report([unnormalised]), at: moment)
+            .compare(with: report([unnormalised]))
+        #expect(comparison.verdict != .incomparable)
+        #expect(comparison.reason == nil)
+    }
+
     /// Forty samples going unscorable is a regression even if every surviving rate improved.
     @Test("a sample that stopped being scorable is a regression")
     func newlyUnscorable() {

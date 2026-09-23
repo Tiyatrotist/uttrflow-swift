@@ -17,6 +17,8 @@ public enum Quantisation: String, Sendable, Equatable, Codable {
 public struct LocalModel: Sendable, Hashable, Codable {
     /// Repository identifier.
     public let identifier: String
+    /// The commit the weights are fetched at, so an install a year from now is the install measured here.
+    public let revision: String
     /// Family, as its makers name it.
     public let family: String
     /// Release within that family.
@@ -33,6 +35,7 @@ public struct LocalModel: Sendable, Hashable, Codable {
     /// Records one candidate exactly as its repository describes it.
     public init(
         identifier: String,
+        revision: String,
         family: String,
         version: String,
         parameterBillions: Double,
@@ -41,6 +44,7 @@ public struct LocalModel: Sendable, Hashable, Codable {
         isMultilingual: Bool
     ) {
         self.identifier = identifier
+        self.revision = revision
         self.family = family
         self.version = version
         self.parameterBillions = parameterBillions
@@ -79,30 +83,35 @@ extension LocalModel {
     /// Gemma 3 at 1B, the control: clean-up is a shallow task and this might be enough.
     public static let gemma3Small = LocalModel(
         identifier: "mlx-community/gemma-3-1b-it-qat-4bit",
+        revision: "15fed4eafb456c6fcb2a1165f19ac609670ed14b",
         family: "Gemma", version: "3", parameterBillions: 1, quantisation: .fourBitQAT,
         downloadBytes: 770_000_000, isMultilingual: true
     )
     /// Llama 3.2 at 3B.
     public static let llama32 = LocalModel(
         identifier: "mlx-community/Llama-3.2-3B-Instruct-4bit",
+        revision: "7f0dc925e0d0afb0322d96f9255cfddf2ba5636e",
         family: "Llama", version: "3.2", parameterBillions: 3, quantisation: .fourBit,
         downloadBytes: 1_820_000_000, isMultilingual: true
     )
     /// Qwen 3 at 4B.
     public static let qwen3 = LocalModel(
         identifier: "mlx-community/Qwen3-4B-Instruct-2507-4bit",
+        revision: "50d427756c6b1b2fe0c0a10f67fbda1fc8e82c1b",
         family: "Qwen", version: "3 (2507)", parameterBillions: 4, quantisation: .fourBit,
         downloadBytes: 2_280_000_000, isMultilingual: true
     )
     /// Ministral 3 at 3B.
     public static let ministral3 = LocalModel(
         identifier: "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
+        revision: "a962dcb09eee4169c890e544c9eb938f1113fdee",
         family: "Ministral", version: "3 (2512)", parameterBillions: 3, quantisation: .fourBit,
         downloadBytes: 2_780_000_000, isMultilingual: true
     )
     /// Gemma 3 at 4B.
     public static let gemma3 = LocalModel(
         identifier: "mlx-community/gemma-3-4b-it-qat-4bit",
+        revision: "3d9ef289111449933c22761961f16a5df237ce2a",
         family: "Gemma", version: "3", parameterBillions: 4, quantisation: .fourBitQAT,
         downloadBytes: 3_030_000_000, isMultilingual: true
     )

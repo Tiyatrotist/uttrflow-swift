@@ -3,6 +3,12 @@
 `DictationHistoryStore` in `Sources/UttrflowHistory/DictationHistoryStore.swift` holds
 everything the user has dictated, on this Mac, between launches.
 
+The history file is local working memory, not backup material. It is written through
+`PrivateFile`, which marks the file and its Application Support folder `isExcludedFromBackup`, so
+backup tools that honour Finder's exclusion flag should skip transcripts and their set-aside
+copies. It is still an owner-only file on the Mac rather than an encrypted store; the at-rest
+boundary is the user's login, FileVault and any encrypted backup volume.
+
 ## Its own file, not a key beside the settings
 
 The history grows without bound, ages out on a clock, and is the one store whose contents

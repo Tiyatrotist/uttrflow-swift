@@ -35,8 +35,8 @@ public actor PredictStore: PredictionStore {
         try? PrivateFile.makeDirectory(at: URL(filePath: path).deletingLastPathComponent())
         do {
             let database = try Database(path: path)
-            try? PrivateFile.tighten(at: URL(filePath: path))
             try Schema.migrate(database)
+            secureFiles(at: path)
             return database
         } catch {
             guard error == .corrupt else { throw error }
@@ -45,9 +45,21 @@ public actor PredictStore: PredictionStore {
                 try? FileManager.default.removeItem(atPath: path + suffix)
             }
             let replacement = try Database(path: path)
-            try? PrivateFile.tighten(at: URL(filePath: path))
             try Schema.migrate(replacement)
+            secureFiles(at: path)
             return replacement
+        }
+    }
+
+    /// SQLite creates the database and sidecars itself, so the store tightens them after opening.
+    private static func secureFiles(at path: String) {
+        for suffix in ["", "-wal", "-shm"] {
+            let url = URL(filePath: path + suffix)
+            guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+                continue
+            }
+            try? PrivateFile.tighten(at: url)
+            try? PrivateFile.excludeFromBackup(at: url)
         }
     }
 
@@ -399,7 +411,9 @@ public actor PredictStore: PredictionStore {
 
     /// Forgets everything learned in one application.
     public func forget(bundleIdentifier: String) throws(PredictStoreError) {
-        try database.run("DELETE FROM surface WHERE bundle_id = ?") { $0.bind(1, bundleIdentifier) }
+        try database.run("DELETE FROM surface WHERE bundle_id = ?") {
+            $0.bind(1, ApplicationKey.of(bundleIdentifier))
+        }
         try leaveNothingBehind()
     }
 

@@ -89,7 +89,8 @@ struct FakeCache {
 
     static func model(identifier: String, downloadBytes: Int64 = 256) -> LocalModel {
         LocalModel(
-            identifier: identifier, family: "Tiny", version: "1", parameterBillions: 0.1,
+            identifier: identifier, revision: String(repeating: "0", count: 40), family: "Tiny",
+            version: "1", parameterBillions: 0.1,
             quantisation: .fourBit, downloadBytes: downloadBytes, isMultilingual: true)
     }
 }
