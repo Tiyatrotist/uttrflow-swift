@@ -139,14 +139,19 @@ What mitigates it, in descending order of effect:
    the cue; it changed the input format from 1 channel to 9 on this machine, which the resampler
    would reduce to channel 0; and it imposes AGC and noise suppression the recogniser has not
    been tuned against.
-2. Trimming a lead-in. The cue occupies a known window at the head of the recording, before any
-   human has begun speaking; discarding it is a pipeline decision.
-3. Being short and quiet, which is all the cue can do by itself. `Tink` is the shortest sound in
+2. Being short and quiet, which is all the cue can do by itself. `Tink` is the shortest sound in
    `/System/Library/Sounds` on macOS 26.5 at 0.564 s, chosen for brevity rather than taste, and
    the default volume is 0.4.
 
 Deliberately not a mitigation: waiting for the start cue to finish before opening the
 microphone. It buys silence at the cost of half a second before the user may speak.
+
+**Trimming a lead-in is also deliberately not a mitigation, by measured decision.** A synthetic
+sweep with `Tink` through `BackedSpeechEngine` found no word errors at the loudest measured
+real leak (−11.5 dBFS); a fixed-window trim would convert a probabilistic bleed into
+deterministic word loss for users who press and speak, so the cue stays in the buffer. The start
+cue in `Sources/UttrflowAudio/RecordingCue+System.swift:8` points at this paragraph rather than
+at an open question.
 
 ## Playing a system sound reliably
 
