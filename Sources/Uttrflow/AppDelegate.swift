@@ -746,6 +746,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Submitted, not handled: the controller queues gestures so press and release cannot interleave.
         dock.onPressBegan = { [weak self] in self?.controller?.submit(.pressed) }
         dock.onPressEnded = { [weak self] in self?.controller?.submit(.released) }
+        // A toggle, not a press and a release: VoiceOver activates the button and has nothing to hold.
+        dock.onToggle = { Task { [weak self] in await self?.controller?.toggleFromControl() } }
         dock.onRecoveryAction = { [weak self] action in self?.perform(action) }
 
         dock.setShortcut(SettingsShortcut.compact(settings.hotkey))
