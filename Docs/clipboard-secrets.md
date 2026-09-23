@@ -72,7 +72,8 @@ underscored standard library entry that carried no source-stability promise, so 
 change could have moved a boundary and altered what the scanner masks without failing a test.
 `WordBreaksTests` now compares `WordBreaks` with `\b` over the whole text on combining marks,
 emoji, regional indicator pairs, scripts written without spaces, and boundaries next to
-punctuation, and the two agree at every character on every case measured.
+punctuation, and the two agree at every character on every case measured. What that costs, and what
+is done about it, is the next section.
 
 **Where the two walks differ, and why it does not reach the scanner.** The word index worked in
 scalars and could return an index inside a grapheme cluster, usually beside a format character:
@@ -82,23 +83,67 @@ produced a different set of indices on 7,707 of them and differed at a character
 and neither ever failed to advance. `NamedSecretScan` walks with `index(after:)` and asks only
 about a character boundary, so an index inside a cluster was never asked about and never matched.
 
-**What asking the engine costs, measured.** Release build, one core, M5 Pro, 21 September 2026,
-processor time for one `ClipKindDetector.kind(of:)` call on a 2 MB clip, with the word index and
-with the pattern: code 0.011 → 0.011 s, prose 0.016 → 0.017 s, CSV 0.028 → 0.028 s, and logs
-0.084 → 0.087 s, the costliest row of the budget table in `Docs/performance.md`. A boundary costs
-about 0.7 µs from the pattern against 0.03 µs from the word index, and it is the same boundary:
-both find 923,080 of them in the scaling test's 2 MB run, and the cost still rises in proportion
-to the clip. Only a clip that names a secret on every line and never gives one pays for that
-difference — 2 MB of `auth_token=abc pass=x api_key=y secret=z pwd=w credential=v` goes
-0.175 → 0.763 s, over the 0.2 processor-second budget for a copy. Nothing shortens that without a
-word index of the project's own, which means the Unicode word break rules and their property
-tables, so it is left measured rather than reimplemented.
-
 The same pass found four classifier patterns with the same flaw, rewritten as patterns that
 accept the same language without the backtracking: a link's host (`[^\s/?#]+\S*` is
 `[^\s/?#]\S*`), a functional colour (`\(\s*[^()]+\)` is `\([^()]+\)`), a call
 (`\w+\((?:\)|[^\s)])` is `\w\(\S`), and every line-start rule in `CodeShapes`, where `^\s*`
 could run through a block of blank lines from each of them and `^\h*` cannot.
+
+## Deciding an ASCII boundary without the pattern
+
+Asking the engine for every boundary costs more than twenty times what the word index did, which no
+ordinary clip notices and one adversarial clip does — see the measurements below. So `WordBreaks`
+takes a boundary from the rules directly where it can, and from the pattern everywhere else.
+
+The rules reach two characters back and one character on: the widest of them holds two words
+together across a single joining character, so `a.b` is one word and `a.` is two. Nothing in ASCII
+is `Extend`, `Format` or `ZWJ`, which are the characters the rules skip over before applying, so a
+position whose four-character window is entirely lone ASCII can be decided from the window alone.
+`WordClass` is that decision: eight classes covering the 128 characters — a letter, a digit, an
+underscore, a space, the character that joins letters, the one that joins digits, the two that join
+either, and everything else, which never joins anything.
+
+`asciiBoundary` walks forward from a boundary deciding each position that way, and gives up the
+moment a character it would have to weigh is not lone ASCII — including a `\r\n`, which is one
+character in Swift and not a lone scalar. Giving up costs the walk so far and nothing else: the
+pattern then runs from the same boundary, exactly as before.
+
+**Why the walk may start with nothing behind it.** At the first position after a boundary there is
+only one character of history, not two, and the rules that want two cannot fire there anyway: each
+of them needs the pair before the position to have been joined, and a boundary is precisely where
+they were not.
+
+**How it is known to be right, rather than argued to be.** Two walks that must agree is the failure
+this code cannot have, because a boundary in the wrong place shows a credential instead of masking
+it and no test goes red. So `WordBreaksTests` compares the walk with `\b` exhaustively: every ASCII
+string of up to three characters; every five-character string over an alphabet holding two members
+of each class, which is wider than the rules can see; and every ASCII character in turn in every
+four-character context over one member of each class. Together that is 3.0 million strings, and
+they agree everywhere. `make verify` reads every twenty-fifth of them and
+`UTTRFLOW_ORACLE_SWEEP=1 swift test --filter WordBreaks` reads them all, in 18 seconds.
+
+**What each of the three costs, measured.** Release build, one core, M5 Pro, 21 September 2026,
+processor time for one `ClipKindDetector.kind(of:)` call on a 2 MB clip, median of seven, with the
+word index, with the pattern alone, and with the ASCII rules in front of it:
+
+| clip | word index | pattern | ASCII rules |
+|---|---|---|---|
+| code | 0.015 s | 0.014 s | 0.015 s |
+| prose | 0.033 s | 0.033 s | 0.034 s |
+| CSV | 0.027 s | 0.027 s | 0.027 s |
+| logs | 0.069 s | 0.068 s | 0.067 s |
+| a secret named on every line and never given | 0.208 s | 0.793 s | 0.213 s |
+
+Only the last clip ever paid for the pattern, and it is the one a user can produce by copying a
+`.env` template or a redacted log: 2 MB of
+`auth_token=abc pass=x api_key=y secret=z pwd=w credential=v`, where every line starts a keyword the
+named-secret reader must measure a boundary around and none of them gives a value it accepts. The
+walk over that clip finds 838,872 boundaries whichever way it is read, and costs 0.705 s from the
+pattern against 0.105 s from the ASCII rules; against the whole call, the pattern adds 0.70 µs a
+boundary and the ASCII rules add 0.006 µs. The budget table in `Docs/performance.md` is written for
+an M1, where these figures roughly double, so that clip sits at about 0.42 processor-seconds there
+and over the 0.2 budget for a copy — as it did before any of this, and for a reason that has nothing
+to do with word breaking.
 
 ## Reading a large clip cheaply
 
