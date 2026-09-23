@@ -57,6 +57,122 @@
 # see the note above the codesign call and Docs/packaging.md.
 set -euo pipefail
 
+fail() {
+    echo "error: $*" >&2
+    exit 1
+}
+
+adhoc_designated_requirement() {
+    printf 'designated => identifier "%s"\n' "$1"
+}
+
+developer_id_team_id() {
+    local identity="$1"
+    if [[ "$identity" =~ \(([A-Z0-9]{10})\)$ ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+        return 0
+    fi
+    return 1
+}
+
+developer_id_designated_requirement() {
+    local bundle_id="$1"
+    local identity="$2"
+    local team_id
+    team_id="$(developer_id_team_id "$identity")" || return 1
+    printf 'designated => anchor apple generic and identifier "%s" and certificate leaf[subject.OU] = "%s"\n' \
+        "$bundle_id" "$team_id"
+}
+
+expected_designated_requirement() {
+    local bundle_id="$1"
+    local real_certificate="$2"
+    local identity="$3"
+    if [[ "$real_certificate" == "yes" ]]; then
+        developer_id_designated_requirement "$bundle_id" "$identity"
+    else
+        adhoc_designated_requirement "$bundle_id"
+    fi
+}
+
+verify_distribution_requirement() {
+    local app="$1"
+    local actual="$2"
+    local expected="$3"
+    local bundle_id="$4"
+    local team_id="$5"
+
+    [[ "$actual" == *"identifier \"$bundle_id\""* ]] || return 1
+    [[ "$actual" == *"anchor apple generic"* ]] || return 1
+    [[ "$actual" == *"certificate leaf[subject.OU] = $team_id"* \
+        || "$actual" == *"certificate leaf[subject.OU] = \"$team_id\""* ]] || return 1
+    codesign --verify --deep --strict -R "=${expected#designated => }" "$app"
+}
+
+assert_requirement() {
+    local name="$1"
+    local actual="$2"
+    local expected="$3"
+    [[ "$actual" == "$expected" ]] || fail "$(
+        printf '%s requirement mismatch.\n' "$name"
+        printf '  expected: %s\n' "$expected"
+        printf '  actual:   %s' "$actual"
+    )"
+}
+
+run_requirement_self_test() {
+    local bundle_id="com.uttrflow.Uttrflow"
+    local identity="Developer ID Application: Uttrflow, Inc. (ABCDE12345)"
+    local distribution_requirement
+    local signed_requirement
+
+    assert_requirement "local" \
+        "$(expected_designated_requirement "$bundle_id" no "")" \
+        'designated => identifier "com.uttrflow.Uttrflow"'
+    assert_requirement "development" \
+        "$(expected_designated_requirement "$bundle_id.dev" no "")" \
+        'designated => identifier "com.uttrflow.Uttrflow.dev"'
+    assert_requirement "rehearsal" \
+        "$(expected_designated_requirement "$bundle_id" no "")" \
+        'designated => identifier "com.uttrflow.Uttrflow"'
+    assert_requirement "distribution" \
+        "$(expected_designated_requirement "$bundle_id" yes "$identity")" \
+        'designated => anchor apple generic and identifier "com.uttrflow.Uttrflow" and certificate leaf[subject.OU] = "ABCDE12345"'
+
+    distribution_requirement="$(expected_designated_requirement "$bundle_id" yes "$identity")"
+    csreq -r "=${distribution_requirement#designated => }" -t >/dev/null \
+        || fail "the distribution requirement does not compile"
+    signed_requirement='designated => identifier "com.uttrflow.Uttrflow" and anchor apple generic and certificate leaf[subject.OU] = ABCDE12345'
+    codesign() {
+        [[ $# -eq 6 && "$1" == --verify && "$2" == --deep && "$3" == --strict \
+            && "$4" == -R && "$5" == '=anchor apple generic and identifier "com.uttrflow.Uttrflow" and certificate leaf[subject.OU] = "ABCDE12345"' \
+            && "$6" == mock-app ]]
+    }
+    verify_distribution_requirement mock-app "$signed_requirement" "$distribution_requirement" "$bundle_id" ABCDE12345 \
+        || fail "distribution verification did not pass the expected requirement to codesign"
+    if verify_distribution_requirement mock-app 'designated => cdhash H"0123456789"' "$distribution_requirement" "$bundle_id" ABCDE12345; then
+        fail "distribution verification accepted an unpinned designated requirement"
+    fi
+    if verify_distribution_requirement mock-app 'designated => identifier "com.uttrflow.Uttrflow" and anchor apple generic and certificate leaf[subject.OU] = OTHER12345' "$distribution_requirement" "$bundle_id" ABCDE12345; then
+        fail "distribution verification accepted a different Team ID"
+    fi
+    codesign() { return 1; }
+    if verify_distribution_requirement mock-app "$signed_requirement" "$distribution_requirement" "$bundle_id" ABCDE12345; then
+        fail "distribution verification ignored a failed codesign check"
+    fi
+
+    if expected_designated_requirement "$bundle_id" yes "Developer ID Application: Uttrflow, Inc." >/dev/null; then
+        fail "distribution requirement accepted an identity without a Team ID"
+    fi
+
+    printf 'bundle designated-requirement self-test passed\n'
+}
+
+if [[ "${1:-}" == "--requirement-self-test" ]]; then
+    run_requirement_self_test
+    exit 0
+fi
+
 # ---------------------------------------------------------------------------
 # Modes
 # ---------------------------------------------------------------------------
@@ -105,11 +221,6 @@ PRODUCTS_DIR="$DERIVED_DATA/Build/Products/$CONFIGURATION"
 SOURCE_PLIST="Resources/Uttrflow-Info.plist"
 ENTITLEMENTS="Resources/Uttrflow.entitlements"
 ICON="Design/uttrflow.icns"
-
-fail() {
-    echo "error: $*" >&2
-    exit 1
-}
 
 # Reads one key out of a plist, failing if it is absent. Everything the bundle needs
 # to know about itself comes from Resources/Uttrflow-Info.plist through this, so the
@@ -363,6 +474,13 @@ if [[ "$MODE" == "rehearsal" && -d "$APP/Contents/Frameworks" ]]; then
     printf '  do this and does not need to — check 7 refuses one that carries it.\n\n'
 fi
 
+REQUIREMENT="$(expected_designated_requirement "$BUNDLE_ID" "$REAL_CERTIFICATE" "$SIGNING_IDENTITY")" \
+    || fail "$(
+        printf 'could not derive the expected distribution designated requirement.\n'
+        printf '  Pass a Developer ID Application identity ending in its Team ID, for example:\n'
+        printf '  Developer ID Application: NAME (TEAMID)'
+    )"
+
 COMMON_ARGS=(--force --identifier "$BUNDLE_ID" --entitlements "$ENTITLEMENTS")
 
 if [[ "$REAL_CERTIFICATE" == "yes" ]]; then
@@ -375,7 +493,6 @@ if [[ "$REAL_CERTIFICATE" == "yes" ]]; then
     COMMON_ARGS+=(--sign "$SIGNING_IDENTITY" --timestamp)
     SIGNATURE_SUMMARY="Developer ID, hardened runtime, secure timestamp, verifies --deep --strict"
 else
-    REQUIREMENT="designated => identifier \"$BUNDLE_ID\""
     COMMON_ARGS+=(--sign - --requirements "=$REQUIREMENT" --timestamp=none)
     SIGNATURE_SUMMARY="ad-hoc, no hardened runtime, verifies --deep --strict"
 fi
@@ -607,20 +724,38 @@ SIGNING_INFO="$(codesign -d --verbose=4 "$APP" 2>&1)" \
 codesign --verify --deep --strict "$APP" \
     || fail "the signature on $APP does not verify"
 
-# 6. The designated requirement really is pinned to the identifier. This is the check
-#    that matters most and the one step 5 cannot do for it: an unpinned, cdhash-based
+# 6. The designated requirement really is pinned to this app. This is the check that
+#    matters most and the one step 5 cannot do for it: an unpinned, cdhash-based
 #    signature verifies perfectly and still loses the microphone grant on next build.
+#    Ad-hoc builds are signed with the exact identifier requirement above. Developer ID
+#    builds keep Apple's fuller default requirement, then prove it satisfies the expected
+#    identifier and Team ID.
 ACTUAL_REQUIREMENT="$(
     codesign -d -r- "$APP" 2>/dev/null \
         | sed -n 's/^#* *designated =>/designated =>/p' \
         | head -1
 )"
-[[ "$ACTUAL_REQUIREMENT" == "$REQUIREMENT" ]] || fail "$(
-    printf 'designated requirement is not pinned to the bundle identifier.\n'
-    printf '  expected: %s\n' "$REQUIREMENT"
-    printf '  actual:   %s\n' "${ACTUAL_REQUIREMENT:-<none>}"
-    printf '  TCC would drop the microphone grant on the next build.'
-)"
+if [[ "$REAL_CERTIFICATE" == "yes" ]]; then
+    [[ -n "$ACTUAL_REQUIREMENT" ]] || fail "$(
+        printf 'the distribution signature has no designated requirement.\n'
+        printf '  expected it to satisfy: %s' "$REQUIREMENT"
+    )"
+    TEAM_ID="$(developer_id_team_id "$SIGNING_IDENTITY")"
+    verify_distribution_requirement "$APP" "$ACTUAL_REQUIREMENT" "$REQUIREMENT" "$BUNDLE_ID" "$TEAM_ID" \
+        || fail "$(
+            printf 'designated requirement is not pinned to the bundle identifier and Team ID.\n'
+            printf '  expected it to satisfy: %s\n' "$REQUIREMENT"
+            printf '  actual:                 %s\n' "$ACTUAL_REQUIREMENT"
+            printf '  TCC would not have a stable Developer ID identity for this app.'
+        )"
+else
+    [[ "$ACTUAL_REQUIREMENT" == "$REQUIREMENT" ]] || fail "$(
+        printf 'designated requirement is not pinned to the bundle identifier.\n'
+        printf '  expected: %s\n' "$REQUIREMENT"
+        printf '  actual:   %s\n' "${ACTUAL_REQUIREMENT:-<none>}"
+        printf '  TCC would drop the microphone grant on the next build.'
+    )"
+fi
 
 # 7. The audio-input entitlement made it into the signature. Inert today, because we
 #    do not enable the hardened runtime — but the day someone does, its absence is a
@@ -758,7 +893,7 @@ cat <<EOF
 Built and signed $APP
 
   identifier   $BUNDLE_ID
-  requirement  $REQUIREMENT
+  requirement  $ACTUAL_REQUIREMENT
   signature    $SIGNATURE_SUMMARY
   resources    $RESOURCE_SUMMARY
 
