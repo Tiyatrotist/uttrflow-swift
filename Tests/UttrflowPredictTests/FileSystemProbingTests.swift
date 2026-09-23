@@ -98,8 +98,10 @@ struct SystemFileSystemTests {
         let boxed = Mutex(0)
         let disk = SystemFileSystem(
             environment: [:], homeDirectory: "/h", probe: { _ in .directory },
-            timeBox: { _, _ in
+            timeBox: { _, work in
                 boxed.withLock { $0 += 1 }
+                // The wait misses its deadline, but the worker itself does go on to finish, as it would for real.
+                _ = work()
                 return nil
             }, now: { clock.now })
         #expect(disk.kind(atPath: "/Volumes/Slow/a") == .unknown)
@@ -112,6 +114,27 @@ struct SystemFileSystemTests {
         let answered = SystemFileSystem(
             environment: [:], homeDirectory: "/h", probe: { _ in .missing }, timeBox: { _, work in work() })
         #expect(answered.kind(atPath: "/Volumes/Quick/a") == .missing)
+    }
+
+    @Test(
+        "A probe still running past its deadline and past the cooldown is not started a second time on the same volume, but a different volume is not held back by it."
+    )
+    func inFlightProbeIsNotDuplicated() {
+        let clock = HandClock()
+        let boxed = Mutex(0)
+        let disk = SystemFileSystem(
+            environment: [:], homeDirectory: "/h", probe: { _ in .directory },
+            timeBox: { _, _ in
+                boxed.withLock { $0 += 1 }
+                // The worker never calls back: this probe is still running, forever, as a hung mount would leave it.
+                return nil
+            }, now: { clock.now })
+        #expect(disk.kind(atPath: "/Volumes/Stuck/a") == .unknown)
+        clock.advance(by: SystemFileSystem.slowVolumeLifetimeInSeconds + 1)
+        #expect(disk.kind(atPath: "/Volumes/Stuck/b") == .unknown)
+        #expect(boxed.withLock { $0 } == 1, "the still-running probe must not be started again")
+        #expect(disk.kind(atPath: "/Volumes/Other/a") == .unknown)
+        #expect(boxed.withLock { $0 } == 2, "a different, healthy volume starts its own probe")
     }
 
     @Test("Work held to a time box that has not finished inside the budget is no answer.")
