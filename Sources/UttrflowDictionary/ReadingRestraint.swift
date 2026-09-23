@@ -1,5 +1,7 @@
 // What a sound key cannot decide on its own.
 
+internal import Foundation
+
 /// What a phonetic lookup must ask beyond the sound key, which the encoder cannot answer. See `Docs/cleanup.md`.
 public enum ReadingRestraint {
     /// The opening letters a reading must share, because a word that merely rhymes is noise, not a reading.
@@ -12,8 +14,8 @@ public enum ReadingRestraint {
 
     /// Whether a reading opens like the word heard; the encoder drops inner vowels, so the opening is what is left.
     public static func opensAlike(_ reading: String, heard: String) -> Bool {
-        let reading = closedUp(reading)
-        let heard = closedUp(heard)
+        let reading = closedUp(reading).folding(options: .diacriticInsensitive, locale: nil)
+        let heard = closedUp(heard).folding(options: .diacriticInsensitive, locale: nil)
         guard reading.count >= openingLettersShared, heard.count >= openingLettersShared else {
             return reading == heard
         }

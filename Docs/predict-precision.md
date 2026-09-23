@@ -52,7 +52,9 @@ now scoped by the window that holds it, so two conversations are two corpora and
 recent lines. Window counts and edit marks (`Priya (3)`, `Draft •`) are stripped, so a thread
 stays one thread; a title long enough to be a document's first line names nothing and is ignored;
 a field that owns a document keeps its own scope, so a browser stays by host and a terminal by
-directory.
+directory — except a terminal whose window title names a remote session, which is scoped as the
+session, since the directory it publishes is this Mac's and not the one the shell is in. See
+`predict-terminal-paths.md`.
 
 **P2 — Precision is the headline. Done.** The bake-off and the scorecard report precision,
 coverage and the count of wrong lines, per category. Every step below is judged on that curve.

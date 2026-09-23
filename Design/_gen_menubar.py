@@ -84,9 +84,9 @@ READY_MENU = menu(f"""
       <div class="mi">Quit Uttrflow<span class="sc">&#8984;Q</span></div>""")
 
 ATTENTION_MENU = menu(f"""
-      <div class="mi tall" style="color:#C2560C"><span class="statusdot" style="background:#FF8D28"></span>
+      <div class="mi tall" style="color:#793F15"><span class="statusdot" style="background:#FF8D28"></span>
         Microphone access is turned off</div>
-      <div class="mi" style="color: var(--accent)">Open System Settings&hellip;</div>
+      <div class="mi" style="color:#0F5751">Open System Settings&hellip;</div>
       <div class="msep"></div>
       <div class="mi dis">Start Dictation<span class="sc">&#8997;Space</span></div>
       <div class="mhdr">Recent</div>

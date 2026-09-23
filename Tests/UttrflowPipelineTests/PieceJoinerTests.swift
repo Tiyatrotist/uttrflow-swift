@@ -369,6 +369,53 @@ struct PieceJoinerSeamTests {
         #expect(code == ["let a = 1\nlet b = 2", "done"])
     }
 
+    /// A pause is not a sentence end, and the live path's words are supposed to match the one-shot result.
+    @Test("adds no stop where the next piece opens on a phrase that continues the sentence")
+    func mdSentenceSeamTakesNoStop() {
+        let whole = PieceJoiner.join(
+            [piece("we moved the review"), piece("to Thursday because the room was taken")],
+            under: .standard(for: .document))
+
+        #expect(whole.cleaned.text == "we moved the review to Thursday because the room was taken")
+    }
+
+    /// An infinitive opens a sentence as readily as it continues one, so it is no evidence either way.
+    @Test("still stops a seam where the next piece opens on an infinitive")
+    func infinitiveAtASeamStillStops() {
+        let seamed = PieceJoiner.seamed(
+            ["I finished the draft", "to be honest it took all day"],
+            under: .standard(for: .document))
+
+        #expect(seamed.first == "I finished the draft.")
+    }
+
+    /// A fronted phrase opens a sentence, and only a preposition a speaker never fronts counts as evidence.
+    @Test("still stops a seam where the next piece opens on a fronted phrase")
+    func frontedPhraseAtASeamStillStops() {
+        let seamed = PieceJoiner.seamed(
+            ["the room was taken", "in the morning we moved it"], under: .standard(for: .document))
+
+        #expect(seamed.first == "the room was taken.")
+    }
+
+    /// A hard cut falls where the speaker never paused, which is most often inside a phrase.
+    @Test(
+        "adds no stop where the piece ends on a word no sentence ends on",
+        arguments: ["we moved the review to", "the room was taken and", "I spoke to the"])
+    func unfinishedPieceTakesNoStop(text: String) {
+        let seamed = PieceJoiner.seamed([text, "Thursday works"], under: .standard(for: .document))
+
+        #expect(seamed.first == text)
+    }
+
+    /// The seam of two whole utterances is still a sentence end, which is what #183 asked for.
+    @Test("still stops a seam with no evidence either way")
+    func seamWithNoEvidenceStillStops() {
+        let seamed = PieceJoiner.seamed(["on my way", "be there soon"], under: .standard(for: .messaging))
+
+        #expect(seamed.first == "on my way.")
+    }
+
     /// A single piece is already the whole message, so the joiner has no seam to end.
     @Test("leaves a one-piece dictation to the message stage")
     func leavesOnePieceAlone() {

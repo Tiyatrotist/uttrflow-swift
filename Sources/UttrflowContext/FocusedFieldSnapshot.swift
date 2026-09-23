@@ -115,9 +115,12 @@ extension FocusedFieldSnapshot {
     public var capability: SurfaceCapability {
         SurfaceCapability(
             application: applicationName, role: role, locator: locator, reportsValue: value != nil,
-            reportsCaretRect: caret != nil, reportsTextStyle: pointSize != nil, isSecure: isSecure,
+            reportsCaretRect: caret != nil, reportsTextStyle: hasTypeStyle, isSecure: isSecure,
             readMicroseconds: readMicroseconds)
     }
+
+    /// Whether any of the field's type can be matched — size, family or colour — since the ghost defaults the rest.
+    var hasTypeStyle: Bool { pointSize != nil || fontFamily != nil || textColor != nil }
 
     /// Where a suggestion may be drawn for this field, or nothing where none may be.
     public var placement: SuggestionPlacement? { capability.placement }

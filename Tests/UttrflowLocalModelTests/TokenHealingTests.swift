@@ -126,6 +126,58 @@ struct TokenHealingTests {
     }
 
     @Test(
+        "Anything but a letter or digit at a token's front starts something new, a space of any width included."
+    )
+    func onlyALetterOrDigitLengthensTheWord() {
+        let marks = TokenHealing.Vocabulary(
+            texts: ["og", "2x", " l", "\u{A0}l", "-l", ".", "\u{E9}t", ""], ending: [])
+        #expect(marks.startsNewWord == [false, false, true, true, true, true, false, false])
+    }
+
+    @Test(
+        "The person is inside a word only where the last thing they typed is a letter or digit with no space after it."
+    )
+    func onlyALetterOrDigitLeavesThePersonInsideAWord() {
+        #expect(healing(owing: " l").isMidWord)
+        #expect(healing(owing: " l2").isMidWord)
+        #expect(!healing(owing: " l.").isMidWord)
+        #expect(!healing(owing: "").isMidWord)
+        #expect(!TokenHealing(vocabulary: vocabulary, owed: " l", wordComplete: true).isMidWord)
+    }
+
+    @Test(
+        "At the step after a word the person stopped inside, a token that starts a new word is priced below one that lengthens it."
+    )
+    func aNewWordIsPricedBelowLengtheningTheTypedOne() {
+        var healing = healing(owing: " l")
+        healing.took(" l")
+        let mask = healing.mask(width: 8)
+        // "og" and "x" lengthen the word, so they keep the whole of the model's own preference.
+        #expect(mask?[2] == 0 && mask?[6] == 0)
+        #expect(mask?[0] == -TokenHealing.newWordPenalty && mask?[1] == -TokenHealing.newWordPenalty)
+        #expect(mask?[4] == -TokenHealing.newWordPenalty)
+        // The penalty prices a break down; it never rules one out, so a word the model is sure of still breaks.
+        #expect(TokenHealing.newWordPenalty.isFinite && TokenHealing.newWordPenalty > 0)
+        #expect(mask?[3] == -.infinity && mask?[7] == -.infinity)
+    }
+
+    @Test("A word the person finished with a space is followed by a new word at no cost.")
+    func aFinishedWordIsFollowedAtNoCost() {
+        var finished = TokenHealing(vocabulary: vocabulary, owed: " l", wordComplete: true)
+        finished.took(" l")
+        let mask = finished.mask(width: 8)
+        #expect(mask?[0] == 0 && mask?[1] == 0 && mask?[4] == 0)
+    }
+
+    @Test(
+        "While the word is still owed, lengthening it and breaking it are not yet the choice, so nothing is priced down."
+    )
+    func nothingIsPricedDownWhileTheWordIsOwed() {
+        let mask = healing(owing: " l").mask(width: 8)
+        #expect(mask?[0] == 0 && mask?[1] == 0 && mask?[7] == 0)
+    }
+
+    @Test(
         "A word that closes the line frees the model once written, so a finished sentence can be left alone.")
     func aClosingWordMayEndTheLine() {
         var closing = TokenHealing(vocabulary: vocabulary, owed: " l", wordComplete: false, mayEnd: true)
