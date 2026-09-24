@@ -197,4 +197,16 @@ struct PhoneticIndexTests {
         #expect(index.unaddressable.map(\.word) == ["!!!"])
         #expect(index.candidates(soundingLike: "Uttrflow").count == 1)
     }
+
+    /// The domain `DictionaryEntry` enforces means this subtraction can no longer overflow. See #1183.
+    @Test("orders entries at the extremes of the counter domain without crashing")
+    func ordersExtremeCountersWithoutCrashing() {
+        let untouched = word("Uttrflow", from: .added, used: 0, reverted: .max)
+        let heavilyUsed = word("Uttrflow", from: .added, used: .max, reverted: 0)
+        #expect(PhoneticIndex.isMoreUseful(heavilyUsed, untouched))
+
+        // Both share a sound and a bucket, so building the index sorts them by the same subtraction.
+        let index = PhoneticIndex(entries: [untouched, heavilyUsed])
+        #expect(index.candidates(soundingLike: "Uttrflow").map(\.id) == [heavilyUsed.id, untouched.id])
+    }
 }

@@ -193,6 +193,49 @@ struct PersonalDictionaryStoreTests {
         #expect(await store.allEntries().first?.timesUsed == 2)
     }
 
+    /// A readable but hand-edited counter must be recoverable, not merely rejected. See issue #1183.
+    @Test("a readable file with an extreme timesUsed does not crash a further use")
+    func extremeTimesUsedDoesNotCrash() async throws {
+        let sandbox = Sandbox()
+        let id = UUID()
+        try sandbox.seed(
+            JSONEncoder().encode([rawWord("Old", timesUsed: .max, timesReverted: 0, id: id)]))
+        let store = PersonalDictionaryStore(file: sandbox.file)
+
+        // Reading it already proves it decoded into the domain, before any counter moves.
+        #expect(await store.allEntries().first?.timesUsed == DictionaryEntry.maximumCount)
+
+        let used = try await store.recordUse(of: id)
+        #expect(used?.timesUsed == DictionaryEntry.maximumCount, "saturates instead of trapping")
+    }
+
+    /// The analogous case for undo: a hand-edited maximum must survive one more revert.
+    @Test("a readable file with an extreme timesReverted does not crash a further undo")
+    func extremeTimesRevertedDoesNotCrash() async throws {
+        let sandbox = Sandbox()
+        let id = UUID()
+        try sandbox.seed(
+            JSONEncoder().encode([rawWord("Old", timesUsed: 0, timesReverted: .max, id: id)]))
+        let store = PersonalDictionaryStore(file: sandbox.file)
+
+        #expect(await store.allEntries().first?.timesReverted == DictionaryEntry.maximumCount)
+
+        let reverted = try await store.recordRevert(of: id)
+        #expect(reverted?.timesReverted == DictionaryEntry.maximumCount)
+    }
+
+    /// The value most likely to hand-edited data: a negative count, which must never wrap into another one.
+    @Test("a negative persisted counter reads as zero, not as a wrapped positive one")
+    func negativePersistedCounterReadsAsZero() async throws {
+        let sandbox = Sandbox()
+        try sandbox.seed(
+            JSONEncoder().encode([rawWord("Old", timesUsed: 5, timesReverted: .min)]))
+        let store = PersonalDictionaryStore(file: sandbox.file)
+
+        #expect(await store.allEntries().first?.timesReverted == 0)
+        #expect(await store.allEntries().first?.isTrustworthy == true)
+    }
+
     @Test("counts a whole dictation's entries in one call, each distinct entry once")
     func countingABatch() async throws {
         let sandbox = Sandbox()

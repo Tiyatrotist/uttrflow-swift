@@ -48,4 +48,33 @@ struct DictionaryEntryTests {
             DictionaryEntry.self, from: JSONEncoder().encode(original))
         #expect(decoded == original)
     }
+
+    /// A hand-edited file can carry a counter no normal path ever produces; the initializer refuses it too.
+    @Test("clamps a counter built outside the domain, not just one decoded outside it")
+    func initializerClampsOutOfDomainCounters() {
+        let entry = entry(used: .max, reverted: .min)
+        #expect(entry.timesUsed == DictionaryEntry.maximumCount)
+        #expect(entry.timesReverted == 0)
+    }
+
+    /// A structurally valid but hand-edited entry must decode into the domain ranking and undo assume.
+    @Test("decodes an extreme counter into the domain rather than carrying it through")
+    func decodingClampsOutOfDomainCounters() throws {
+        let data = try rawDictionaryEntryJSON(
+            id: UUID(), word: "Wrong", pronunciation: nil, origin: .added, firstSeen: noon,
+            timesUsed: .max, timesReverted: .min)
+        let decoded = try JSONDecoder().decode(DictionaryEntry.self, from: data)
+        #expect(decoded.timesUsed == DictionaryEntry.maximumCount)
+        #expect(decoded.timesReverted == 0)
+        // Everything else about the entry survives the recovery untouched.
+        #expect(decoded.word == "Wrong")
+        #expect(decoded.origin == .added)
+    }
+
+    /// The whole point of the domain: this combination would overflow `Int` before the clamp existed.
+    @Test("netUses never overflows, even at the extremes of the domain")
+    func netUsesNeverOverflows() {
+        #expect(entry(used: 0, reverted: .max).netUses == -DictionaryEntry.maximumCount)
+        #expect(entry(used: .max, reverted: 0).netUses == DictionaryEntry.maximumCount)
+    }
 }

@@ -74,9 +74,7 @@ public struct PhoneticIndex: Sendable, Equatable {
     /// Which of two entries sharing a sound deserves the bucket slot; a total order, down to the identifier.
     static func isMoreUseful(_ first: DictionaryEntry, _ second: DictionaryEntry) -> Bool {
         // Uses the user did not undo, so a constantly reverted word does not outrank one that works.
-        let firstNet = first.timesUsed - first.timesReverted
-        let secondNet = second.timesUsed - second.timesReverted
-        if firstNet != secondNet { return firstNet > secondNet }
+        if first.netUses != second.netUses { return first.netUses > second.netUses }
         if first.firstSeen != second.firstSeen { return first.firstSeen > second.firstSeen }
         if first.word != second.word { return first.word < second.word }
         return first.id.uuidString < second.id.uuidString

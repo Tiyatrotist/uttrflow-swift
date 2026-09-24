@@ -109,4 +109,13 @@ struct WorkingSetTests {
         let beta = word("Beta", from: .added, used: 4, daysAgo: 3)
         #expect(WorkingSet.words(from: [beta, alpha], now: epoch) == ["Alpha", "Beta"])
     }
+
+    /// The domain `DictionaryEntry` enforces means this subtraction can no longer overflow. See #1183.
+    @Test("ranks a readable entry at the extremes of the counter domain without crashing")
+    func ranksExtremeCountersWithoutCrashing() {
+        let untouched = word("Untouched", from: .added, used: 0, reverted: .max)
+        let heavilyUsed = word("HeavilyUsed", from: .added, used: .max, reverted: 0)
+        let words = WorkingSet.words(from: [untouched, heavilyUsed], now: epoch)
+        #expect(words == ["HeavilyUsed", "Untouched"])
+    }
 }

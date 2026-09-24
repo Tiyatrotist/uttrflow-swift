@@ -29,6 +29,9 @@ public struct DictionaryEntry: Sendable, Equatable, Identifiable, Codable {
     /// How many uses the user undid; the ratio to `timesUsed` is what lets a bad word retire itself.
     public var timesReverted: Int
 
+    /// The most either counter may ever hold, so adding, subtracting or comparing them never overflows.
+    public static let maximumCount = Int.max / 2
+
     public init(
         id: UUID = UUID(), word: String, pronunciation: String? = nil, origin: WordOrigin,
         firstSeen: Date, timesUsed: Int = 0, timesReverted: Int = 0
@@ -38,16 +41,37 @@ public struct DictionaryEntry: Sendable, Equatable, Identifiable, Codable {
         self.pronunciation = pronunciation
         self.origin = origin
         self.firstSeen = firstSeen
-        self.timesUsed = timesUsed
-        self.timesReverted = timesReverted
+        self.timesUsed = Self.clamped(timesUsed)
+        self.timesReverted = Self.clamped(timesReverted)
+    }
+
+    /// Decodes a hand-edited or otherwise stray counter into the domain the rest of the type assumes.
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try values.decode(UUID.self, forKey: .id),
+            word: try values.decode(String.self, forKey: .word),
+            pronunciation: try values.decodeIfPresent(String.self, forKey: .pronunciation),
+            origin: try values.decode(WordOrigin.self, forKey: .origin),
+            firstSeen: try values.decode(Date.self, forKey: .firstSeen),
+            timesUsed: try values.decode(Int.self, forKey: .timesUsed),
+            timesReverted: try values.decode(Int.self, forKey: .timesReverted))
     }
 
     /// What the index should key this entry on: how it sounds, not how it is spelt.
     public var soundsLike: String { pronunciation ?? word }
 
+    /// Uses the word survived, undos netted out; safe to compute because both counters stay in domain.
+    public var netUses: Int { timesUsed - timesReverted }
+
     /// Whether the entry has earned its place: fewer than half its uses undone, once it has three.
     public var isTrustworthy: Bool {
         guard timesUsed >= 3 else { return true }
         return Double(timesReverted) / Double(timesUsed) < 0.5
+    }
+
+    /// Keeps a persisted or incremented counter inside zero and `maximumCount`, negative values included.
+    static func clamped(_ count: Int) -> Int {
+        min(max(count, 0), maximumCount)
     }
 }
