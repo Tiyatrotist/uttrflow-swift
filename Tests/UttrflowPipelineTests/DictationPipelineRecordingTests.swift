@@ -400,3 +400,29 @@ struct RetriedDictationPresentationTests {
         #expect(offered.severity == failure.severity)
     }
 }
+
+@Suite("The fake audio capture engine follows the real engine's lifecycle contract")
+struct FakeAudioCaptureEngineTests {
+    @Test("stop while idle throws notRecording, and idle is unchanged")
+    func idleStopThrows() async {
+        let capture = FakeAudioCaptureEngine()
+        await #expect(throws: AudioCaptureError.notRecording) { _ = try await capture.stop() }
+        #expect(await capture.state == .idle)
+    }
+
+    @Test("a second start while recording throws alreadyRecording")
+    func repeatedStartThrows() async throws {
+        let capture = FakeAudioCaptureEngine()
+        try await capture.start()
+        await #expect(throws: AudioCaptureError.alreadyRecording) { try await capture.start() }
+        #expect(await capture.state == .recording)
+    }
+
+    @Test("a scripted stop failure still leaves the engine idle")
+    func failedStopGoesIdle() async throws {
+        let capture = FakeAudioCaptureEngine(stopOutcome: .failure(.engineFailed(description: "gone")))
+        try await capture.start()
+        await #expect(throws: AudioCaptureError.self) { _ = try await capture.stop() }
+        #expect(await capture.state == .idle)
+    }
+}
