@@ -60,6 +60,16 @@ struct SnippetTests {
         #expect(used.created == snippet.created)
     }
 
+    @Test("a use recorded at the largest representable count saturates instead of trapping")
+    func recordingAUseAtTheLimit() {
+        let snippet = Snippet(
+            trigger: "sign off", expansion: "the text", created: snippetEpoch, timesUsed: Int.max)
+
+        let used = snippet.used(at: snippetEpoch)
+
+        #expect(used.timesUsed == Int.max)
+    }
+
     @Test("a snippet that has never fired says so")
     func neverUsed() {
         #expect(makeSnippet(trigger: "sign off").lastUsed == nil)

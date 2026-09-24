@@ -307,6 +307,25 @@ struct SnippetStoreTests {
         #expect(sandbox.onDisk()?.first?.timesUsed == 2)
     }
 
+    @Test("counting a snippet already at the largest representable count saturates, not traps")
+    func countingAtTheLimit() async throws {
+        let sandbox = Sandbox()
+        let maxed = Snippet(
+            trigger: "pr", expansion: "pull request", created: snippetEpoch, timesUsed: Int.max)
+        let healthy = makeSnippet(trigger: "brb", expansion: "be right back")
+        try sandbox.seed([maxed, healthy])
+        let store = SnippetStore(file: sandbox.file)
+        let later = snippetEpoch.addingTimeInterval(60)
+
+        let kept = try await store.recordUse(of: [maxed.id], at: later)
+
+        #expect(kept.first?.timesUsed == Int.max)
+        #expect(kept.first?.trigger == "pr")
+        #expect(kept.first?.expansion == "pull request")
+        #expect(kept.last == healthy)
+        #expect(sandbox.onDisk()?.first?.timesUsed == Int.max)
+    }
+
     @Test("counting a snippet that has since been deleted changes nothing")
     func countingSomethingAbsent() async throws {
         let sandbox = Sandbox()
