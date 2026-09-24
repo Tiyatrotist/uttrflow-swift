@@ -8,13 +8,14 @@ public enum SpeechEngineFactory {
     public static func make(
         kind: SpeechEngineKind,
         model: SpeechModel = .default,
-        modelFolder: URL
+        modelFolder: URL,
+        prewarm: Bool = true  // Only a measurement harness passes false; see Docs/performance.md.
     ) -> BackedSpeechEngine {
         switch kind {
         case .whisperKit:
             BackedSpeechEngine(
                 kind: .whisperKit,
-                backend: WhisperKitBackend(model: model, modelFolder: modelFolder)
+                backend: WhisperKitBackend(model: model, modelFolder: modelFolder, prewarm: prewarm)
             )
         case .appleSpeech:
             BackedSpeechEngine(kind: .appleSpeech, backend: AppleSpeechBackend())

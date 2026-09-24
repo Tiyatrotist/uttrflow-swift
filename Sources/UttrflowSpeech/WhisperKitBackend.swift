@@ -8,11 +8,14 @@ import WhisperKit
 public actor WhisperKitBackend: TranscriptionBackend {
     private let model: SpeechModel
     private let modelFolder: URL
+    /// On: only prewarm holds the first compile's peak down, and that peak is still unread (#481).
+    private let prewarm: Bool
     private var kit: LoadedKit?
 
-    public init(model: SpeechModel, modelFolder: URL) {
+    public init(model: SpeechModel, modelFolder: URL, prewarm: Bool = true) {
         self.model = model
         self.modelFolder = modelFolder
+        self.prewarm = prewarm
     }
 
     /// One frame past the end-of-clip window it is driven with, since a clip no longer than that decodes to nothing.
@@ -43,7 +46,7 @@ public actor WhisperKitBackend: TranscriptionBackend {
                     tokenizerFolder: modelFolder,
                     verbose: false,
                     logLevel: .error,
-                    prewarm: true,
+                    prewarm: prewarm,
                     load: true,
                     download: false
                 )

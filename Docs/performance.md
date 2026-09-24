@@ -1114,8 +1114,14 @@ the 58-second passage against the 10.74 s measured.
 
 **The first load in that run was the cold one, and it took two and a half minutes.** This
 was not planned — the earlier run measured 4.23 s and recorded that "the genuinely cold
-first run is not measured" as a gap. It has now measured itself, because a freshly built
-binary does not inherit the Neural Engine's compiled copy of the model.
+first run is not measured" as a gap. It has now measured itself, on the first load of a
+freshly built binary.
+
+**A new binary is not what empties the cache**, though this section used to say so. A build made
+for the prewarm measurement below took 9.2 s on its very first load, at a load average of 139, and
+2.25–2.40 s once the machine was quieter — nowhere near two minutes. So the compiled copy survives
+a rebuild and belongs to the model and the OS rather than to the executable. That is why
+there is no cache to delete to get a cold load back: see "What prewarm costs" below.
 
 The shape of it is the whole story. Of 148 seconds, the app's own process spent **21.6
 processor-seconds — 0.15 of a core.** It was not working; it was waiting. The work was in
@@ -1130,7 +1136,7 @@ wait nobody has:
 
 | | seconds | who pays it |
 |---|---|---|
-| Neural Engine compile cache empty | ~148 | first launch after install, and after anything that changes the binary or the OS |
+| Neural Engine compile cache empty | ~148 | first launch after install, and after anything that changes the model or the OS |
 | a fresh process, cache warm | 4–9 | every login |
 | a second recogniser in a live process | 4–9 | nobody — the app builds one and keeps it |
 
@@ -1401,8 +1407,53 @@ temporary print over 528 decodes of the same corpus, not part of the harness:
 | the same without prewarm | 1.2–1.3 | 1.2 | 95 MB |
 
 The first dictation after a warm launch waited 1.05 s against 1.02–1.03 s for the next two, so
-prewarm buys nothing a warm launch can see. What it buys on a cold one — WhisperKit prewarms to
-keep the compile's peak memory down — was not measured, so it stays on.
+prewarm buys nothing a warm launch can see.
+
+#### What prewarm costs, and what it was supposed to buy
+
+Prewarm is on because WhisperKit prewarms to hold down the peak memory of the **first** compile of
+the model, and that peak had never been read: the profile sampled memory before the load and after
+it, never during, so a spike that was gone by the time the load returned left no trace.
+`PerformanceProfiler` now watches the first load with `PeakMemory.observed`, and
+`uttrflow-bakeoff profile --no-prewarm` loads with prewarm off, so both conditions are one command
+each. Six runs of each, interleaved, Debug build, **48 GB M5 Pro**, load average 9–38:
+
+| | seconds | processor seconds | added to the footprint | peak *during* the load |
+|---|---|---|---|---|
+| prewarm on (shipping) | 2.25–2.40 | 2.19–2.36 | 104.6–108.6 MB | 182.8–186.8 MB footprint, 341–354 MB resident |
+| prewarm off | 1.34–1.38 | 1.32–1.89 | 87.5–92.2 MB | 183.6–186.1 MB footprint, 347–348 MB resident |
+
+- **The 1.1 s is confirmed, at about 0.9 s here**, and processor seconds say it the same way, so it
+  is the app's own work rather than a busy machine. One prewarm-on run took 7.19 s at a load
+  average of 30; nothing else left the ranges above.
+- **Prewarm holds about 16 MB more once loaded**, not less.
+- **On a warm compile the load's peak is the same either way**, 183–187 MB, and the two ranges
+  overlap completely. Both are inside the 400 MB dictation line, with the model's mapped weights
+  making up most of the resident figure.
+
+**The cold-compile peak is still not measured, and not for want of trying.** Two things stand in
+the way, and both are worth writing down so the next attempt does not start from the issue's
+recipe:
+
+- **There is no compiled model cache to remove.** The 148 s and 205–254 s loads above were the
+  first compile on this Mac and OS; a load writes nothing under `~/Library/Caches`, the model
+  folder or the per-user cache directory, and
+  `~/Library/Caches/com.apple.e5rt.e5bundlecache` has not been touched since months before the
+  model was installed. What makes a load cold is a Neural Engine compile the system has no copy
+  of, and the only levers on that are a reboot and `purge`, which needs root.
+- **Most of that peak is in another process anyway.** "First run against warm" above measured the
+  cold load spending 21.6 processor-seconds in the app against 88% of a core in
+  `ANECompilerService`. Both instruments the issue names report one process — `MemoryFootprint`
+  the app's own `phys_footprint`, `/usr/bin/time -l` the child's maximum resident size — so
+  neither can see the compiler daemon at all, and the number the app can report is not the number
+  an 8 GB Mac runs out of memory on.
+
+So **prewarm stays on**, unchanged: the one thing it exists for is the one thing still unread, and
+the evidence in hand — a second of launch and 16 MB — is the price of it, not a case against it.
+Getting the number wants a machine-wide instrument and **two** restarts, since the first load
+after one is the only cold load it has: run
+`uttrflow-bakeoff profile --dictations 1 --repetitions 1 --transcribe-only` as the first thing
+after a restart, add `--no-prewarm` after the next one, and watch `ANECompilerService` beside both.
 
 ### Measured and not taken
 
@@ -1456,8 +1507,10 @@ document is worse than a gap.
   because it is repeatable; the word error rate against real recorded speech is
   Phase 8's job, not this document's.
 - **Peak is sampled, not continuous.** Polling every 20 ms can miss a spike shorter than
-  that. The two peak figures are each their own maximum and may come from different
-  instants.
+  that. The peak figures are each their own maximum and may come from different instants.
+- **No peak here is machine-wide.** Every one is this process's own `phys_footprint`, so
+  work the app hands to a system daemon — `ANECompilerService` during a cold model compile,
+  Apple's model process during clean-up — is absent from all of them.
 
 ## Re-running it
 
@@ -1466,6 +1519,7 @@ make bakeoff ARGS="profile"                          # the standard run
 make bakeoff ARGS="profile --app dist/Uttrflow.app"   # include the bundle in the disk figure
 make bakeoff ARGS="profile --dictations 30"          # a longer leak check
 make bakeoff ARGS="profile --transcribe-only"        # transcription without the clean-up pass
+make bakeoff ARGS="profile --no-prewarm"             # load with WhisperKit's prewarm off, to read what it costs
 make bakeoff ARGS="gpu-memory --passes 40"           # the suggestion model's GPU memory, pass by pass
 make bakeoff ARGS="gpu-memory --typing --show"       # processor a pass while a reply is typed, and every line
 make bakeoff ARGS="reload-leaks --checkpoints 1,5,20" # leaks, footprint and time across reloads in one process

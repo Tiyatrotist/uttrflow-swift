@@ -99,7 +99,12 @@ public struct PerformanceProfiler: Sendable {
         onPhase?(.loadingModel)
         let beforeLoadCPU = readCPU()
         let firstLoadStart = clock.now
-        let loaded = await loadSpeechModel()
+        // Watched, not sampled either side: a cold load's compile spike is gone before it returns.
+        let (loaded, loadPeak) = await PeakMemory.observed(
+            interval: configuration.pollInterval, read: read
+        ) {
+            await loadSpeechModel()
+        }
         let firstLoad = firstLoadStart.duration(to: clock.now)
         let loadCPU = cpuCost(since: beforeLoadCPU, over: firstLoad)
         sample("speech model loaded")
@@ -113,7 +118,8 @@ public struct PerformanceProfiler: Sendable {
             return PerformanceReport(
                 machine: machine,
                 modelLoad: ModelLoadProfile(
-                    first: firstLoad, warm: nil, addedBytes: addedBytes, cpu: loadCPU),
+                    first: firstLoad, warm: nil, addedBytes: addedBytes, peak: loadPeak,
+                    cpu: loadCPU),
                 timeline: MemoryTimeline(samples: samples, peak: peak),
                 leak: LeakCheck(footprints: [], allowanceBytes: configuration.leakAllowanceBytes),
                 utterances: [], disk: disk,
@@ -173,7 +179,7 @@ public struct PerformanceProfiler: Sendable {
             machine: machine,
             modelLoad: ModelLoadProfile(
                 first: firstLoad, warm: warmLoaded ? warmLoad : nil, addedBytes: addedBytes,
-                cpu: loadCPU),
+                peak: loadPeak, cpu: loadCPU),
             timeline: MemoryTimeline(samples: samples, peak: peak),
             leak: LeakCheck(
                 footprints: footprintsAfterEach, allowanceBytes: configuration.leakAllowanceBytes),

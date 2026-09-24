@@ -60,13 +60,19 @@ public struct ModelLoadProfile: Sendable, Equatable {
     public let warm: Duration?
     /// What the loaded model added to the process footprint.
     public let addedBytes: Int64?
+    /// The highest reading taken while the first load ran, which on a cold one is the compile's own peak.
+    public let peak: MemoryReading?
     /// Processor time of the first load, which says whether four seconds is cores busy or a disk waited on.
     public let cpu: CPUCost?
 
-    public init(first: Duration, warm: Duration?, addedBytes: Int64?, cpu: CPUCost? = nil) {
+    public init(
+        first: Duration, warm: Duration?, addedBytes: Int64?, peak: MemoryReading? = nil,
+        cpu: CPUCost? = nil
+    ) {
         self.first = first
         self.warm = warm
         self.addedBytes = addedBytes
+        self.peak = peak
         self.cpu = cpu
     }
 
