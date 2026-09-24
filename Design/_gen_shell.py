@@ -67,6 +67,8 @@ SHELL_CSS = """
       --fill-2: rgba(255,255,255,0.13);
       --accent-wash: rgba(18,128,119,0.22);
       --accent-tint: rgba(18,128,119,0.46);
+      /* Matches BrandPalette.Semantic.criticalInk.dark — 6.02:1 on #1E1E1E. */
+      --red-ink: #FF6B6E;
       --card-bg: #262628;
       --control-bg: #3A3A3D;
       --control-border: rgba(255,255,255,0.15);
@@ -83,7 +85,7 @@ SHELL_CSS = """
     .theme-dark .btn.primary { background: var(--accent); color: #FFFFFF; border-color: transparent; }
     .theme-dark .btn.plain { background: transparent; border-color: transparent;
                              box-shadow: none; color: var(--accent-dark); }
-    .theme-dark .btn.destructive { color: var(--red); }
+    .theme-dark .btn.destructive { color: var(--red-ink); }
     .theme-dark .key { background: var(--control-bg); border-color: rgba(255,255,255,0.20);
       box-shadow: 0 1px 0 rgba(0,0,0,0.45), inset 0 -1px 0 rgba(255,255,255,0.06);
       color: var(--label); }

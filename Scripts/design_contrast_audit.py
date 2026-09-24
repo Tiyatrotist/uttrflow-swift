@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
-"""Fails when an attention-menu text row in the menu-bar artboard falls below WCAG AA contrast.
+"""Fails when a shared-token text role falls below WCAG AA contrast on its artboard surface.
 
-The menu bar artboard draws a translucent native-style menu (`rgba(250,250,253,0.72)`) over
-a radial gradient with three declared stops. The two text rows in the attention state — the
-status row and the recovery action — must clear 4.5:1 against every composited background the
-gradient can produce, because the backdrop blur cannot lift the menu above the gradient's
-brightest source stop.
+Two checks, both against `Design/`:
 
-Source: `Design/_gen_menubar.py`. The artboard generator writes a single static file, so the
-audit runs against the generator and the regeneration contract is that a second run leaves the
-worktree clean (`Scripts/docs_audit.sh` enforces that separately).
+1. The menu bar artboard draws a translucent native-style menu (`rgba(250,250,253,0.72)`)
+   over a radial gradient with three declared stops. The two text rows in the attention
+   state — the status row and the recovery action — must clear 4.5:1 against every
+   composited background the gradient can produce, because the backdrop blur cannot lift
+   the menu above the gradient's brightest source stop.
+2. The shared `--red-ink` token (`.btn.destructive` and any row that highlights an
+   over-threshold count) must clear 4.5:1 against the opaque window background it is drawn
+   on, light and dark, so it stays the readable critical ink rather than the bright
+   `--red` fill.
+
+Every artboard shares `Design/_gen_common.py` and `Design/_gen_shell.py`, so both checks
+run against those generators rather than any one `.dc.html` file. The regeneration contract
+— a second generator run leaves the worktree clean — is `Scripts/docs_audit.sh`'s to
+enforce, not this script's.
 """
 
 import argparse
@@ -36,6 +43,10 @@ INLINE_COLOR = re.compile(r'style="color:\s*(?P<color>#[0-9A-Fa-f]{6}|var\(--[\w
 REQUIRED_RATIO = 4.5
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SOURCE = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "Design", "_gen_menubar.py"))
+COMMON_SOURCE = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "Design", "_gen_common.py"))
+SHELL_SOURCE = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "Design", "_gen_shell.py"))
+
+TOKEN_HEX_LINE = r"--{name}:\s*(?P<hex>#[0-9A-Fa-f]{{6}});"
 
 
 def hex_to_rgb(value):
@@ -153,6 +164,37 @@ def self_test():
     return not wrong
 
 
+def load_token(path, name):
+    text = open(path).read()
+    match = re.search(TOKEN_HEX_LINE.format(name=re.escape(name)), text)
+    if not match:
+        raise SystemExit(f"design contrast audit: no --{name} declaration found in {path}")
+    return match.group("hex")
+
+
+# The shared destructive/critical-count text role, checked against the opaque window
+# background it sits on in each appearance — light from `_gen_common.py`'s root tokens,
+# dark from `_gen_shell.py`'s `.theme-dark` override of the same token names.
+DESTRUCTIVE_SURFACES = (
+    ("light", COMMON_SOURCE, COMMON_SOURCE),
+    ("dark", SHELL_SOURCE, SHELL_SOURCE),
+)
+
+
+def audit_destructive_text():
+    failures = []
+    rows = []
+    for theme, ink_source, bg_source in DESTRUCTIVE_SURFACES:
+        ink_hex = load_token(ink_source, "red-ink")
+        bg_hex = load_token(bg_source, "window-bg")
+        ratio = contrast_ratio(hex_to_rgb(ink_hex), hex_to_rgb(bg_hex))
+        verdict = "pass" if ratio >= REQUIRED_RATIO else "FAIL"
+        rows.append((theme, ink_hex, bg_hex, ratio, verdict))
+        if ratio < REQUIRED_RATIO:
+            failures.append((theme, ink_hex, bg_hex, ratio))
+    return rows, failures
+
+
 def audit():
     if not os.path.isfile(SOURCE):
         print(f"design contrast audit: {SOURCE} not found", file=sys.stderr)
@@ -194,6 +236,28 @@ def audit():
         return 1
 
     print(f"\ndesign contrast audit: every attention text row clears {REQUIRED_RATIO:.2f}:1.\n")
+
+    print("Destructive/critical-count text, contrast against the window background")
+    destructive_rows, destructive_failures = audit_destructive_text()
+    for theme, ink_hex, bg_hex, ratio, verdict in destructive_rows:
+        print(f"  {theme}  {ink_hex} on {bg_hex}  {ratio:.2f}:1  [{verdict}]")
+
+    if destructive_failures:
+        print(
+            f"\n  ✗ {len(destructive_failures)} destructive/critical-count text role(s) fall "
+            f"below WCAG AA text contrast ({REQUIRED_RATIO:.2f}:1):",
+            file=sys.stderr,
+        )
+        for theme, ink_hex, bg_hex, ratio in destructive_failures:
+            print(f"    {theme}  {ink_hex} on {bg_hex}  {ratio:.2f}:1", file=sys.stderr)
+        print(
+            "    `--red-ink` is the readable text role; `--red` is the bright fill and never\n"
+            "    carries text. See `Design/_gen_common.py` and `Design/_gen_shell.py`.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"\ndesign contrast audit: destructive/critical-count text clears {REQUIRED_RATIO:.2f}:1.\n")
     return 0
 
 
