@@ -10,6 +10,8 @@ struct ProfilePrinter {
     let includesCleanup: Bool
     /// Printed because the load rows below mean different things with WhisperKit's prewarm on and off.
     let prewarm: Bool
+    /// The voice that actually spoke the cached audio, not just the one `--voice` requested.
+    let voice: ResolvedVoice
 
     private static let labelWidth = 30
 
@@ -30,6 +32,7 @@ struct ProfilePrinter {
             "machine",
             "\(machine.chip) · \(gibibytes(machine.memoryBytes)) · \(machine.operatingSystem)")
         row("speech model", model.variant)
+        row("voice", voice.label)
         row("measures", includesCleanup ? "transcription and clean-up" : "transcription only")
         row("prewarm", prewarm ? "on" : "off")
     }

@@ -48,7 +48,7 @@ struct Profile: AsyncParsableCommand {
         }
 
         // Read before anything is measured, so the timings are not the disk's.
-        let spoken = try SpokenPassages(
+        let (spoken, resolvedVoice) = try SpokenPassages(
             directory: URL(fileURLWithPath: audioDirectory), voice: voice
         ).prepare(ProfileCorpus.all)
         let recordings = spoken.map {
@@ -104,7 +104,8 @@ struct Profile: AsyncParsableCommand {
 
         clearProgress()
         ProfilePrinter(
-            report: report, model: model, includesCleanup: !transcribeOnly, prewarm: !noPrewarm
+            report: report, model: model, includesCleanup: !transcribeOnly, prewarm: !noPrewarm,
+            voice: resolvedVoice
         ).emit()
         try BudgetVerdict.enforce(ResourceBudget.readings(of: report.timeline))
     }

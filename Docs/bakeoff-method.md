@@ -103,9 +103,11 @@ on the name would go on reporting yesterday's audio under today's passage, which
 kind of wrong a performance document never recovers from.
 
 Audio is 16 kHz mono — what the recogniser wants and what the microphone path resamples to, so
-nothing is resampled twice. A named voice may simply not be installed on a given Mac; falling
-back to the system default keeps the profile runnable, and the report names the voice that
-spoke because the seconds of audio depend on it.
+nothing is resampled twice. `say -v <name>` can exit 0 and write audio for a name absent from
+`say -v ?`, so the requested voice is checked against that listing before synthesis rather than
+trusted by exit status. A named voice may simply not be installed on a given Mac; falling back
+to the system default keeps the profile runnable, and the report names the voice that actually
+spoke — never the unavailable requested name — because the seconds of audio depend on it.
 
 ## The candidate list
 
