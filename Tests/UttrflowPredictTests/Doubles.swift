@@ -59,6 +59,35 @@ actor ScriptedScoring: CandidateScoring {
     }
 }
 
+/// A model that answers this, but blocks the thread rather than honouring cancellation while it does.
+actor NoncooperativeScoring: CandidateScoring {
+    /// The score to answer with once the sleep is over.
+    private let score: Double?
+    /// How long the thread is held regardless of whether the caller has stopped waiting.
+    private let holdForMilliseconds: Int
+    /// The clock a deadline waits on, pushed past its budget the moment this is asked, as `ScriptedScoring` does.
+    private let advancing: ManualClock?
+
+    /// A model that answers `score` after blocking the thread for `holdForMilliseconds`, cancellation or not.
+    init(
+        _ score: Double?, holdingThreadForMilliseconds holdForMilliseconds: Int,
+        advancing: ManualClock? = nil
+    ) {
+        self.score = score
+        self.holdForMilliseconds = holdForMilliseconds
+        self.advancing = advancing
+    }
+
+    var isReady: Bool { true }
+
+    /// Blocks with `usleep`, a plain C call with no cancellation check, unlike `Task.sleep`.
+    func logLikelihood(of candidate: String, following context: String) async -> Double? {
+        advancing?.advance(by: .seconds(3_600))
+        usleep(useconds_t(holdForMilliseconds * 1_000))
+        return score
+    }
+}
+
 /// A store that only remembers being told a candidate was wrong.
 actor RecordingSupersession: SupersessionRecording {
     /// Each supersession as `wrong → right`.

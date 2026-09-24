@@ -111,6 +111,25 @@ struct VerifierTests {
         #expect(await decided("git zqxjw", typed: "git z", scoring: slow, clock: clock) == .rejected)
     }
 
+    @Test("A scorer that ignores cancellation does not hold the verdict past its deadline.")
+    func aNoncooperativeScorerDoesNotHoldUpTheVerdict() async {
+        // On a clock the scorer itself pushes past the budget, so the deadline needs no real time to win the race.
+        let budgetClock = ManualClock()
+        let index = EnvironmentIndex(reader: StubEnvironment([:]))
+        let scoring = NoncooperativeScoring(
+            liked, holdingThreadForMilliseconds: 8_000, advancing: budgetClock)
+        let verifier = Verifier(index: index, scoring: scoring, budgetInMilliseconds: 200, clock: budgetClock)
+        let wall = ContinuousClock()
+        let start = wall.now
+        let verdict = await verifier.verdict(
+            for: Candidate(text: "git zqxjw", source: .personal), in: terminal, typed: "git z", now: moment)
+        let elapsed = start.duration(to: wall.now)
+        #expect(verdict == .rejected)
+        #expect(
+            elapsed < .seconds(4),
+            "the verdict must return once the deadline wins, not wait out an 8-second noncooperative scorer")
+    }
+
     @Test("A candidate the machine attested is answered before the model is asked at all.")
     func attestationRunsBeforeTheModel() async {
         let clock = ManualClock()
