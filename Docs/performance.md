@@ -33,9 +33,12 @@ used **97.5% of one core, continuously, for as long as it ran** — from login, 
 is a login item — and ⌘H did not stop it. It is fixed; the section on it is below,
 because it is much the largest thing this document has ever found.
 
-**No leak, and nothing close to memory pressure.** Peak footprint 379 MB, peak resident
-536 MB. An 8 GB Mac is never in danger from Uttrflow alone. Ten consecutive dictations
-left the process smaller than it started.
+**Dictation alone, with AI suggestions off, is nearly free on memory too.** Peak footprint
+379 MB, peak resident 536 MB, with clean-up on. Ten consecutive dictations left the process
+smaller than it started. AI suggestions on is a separate, multi-gigabyte mode — up to 3.0 GB
+between passes and 3.5 GB at a pass's peak, close to half of memory on an 8 GB Mac — covered
+in "The memory budget" below; this headline does not cover it, and #475 tracks a soak that
+measured that mode over both lines (about 3.08 GB settled, 4.28 GB peak) and is still open.
 
 ## The energy budget
 
