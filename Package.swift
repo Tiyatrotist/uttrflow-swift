@@ -103,8 +103,10 @@ let package = Package(
         ),
 
         // An open-weight model on the Mac's GPU, for the languages Apple's does not
-        // cover. Quarantined here because MLX needs Metal shaders that SwiftPM's
-        // command line cannot build — nothing else in the package depends on it.
+        // cover. MLX needs Metal shaders that SwiftPM's command line cannot build, so
+        // `swift build`/`swift test` never reach this target — but the `Uttrflow` app
+        // target and `uttrflow-bakeoff` both depend on it and are built with
+        // `xcodebuild`, which can. See `Docs/packaging.md`.
         .target(
             name: "UttrflowLocalModel",
             dependencies: [
