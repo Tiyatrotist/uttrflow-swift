@@ -121,10 +121,24 @@ private struct ControllerHarness {
     let clock: ManualClock
 }
 
+/// Records every ``StopGesture`` the controller reports, so a test can watch a live transition.
+private final class StopGestureSpy: Sendable {
+    private let log = Mutex<[StopGesture]>([])
+
+    /// The closure handed to ``DictationController/init``, so a test can wire it in.
+    func record(_ gesture: StopGesture) {
+        log.withLock { $0.append(gesture) }
+    }
+
+    /// Every gesture the controller reported, in order.
+    var recorded: [StopGesture] { log.withLock { $0 } }
+}
+
 private func makeHarness(
     activation: HotkeyActivation = .holdToTalk,
     captureStart: ScriptedOutcome<Void, AudioCaptureError> = .ok,
-    monitorStart: ScriptedOutcome<Void, HotkeyError> = .ok
+    monitorStart: ScriptedOutcome<Void, HotkeyError> = .ok,
+    gestureSpy: StopGestureSpy = StopGestureSpy()
 ) -> ControllerHarness {
     let capture = FakeAudioCaptureEngine(startOutcome: captureStart)
     let speech = FakeSpeechEngine(
@@ -148,7 +162,8 @@ private func makeHarness(
             monitor: monitor,
             cue: cue,
             activation: activation,
-            clock: clock
+            clock: clock,
+            onStopGestureChange: { gesture in gestureSpy.record(gesture) }
         ),
         pipeline: pipeline,
         monitor: monitor,
@@ -623,6 +638,113 @@ struct DictationControllerModeChangeTests {
 
         #expect(await harness.capture.calls.isEmpty, "the microphone never opened")
         await harness.controller.stop()
+    }
+}
+
+/// The dock instruction must change when the gesture that ends the recording changes.
+@Suite("The stop-gesture the dock should announce")
+struct DictationControllerStopGestureTests {
+    /// The default nothing-held state says the shortcut does nothing, so releasing is the stop.
+    @Test("says the shortcut stops the recording only while a hold is open")
+    func idleIsLetGo() async {
+        let harness = makeHarness(activation: .holdToTalk)
+
+        #expect(await harness.controller.currentStopGesture == .letGo)
+    }
+
+    /// A press-to-toggle shortcut stays waiting for the next press even while the microphone is live.
+    @Test("press-to-toggle says the shortcut must be pressed again to stop, not let go")
+    func toggleIsPressAgain() async {
+        let harness = makeHarness(activation: .pressToToggle)
+
+        #expect(await harness.controller.currentStopGesture == .pressAgain)
+    }
+
+    /// A hold-to-talk double tap leaves the microphone open, so releasing no longer stops the recording.
+    @Test("hands-free says the shortcut must be pressed again, even though the mode is hold")
+    func handsFreeIsPressAgain() async {
+        let spy = StopGestureSpy()
+        let harness = makeHarness(gestureSpy: spy)
+
+        await tap(harness)
+        harness.clock.advance(by: .milliseconds(120))
+        await tap(harness)
+        #expect(await harness.controller.currentStopGesture == .pressAgainHandsFree)
+
+        // The dock was told once when hands-free flipped on, not when nothing happened.
+        #expect(spy.recorded.last == .pressAgainHandsFree)
+    }
+
+    /// The dock has to be told, in order, as the recording hands a hold over to hands-free and back.
+    @Test("reports let-go, hands-free and let-go in order across a double-tap cycle")
+    func gestureMovesAcrossADoubleTapCycle() async {
+        let spy = StopGestureSpy()
+        let harness = makeHarness(gestureSpy: spy)
+
+        // The dock is told the resting gesture once the controller reaches its actor, before any key.
+        #expect(spy.recorded == [.letGo])
+
+        // First double tap opens hands-free: let-go while the hold is open, then hands-free.
+        await tap(harness)
+        #expect(await harness.controller.currentStopGesture == .letGo)
+        harness.clock.advance(by: .milliseconds(120))
+        await tap(harness)
+        #expect(await harness.controller.currentStopGesture == .pressAgainHandsFree)
+
+        // Second double tap closes it: hands-free, then let-go once the recording is over.
+        harness.clock.advance(by: .seconds(2))
+        await tap(harness)
+        #expect(await harness.controller.currentStopGesture == .pressAgainHandsFree)
+        harness.clock.advance(by: .milliseconds(120))
+        await tap(harness)
+        #expect(await harness.controller.currentStopGesture == .letGo)
+
+        // Initial let-go, the hands-free opening, and the return to let-go — and nothing else.
+        #expect(spy.recorded == [.letGo, .pressAgainHandsFree, .letGo])
+    }
+
+    /// Press-to-toggle stays press-again from the first press of the shortcut through to the closing one.
+    @Test("press-to-toggle never advertises a let-go, even mid-dictation")
+    func toggleStaysPressAgain() async {
+        let spy = StopGestureSpy()
+        let harness = makeHarness(activation: .pressToToggle, gestureSpy: spy)
+
+        // The dock is told the initial gesture once, and never told again — hands-free never changes.
+        #expect(spy.recorded == [.pressAgain])
+
+        await harness.controller.handle(.pressed)
+        #expect(await harness.controller.currentStopGesture == .pressAgain)
+        await harness.controller.handle(.released)
+        #expect(await harness.controller.currentStopGesture == .pressAgain)
+
+        await harness.controller.handle(.pressed)
+        #expect(await harness.controller.currentStopGesture == .pressAgain)
+
+        // Nothing further — no spurious updates from the two press/release pairs.
+        #expect(spy.recorded == [.pressAgain])
+    }
+
+    /// A click on a control while hands-free finishes the dictation, and the dock goes back to holding.
+    @Test("a control stop drops hands-free, so the next gesture is a hold-to-talk let-go")
+    func controlStopClearsHandsFree() async {
+        let spy = StopGestureSpy()
+        let harness = makeHarness(gestureSpy: spy)
+
+        await goHandsFree(harness)
+        #expect(await harness.controller.currentStopGesture == .pressAgainHandsFree)
+
+        await harness.controller.toggleFromControl()
+        #expect(await harness.controller.currentStopGesture == .letGo)
+
+        // Initial let-go, then the hands-free opening, then the return to let-go.
+        #expect(spy.recorded == [.letGo, .pressAgainHandsFree, .letGo])
+    }
+
+    /// Helper reused by hands-free tests so the gesture spy sees the right setup path.
+    private func goHandsFree(_ harness: ControllerHarness) async {
+        await tap(harness)
+        harness.clock.advance(by: .milliseconds(120))
+        await tap(harness)
     }
 }
 
