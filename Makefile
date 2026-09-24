@@ -70,6 +70,10 @@ pre-push-test: ## Prove the pre-push hook uses the disclosure audit paired with 
 update-feed-test: ## Prove the release scripts parse update-feed URLs by host, not prefix.
 	@python3 Scripts/update_feed_gate_test.py
 
+.PHONY: entitlement-gate-test
+entitlement-gate-test: ## Prove the release gates read entitlement Boolean values, not just key names.
+	@python3 Scripts/entitlement_gate_test.py
+
 .PHONY: issue-template-audit
 issue-template-audit: ## Refuse a public issue template that prompts for content the disclosure rule forbids. Needs no build.
 	@python3 Scripts/issue_template_audit.py
@@ -158,7 +162,7 @@ disclosure-history: ## Scan every commit on every ref. Run before a repo goes pu
 # whose failure cannot be fixed after the fact. A competitor's name in a commit is
 # published the moment the commit is, and no later edit reaches a clone or a cache.
 .PHONY: verify
-verify: pii-audit disclosure-audit issue-template-audit docs-audit comment-audit match-audit ratchet-test range-test hits-test pre-push-test update-feed-test issue-template-test uitest-arguments uitest-result-path log-audit store-permissions pasteboard-audit bundle-requirement-test release-tag-test release-order-test e2e-predict-cleanup-test perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, issue template prompts, docs, comments, word matches, log privacy, clipboard, bundle signing, release tags, release stage order, energy and memory budget, lint, build, tests, coverage floor, offline audit.
+verify: pii-audit disclosure-audit issue-template-audit docs-audit comment-audit match-audit ratchet-test range-test hits-test pre-push-test update-feed-test entitlement-gate-test issue-template-test uitest-arguments uitest-result-path log-audit store-permissions pasteboard-audit bundle-requirement-test release-tag-test release-order-test e2e-predict-cleanup-test perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, issue template prompts, docs, comments, word matches, log privacy, clipboard, bundle signing, release tags, release stage order, energy and memory budget, lint, build, tests, coverage floor, offline audit.
 
 # Hooks are not cloned — .git/hooks is local to a checkout — so this points git at a
 # directory that is. One command per clone, and the gate cannot be forgotten after that.
