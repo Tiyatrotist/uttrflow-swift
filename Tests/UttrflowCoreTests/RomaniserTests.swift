@@ -146,9 +146,23 @@ struct LatinScriptTests {
 
     @Test(
         "counts any other script's letters as not Latin",
-        arguments: ["है", "Привет", "مرحبا", "你好", "γεια", "a\u{0951}"])
+        arguments: ["है", "Привет", "مرحبا", "你好", "γεια", "a\u{0951}", "\u{1D6C2}"])
     func notLatin(text: String) {
         #expect(!LatinScript.isLatin(text))
+    }
+
+    @Test("counts Mathematical Latin letters as Latin, distinct from Mathematical Greek in the same block")
+    func mathematicalLatinLetter() {
+        #expect(LatinScript.isLatin("\u{1D400}"))
+        #expect(LatinScript.enforced("\u{1D400}") == "\u{1D400}")
+    }
+
+    @Test("transliterates a Mathematical Greek letter rather than passing it through unchanged")
+    func mathematicalGreekLetter() {
+        let input = "\u{1D6C2}"  // MATHEMATICAL BOLD SMALL ALPHA
+        #expect(!LatinScript.isLatin(input))
+        let enforced = LatinScript.enforced(input)
+        #expect(LatinScript.isLatin(enforced))
     }
 
     @Test("romanises Devanagari, capitalising a sentence it opens")

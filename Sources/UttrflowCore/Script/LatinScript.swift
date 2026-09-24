@@ -79,7 +79,8 @@ public enum LatinScript {
         0xFE00...0xFE0F,  // Variation selectors, which emoji carry.
         0xFE20...0xFE2F,  // Combining half marks.
         0xFF21...0xFF5A,  // Fullwidth Latin letters.
-        0x1D400...0x1D7FF,  // Mathematical alphanumerics.
+        0x1D400...0x1D6A5,  // Mathematical Latin letters; the rest of the block before the digits is Greek.
+        0x1D7CE...0x1D7FF,  // Mathematical digits.
         0x1F100...0x1F1FF,  // Enclosed alphanumerics supplement, flags included.
         0xE0000...0xE01EF,  // Tags and variation selectors supplement.
     ]
