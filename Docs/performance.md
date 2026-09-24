@@ -1141,14 +1141,17 @@ timing: the previous reading took 2,004,000 reads for a 4,000-character line.
 
 ```
   speech model                  648.4 MB
-  application                   22.5 MB
-  total                         671.0 MB
+  application                   64.9 MB
+  total                         713.3 MB
 ```
 
-The model is measured on disk (645.7 MB across 4 `.mlmodelc` bundles plus two JSON
+The model is measured on disk (648.4 MB across 4 `.mlmodelc` bundles plus two JSON
 files), not taken from the catalogue. The application is the signed bundle from
-`make app`. A fresh install is therefore **660 MB**, of which 98% is the speech model
-and all of it is downloaded on first launch rather than shipped.
+`make app`, its regular files summed the same way `Profile.bytes(under:)` sums them
+(`FileManager` resource values, symlinks excluded) — mostly the 57.9 MB executable and
+the 3.8 MB MLX Metal library. Both figures, and the total, are decimal MB (10^6 bytes).
+A fresh install is therefore **713.3 MB**: the speech model is downloaded on first
+launch, the application ships in the bundle, and the total is both added together.
 
 ## Showing what a formatter changed
 

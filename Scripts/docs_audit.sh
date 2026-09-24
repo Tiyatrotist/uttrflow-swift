@@ -899,10 +899,78 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 9. The disk table's total, and the prose that restates it, must add up.
+# ---------------------------------------------------------------------------
+#
+# Issue #1239: the disk section's table gave a "total" row and the prose below it named
+# a "fresh install" figure that neither matched the table's sum nor each other, and the
+# prose also quoted a different speech-model size than the table's own row. Three numbers
+# describing the same install, none of them arithmetically tied to another.
+printf '\nPerformance disk table arithmetic\n'
+
+PERF_DOC="Docs/performance.md"
+if [[ ! -f "$PERF_DOC" ]]; then
+    fail "$PERF_DOC is missing" \
+        "The disk table this check reconciles no longer exists to check."
+else
+    read -r -d '' DISK_PROGRAM <<'PYTHON' || true
+import re
+import sys
+
+text = open("Docs/performance.md", errors="ignore").read()
+start = text.find("## Disk")
+end = text.find("\n## ", start + 1)
+if start == -1:
+    print("Docs/performance.md  cannot find the '## Disk' section")
+    sys.exit()
+section = text[start:end if end != -1 else len(text)]
+
+table = re.search(
+    r"speech model\s+([\d.]+)\s*MB\n\s*application\s+([\d.]+)\s*MB\n\s*total\s+([\d.]+)\s*MB",
+    section,
+)
+if not table:
+    print("Docs/performance.md  cannot find the speech model / application / total rows")
+    sys.exit()
+model, application, total = (float(g) for g in table.groups())
+if round(model + application, 1) != round(total, 1):
+    print(
+        f"Docs/performance.md  table rows {model} + {application} MB "
+        f"= {model + application:.1f} MB, not the printed total {total} MB"
+    )
+
+prose_model = re.search(r"model is measured on disk \(([\d.]+)\s*MB", section)
+if prose_model and float(prose_model.group(1)) != model:
+    print(
+        f"Docs/performance.md  prose gives the speech model as {prose_model.group(1)} MB, "
+        f"the table gives {model} MB"
+    )
+
+prose_total = re.search(r"fresh install is therefore \*\*([\d.]+)\s*MB", section)
+if prose_total and float(prose_total.group(1)) != total:
+    print(
+        f"Docs/performance.md  prose gives the fresh-install total as {prose_total.group(1)} MB, "
+        f"the table gives {total} MB"
+    )
+PYTHON
+    disk_issues="$(python3 -c "$DISK_PROGRAM")"
+
+    if [[ -n "${disk_issues//[[:space:]]/}" ]]; then
+        fail "the disk table and its prose do not agree with each other" \
+            "The table's speech-model, application and total rows, and the prose figures" \
+            "that restate them, must be one arithmetic story rather than three separately" \
+            "rounded numbers." \
+            "" $'\n'"$disk_issues"
+    else
+        pass "the disk table's rows and the prose that restates them add up"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 printf '\n'
 if [[ "$failures" -gt 0 ]]; then
     printf 'docs audit: %s check(s) failed. The documentation contradicts the tree.\n\n' "$failures" >&2
     exit 1
 fi
 
-printf 'docs audit: the paths, links, test count, worktree cleanup order, release bullets, performance headline scope, CLAUDE.md delegation and uttrflow-eval examples in %s documents all check out.\n\n' "$DOC_COUNT"
+printf 'docs audit: the paths, links, test count, worktree cleanup order, release bullets, performance headline scope, CLAUDE.md delegation, uttrflow-eval examples and disk table arithmetic in %s documents all check out.\n\n' "$DOC_COUNT"
