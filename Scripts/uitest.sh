@@ -17,9 +17,13 @@ command -v xcodegen >/dev/null 2>&1 || {
 
 xcodegen generate --spec UITests/project.yml --project UITests --quiet
 
+# xcodebuild refuses to write into a result bundle that is already there, so a second
+# `make uitest` needs the prior one moved aside; see Scripts/uitest_result_path.sh.
+result_bundle_path="$(./Scripts/uitest_result_path.sh dist/uitest.xcresult)"
+
 xcodebuild test \
     -project UITests/UttrflowUITests.xcodeproj \
     -scheme UttrflowUITests \
     -destination 'platform=macOS,arch=arm64' \
-    -resultBundlePath dist/uitest.xcresult \
+    -resultBundlePath "$result_bundle_path" \
     "$@"

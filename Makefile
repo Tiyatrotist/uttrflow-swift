@@ -82,6 +82,10 @@ store-permissions: ## Prove nothing writes a local store's files except through 
 uitest-arguments: ## Prove the UI harness refuses a rounds count it cannot run. Compiles it; needs no screen.
 	@python3 Scripts/uitest_arguments_test.py
 
+.PHONY: uitest-result-path
+uitest-result-path: ## Prove a second `make uitest` moves the prior result bundle aside. Needs no screen.
+	@python3 Scripts/uitest_result_path_test.py
+
 .PHONY: docs-audit
 docs-audit: ## Prove the documentation still describes this tree, including that CLAUDE.md delegates to AGENTS.md. Needs no build.
 	./Scripts/docs_audit.sh --self-test
@@ -142,7 +146,7 @@ disclosure-history: ## Scan every commit on every ref. Run before a repo goes pu
 # whose failure cannot be fixed after the fact. A competitor's name in a commit is
 # published the moment the commit is, and no later edit reaches a clone or a cache.
 .PHONY: verify
-verify: pii-audit disclosure-audit issue-template-audit docs-audit comment-audit match-audit ratchet-test range-test pre-push-test update-feed-test issue-template-test uitest-arguments log-audit store-permissions pasteboard-audit bundle-requirement-test release-tag-test perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, issue template prompts, docs, comments, word matches, log privacy, clipboard, bundle signing, release tags, energy and memory budget, lint, build, tests, coverage floor, offline audit.
+verify: pii-audit disclosure-audit issue-template-audit docs-audit comment-audit match-audit ratchet-test range-test pre-push-test update-feed-test issue-template-test uitest-arguments uitest-result-path log-audit store-permissions pasteboard-audit bundle-requirement-test release-tag-test perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, issue template prompts, docs, comments, word matches, log privacy, clipboard, bundle signing, release tags, energy and memory budget, lint, build, tests, coverage floor, offline audit.
 
 # Hooks are not cloned — .git/hooks is local to a checkout — so this points git at a
 # directory that is. One command per clone, and the gate cannot be forgotten after that.

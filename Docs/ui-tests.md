@@ -23,6 +23,12 @@ make app                # the bundle under test
 make uitest
 ```
 
+`make uitest` always writes its result bundle to `dist/uitest.xcresult`, which is where
+`xcodebuild` insists on writing fresh each run. Running it twice in a row does not fail on the
+second attempt: `Scripts/uitest_result_path.sh` moves a bundle already there aside, under its own
+timestamp, before `xcodebuild` runs, so the previous run's result stays on disk for debugging
+instead of being deleted or blocking the next run.
+
 ## Why it is not in `make verify`
 
 Three reasons, in order of how much they matter:
