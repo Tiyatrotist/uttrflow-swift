@@ -339,7 +339,7 @@ public enum PanelPresenter {
         insertion == .atCaret ? pasteRowHint : copyRowHint
     }
 
-    /// Which line goes under the list, undo first because it expires. See `Docs/panel.md`.
+    /// Which line goes under the list; a sheet's keys win over the undo offer. See `Docs/panel.md`.
     static func hint(for snapshot: PanelSnapshot, isEmpty: Bool) -> String {
         if snapshot.sheet != nil { return sheetHint }
         if snapshot.canUndoDelete { return undoHint }
