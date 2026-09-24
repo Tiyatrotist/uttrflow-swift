@@ -43,4 +43,18 @@ struct LineShapeTests {
         #expect(shape("cd x; git chec") == LineShape(command: "git", kind: .subcommand(of: "git")))
         #expect(shape("time make ver") == LineShape(command: "make", kind: .subcommand(of: "make")))
     }
+
+    @Test("An operator run into the word before it still starts a new command.")
+    func operatorsAdjacentToThePriorWord() {
+        #expect(shape("git status&& gi") == LineShape(command: nil, kind: .program))
+        #expect(shape("git status|| gi") == LineShape(command: nil, kind: .program))
+        #expect(shape("cat file| gr") == LineShape(command: nil, kind: .program))
+        #expect(shape("make build; gi") == LineShape(command: nil, kind: .program))
+    }
+
+    @Test("A quoted or escaped operator character stays part of the word, so it never ends a command.")
+    func quotedAndEscapedOperatorsDoNotSplit() {
+        #expect(shape("echo \"a && b\" nex") == LineShape(command: "echo", kind: .free))
+        #expect(shape("git commit -m foo\\; gi") == LineShape(command: "git", kind: .free))
+    }
 }
