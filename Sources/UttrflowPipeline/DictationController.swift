@@ -370,6 +370,8 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
             await pipeline.cancel()
             return
         }
+        // A real hold, so any earlier tap is no longer waiting to pair with the next one.
+        lastTapEndedAt = nil
         // Letting go of a key that was never held is what ends a hold, and hands-free has no hold.
         guard !isHandsFree else { return }
         stopWatchingTheLimit()

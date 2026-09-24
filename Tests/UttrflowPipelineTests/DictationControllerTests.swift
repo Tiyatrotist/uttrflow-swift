@@ -311,6 +311,24 @@ struct DictationControllerTests {
         #expect(harness.inserter.received == [controllerTidied])
     }
 
+    /// A finished hold between the two taps must not let them pair up as a double tap.
+    @Test("a tap before a completed hold does not pair with a tap after it")
+    func aTapBeforeAHoldDoesNotPairWithATapAfterIt() async {
+        let harness = makeHarness()
+        await tap(harness)
+
+        await harness.controller.handle(.pressed)
+        harness.clock.advance(by: .milliseconds(201))
+        await harness.controller.handle(.released)
+
+        await tap(harness)
+
+        #expect(
+            await harness.pipeline.currentState.isListening == false,
+            "the hold's own tidy-up finished the dictation; the lone tap after it is only a slip")
+        #expect(harness.inserter.received == [controllerTidied])
+    }
+
     /// One stray tap while hands-free must not close the microphone on its own.
     @Test("a single tap while hands-free changes nothing")
     func oneTapDoesNotStopHandsFree() async {
