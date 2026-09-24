@@ -51,6 +51,21 @@ public enum VoiceActivity: Sendable {
         return start < end ? start..<end : nil
     }
 
+    /// Whether any whole frame in `samples` reaches ``absoluteFloor``, stopping at the first one.
+    static func hasSpeech(in samples: ArraySlice<Float>, frameLength: Int) -> Bool {
+        var start = samples.startIndex
+        while start + frameLength <= samples.endIndex {
+            var sum: Float = 0
+            for index in start..<(start + frameLength) {
+                let sample = samples[index]
+                if sample.isFinite { sum += sample * sample }
+            }
+            if (sum / Float(frameLength)).squareRoot() >= absoluteFloor { return true }
+            start += frameLength
+        }
+        return false
+    }
+
     /// Root-mean-square loudness of each whole frame, ignoring any partial last one.
     static func frameLoudness(of samples: [Float], frameLength: Int) -> [Float] {
         var loudness: [Float] = []

@@ -46,12 +46,14 @@ public struct SpeechWindowing: Sendable, Equatable {
 
         let limit = Swift.min(samples.count, start + Int(maximumLength * Double(sampleRate)))
         let frameLength = Swift.max(1, Int(VoiceActivity.frameDuration * Double(sampleRate)))
-        let everything = VoiceActivity.frameLoudness(
-            of: Array(samples[start...]), frameLength: frameLength)
+        let loudness = VoiceActivity.frameLoudness(
+            of: Array(samples[start..<limit]), frameLength: frameLength)
         // A recording with no speech left in it is one piece, whatever its length.
-        guard (everything.max() ?? 0) >= VoiceActivity.absoluteFloor else { return nil }
+        let hasSpeechAhead =
+            (loudness.max() ?? 0) >= VoiceActivity.absoluteFloor
+            || VoiceActivity.hasSpeech(in: samples[limit...], frameLength: frameLength)
+        guard hasSpeechAhead else { return nil }
 
-        let loudness = Array(everything.prefix((limit - start) / frameLength))
         let sorted = loudness.sorted()
         let floor = VoiceActivity.percentile(sorted, 0.1)
         let threshold = VoiceActivity.threshold(forFloor: floor)
