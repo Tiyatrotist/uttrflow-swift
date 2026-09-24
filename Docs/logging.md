@@ -53,11 +53,12 @@ out. It fails whatever the privacy level.
 
 It also fails when a message publishes a description: `String(describing:)`,
 `String(reflecting:)`, `.localizedDescription`, `.description`, or a bare value named like an
-error or a failure, interpolated with `privacy: .public` or anywhere in a `Log.swift` builder.
-An error's description can carry its payload — a database path under the home folder, a raw
-SQLite message, the text a model was given — so an error is logged by `SuggestionLog.failure`,
-which keeps its type and case. A description of a value whose every case is fixed wording goes
-on the audit's second list with its reason, printed on every run. `--self-test`, which `make
+error or a failure, at every privacy level, including `.private` — a private value is still
+captured, so marking a description private is not a fix, only a narrower leak. An error's
+description can carry its payload — a database path under the home folder, a raw SQLite
+message, the text a model was given — so an error is logged by `SuggestionLog.failure`, which
+keeps its type and case. A description of a value whose every case is fixed wording goes on the
+audit's second list with its reason, printed on every run. `--self-test`, which `make
 verify` passes, proves the audit still reports each kind of violation it looks for.
 
 A value that matches a name and carries no user text goes on the audit's allow-list with its

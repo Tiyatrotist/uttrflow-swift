@@ -43,7 +43,7 @@ DESCRIPTIONS = (
     re.compile(r"^(?:self\.)?[a-z]*(?:error|failure|Error|Failure)s?$"),
 )
 
-# Public descriptions of values whose every case is fixed wording, each with the reason printed on every run.
+# Descriptions of values whose every case is fixed wording, each with the reason printed on every run.
 DESCRIBED = {
     ("Sources/Uttrflow/AppDelegate.swift", "String(describing: became)"): "a LaunchAtLoginStatus, a case with no payload",
     ("Sources/Uttrflow/Suggestion/SuggestionCoordinator.swift", "String(describing: read?.placement)"): (
@@ -164,11 +164,6 @@ def user_text_names(value, builders=()):
     return found
 
 
-def is_public(expression):
-    """Whether an interpolation asks for its value to be published unredacted."""
-    return re.search(r",\s*privacy:\s*\.public\b", expression) is not None
-
-
 def described(value):
     """Whether a value is an error or a description of a value in full, which may carry its payload."""
     return any(pattern.search(value) for pattern in DESCRIPTIONS)
@@ -190,7 +185,7 @@ def log_values(path, text):
 
 
 def findings_in(path, builders=(), text=None):
-    """Yields (line, value, names) for each interpolation in a log message that carries user text or a public description; a builder's own calls are trusted, since its file is scanned whole."""
+    """Yields (line, value, names) for each interpolation in a log message that carries user text or a description that still carries its payload, at any privacy level; a builder's own calls are trusted, since its file is scanned whole."""
     if text is None:
         text = open(path, errors="ignore").read()
     for offset, expression, whole in log_interpolations(path, text):
@@ -198,8 +193,8 @@ def findings_in(path, builders=(), text=None):
         names = user_text_names(value, builders)
         if names and (path, value) not in ALLOWED:
             yield text.count("\n", 0, offset) + 1, value, names
-        elif (whole or is_public(expression)) and described(value) and (path, value) not in DESCRIBED:
-            yield text.count("\n", 0, offset) + 1, value, ["public description"]
+        elif described(value) and (path, value) not in DESCRIBED:
+            yield text.count("\n", 0, offset) + 1, value, ["a description that still carries its payload"]
 
 
 def read_source(path):
@@ -239,7 +234,12 @@ SELF_TEST = (
     ("Sources/A.swift", 'Self.log.error(\n "x: \\(self.loadError, privacy: .public)")', True),
     ("Sources/A.swift", 'log.error("x: \\(typed, privacy: .public)")', True),
     ("Sources/ALog.swift", 'static func f(_ error: any Error) -> String { "x \\(String(describing: error))" }', True),
-    ("Sources/A.swift", 'log.error("x: \\(String(describing: error), privacy: .private)")', False),
+    ("Sources/A.swift", 'log.error("x: \\(String(describing: error), privacy: .private)")', True),
+    ("Sources/A.swift", 'log.error("x: \\(String(reflecting: failure), privacy: .private)")', True),
+    ("Sources/A.swift", 'log.error("x: \\(error.localizedDescription, privacy: .private)")', True),
+    ("Sources/A.swift", 'log.error("x: \\(error, privacy: .private)")', True),
+    ("Sources/A.swift", 'log.error("x: \\(error.debugDescription)")', True),
+    ("Sources/A.swift", 'log.error("x: \\(failure)")', True),
     ("Sources/A.swift", 'log.error("x: \\(SuggestionLog.failure(error), privacy: .public)")', False),
     ("Sources/A.swift", 'log.error("x: \\(error.userMessage, privacy: .public)")', False),
     ("Sources/A.swift", 'log.error("x: \\(typed.count, privacy: .public)")', False),
@@ -300,7 +300,7 @@ def main():
     for (path, value), reason in sorted(ALLOWED.items()):
         print(f"    {path}  \\({value})  {reason}")
     builders = [path for path in files if BUILDER_FILE.search(path)]
-    print("  Described publicly, with the reason:")
+    print("  Described in full, with the reason it is safe at every privacy level:")
     for (path, value), reason in sorted(DESCRIBED.items()):
         print(f"    {path}  \\({value})  {reason}")
     print("  Scanned whole, as log-message builders:")
@@ -312,7 +312,7 @@ def main():
     failures = [(path, line, value, names) for path in files for line, value, names in findings_in(path, trusted)]
 
     if failures:
-        print(f"\n  ✗ {len(failures)} log interpolation(s) carry text a person typed, read or said, or a public description:", file=sys.stderr)
+        print(f"\n  ✗ {len(failures)} log interpolation(s) carry text a person typed, read or said, or a description that still carries its payload:", file=sys.stderr)
         for path, line, value, names in failures:
             print(f"    {path}:{line}  \\({value})  [{', '.join(names)}]", file=sys.stderr)
         print("    The unified log keeps what it is given, and `.private` is readable on a Mac set to", file=sys.stderr)
