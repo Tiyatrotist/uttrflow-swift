@@ -46,4 +46,54 @@ struct SlowClipboardReadTests {
         source.bumpChangeCount()
         #expect(await watcher.newClip(at: Date())?.clip.text == "delivered at last")
     }
+
+    @Test("outstanding workers are bounded across timed-out copies, and a later healthy copy still lands")
+    func outstandingWorkersAreBounded() async {
+        let source = BlockedSource()
+        let watcher = PasteboardWatcher(
+            source: source, interval: .milliseconds(10), readLimit: .milliseconds(50))
+
+        // Every one of these copies blocks in `text()` and times out from the caller's side.
+        for _ in 0..<(PasteboardWatcher.maxOutstandingReads + 3) {
+            source.bumpChangeCount()
+            let clip = await watcher.newClip(at: Date())
+            #expect(clip == nil)
+        }
+        #expect(await watcher.outstandingReads == PasteboardWatcher.maxOutstandingReads)
+
+        // Freeing the blocked workers lets them return and give their slots back.
+        source.releaseBlocked()
+        while await watcher.outstandingReads != 0 { await Task.yield() }
+
+        source.deliverPromptly()
+        source.bumpChangeCount()
+        #expect(await watcher.newClip(at: Date())?.clip.text == "delivered at last")
+    }
+}
+
+/// A source whose `text()` blocks until released, so a caller can hold several readers open at once.
+private final class BlockedSource: ClipboardSource, @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 1
+    private var isBlocked = true
+    private let gate = DispatchSemaphore(value: 0)
+
+    func changeCount() -> Int { lock.withLock { count } }
+    func bumpChangeCount() { lock.withLock { count += 1 } }
+    func deliverPromptly() { lock.withLock { isBlocked = false } }
+    /// Lets every reader parked in `text()` return.
+    func releaseBlocked() { gate.signal() }
+
+    func text() -> String? {
+        if lock.withLock({ isBlocked }) {
+            gate.wait()
+            gate.signal()
+        }
+        return "delivered at last"
+    }
+
+    func html() -> String? { nil }
+    func markers() -> PasteboardMarkers { PasteboardMarkers() }
+    func image() -> (data: Data, width: Int, height: Int)? { nil }
+    func frontmostApplicationName() -> String? { nil }
 }
