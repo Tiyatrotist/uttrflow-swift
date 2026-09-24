@@ -558,11 +558,13 @@ public actor DictationPipeline {
             // The unrewritten sentence, which is the space the corrections' word ranges index.
             spokenWords: whole.heard.text.spokenWords.count)
         guard
-            await insert(
+            let arrival = await insert(
                 expanded.text, cleanedBy: whole.cleaned.producedBy, changes: changes,
                 delivery: delivery)
         else { return }
 
+        // An unconfirmed paste is not proof the words reached the user, so nothing is learnt from it yet.
+        guard arrival != .unconfirmed else { return }
         // Both run after the words are on screen, and neither can fail the dictation. §19.
         await count(changes)
         // A secret is not a word to learn.
@@ -736,10 +738,10 @@ public actor DictationPipeline {
         }
     }
 
-    /// Puts the finished text where the user was typing, answering whether it reached the screen.
+    /// Puts the finished text where the user was typing, answering how it arrived, or nil on failure.
     private func insert(
         _ text: String, cleanedBy: TransformerKind, changes: AppliedChanges, delivery: Delivery
-    ) async -> Bool {
+    ) async -> InsertionArrival? {
         let inserter = delivery == .copy ? clipboard : self.inserter
         // Said before the words are handed over, because the app takes its own time to show them.
         transition(to: .inserting)
@@ -767,11 +769,11 @@ public actor DictationPipeline {
                         spokenFor: spokenFor, changes: changes,
                         fromRecording: delivery == .copy, arrival: attempt.arrival,
                         intoSecureField: destinationIsSecure)))
-            return true
+            return attempt.arrival
         } catch {
             // The words survive the failure: the interface can still offer them.
             await fail(DictationFailure(error, transcript: text))
-            return false
+            return nil
         }
     }
 
