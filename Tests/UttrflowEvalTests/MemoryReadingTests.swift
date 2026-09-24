@@ -3,6 +3,7 @@ import Synchronization
 import Testing
 
 @testable import UttrflowEval
+@testable import UttrflowTestSupport
 
 /// Hands out prepared readings in order, then repeats the last one, since real figures move on their own.
 private final class ScriptedReadings: Sendable {
@@ -69,46 +70,17 @@ struct MemoryReadingTests {
     }
 }
 
-/// A wait the test controls, so the poll count is exact rather than a claim about the scheduler.
-private final class PollGate: Sendable {
-    private let target: Int
-    private let polls = Mutex(0)
-    private let quotaMet: AsyncStream<Void>
-    private let announce: AsyncStream<Void>.Continuation
-
-    init(target: Int) {
-        self.target = target
-        (quotaMet, announce) = AsyncStream.makeStream()
-    }
-
-    var wait: @Sendable (Duration) async -> Bool {
-        { _ in
-            // Counted before the reading it precedes, so the nth call is the one that produces the nth poll.
-            let count = self.polls.withLock { count in
-                count += 1
-                return count
-            }
-            guard count > self.target else { return true }
-            self.announce.finish()
-            // Stopping rather than parking: a gate that never returned would leak the polling task and crash.
-            return false
-        }
-    }
-
-    /// Returns once the poller has taken exactly `target` readings and no more.
-    func untilPolled() async { for await _ in quotaMet {} }
-}
-
 @Suite("Watching for a peak")
 struct PeakMemoryTests {
     @Test("keeps the highest figure seen while the work ran")
     func catchesTheSpike() async {
         let readings = ScriptedReadings([100, 900, 400, 400])
-        let gate = PollGate(target: 3)
+        let clock = ManualClock()
         let (value, peak) = await PeakMemory.observed(
-            interval: .milliseconds(1), read: readings.read, wait: gate.wait
+            interval: .milliseconds(1), read: readings.read, clock: clock
         ) {
-            await gate.untilPolled()
+            // Advances only once the poller is actually asleep, so the count of polls is exact.
+            for _ in 0..<3 { await clock.advanceWhenSomethingIsWaiting(by: .milliseconds(1)) }
             return "done"
         }
         #expect(value == "done")
@@ -123,7 +95,7 @@ struct PeakMemoryTests {
     func readsAfterTheWork() async {
         let readings = ScriptedReadings([100, 500])
         let (_, peak) = await PeakMemory.observed(
-            interval: .seconds(60), read: readings.read
+            interval: .seconds(60), read: readings.read, clock: ManualClock()
         ) {
             0
         }
@@ -132,7 +104,9 @@ struct PeakMemoryTests {
 
     @Test("no peak at all when every reading fails")
     func noReadingsMeansNoPeak() async {
-        let (value, peak) = await PeakMemory.observed(interval: .seconds(60), read: { nil }) { 7 }
+        let (value, peak) = await PeakMemory.observed(
+            interval: .seconds(60), read: { nil }, clock: ManualClock()
+        ) { 7 }
         #expect(value == 7)
         #expect(peak == nil)
     }
@@ -142,9 +116,21 @@ struct PeakMemoryTests {
     func rethrowsTheOperationsError() async {
         struct Boom: Error {}
         await #expect(throws: Boom.self) {
-            try await PeakMemory.observed(interval: .seconds(60), read: { nil }) {
+            try await PeakMemory.observed(interval: .seconds(60), read: { nil }, clock: ManualClock()) {
                 throw Boom()
             }
         }
+    }
+
+    /// The poller must never spin: on a clock that never advances, cancelling it must not need a second reading.
+    @Test("never polls again once the clock stops moving")
+    func neverSpinsOnAStalledClock() async {
+        let readings = ScriptedReadings([100])
+        let clock = ManualClock()
+        _ = await PeakMemory.observed(interval: .milliseconds(1), read: readings.read, clock: clock) {
+            await clock.waitUntilSomethingIsWaiting()
+        }
+        // Before the work, and once more after: nothing in between, since the clock never advanced.
+        #expect(readings.callCount == 2)
     }
 }
