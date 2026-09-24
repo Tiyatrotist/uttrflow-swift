@@ -730,8 +730,9 @@ INJECTIONS = (
     ),
     (
         "Sources/UttrflowLocalModel/MLXCandidateScorer.swift",
-        "        bufferCache.hold()\n        defer { bufferCache.clear() }\n        guard let container, !Task.isCancelled else { return [] }",
-        "        guard let container, !Task.isCancelled else { return [] }", "cache",
+        "        bufferCache.hold()\n        defer { bufferCache.clear() }\n"
+        "        // The forward pass runs on the whole candidate, so the result is the same for every typed prefix.",
+        "        // The forward pass runs on the whole candidate, so the result is the same for every typed prefix.", "cache",
     ),
     (
         "Sources/Uttrflow/Dock/DockView.swift",
@@ -747,19 +748,25 @@ INJECTIONS = (
         # the function, not whether either preceded the pass.
         "Sources/UttrflowLocalModel/MLXCandidateScorer.swift",
         "        bufferCache.hold()\n        defer { bufferCache.clear() }\n"
-        "        guard let container, !Task.isCancelled else { return [] }\n"
-        "        beginPass()\n        defer { endPass() }\n"
-        "        let bytes = vocabulary?.bytes ?? []\n"
-        "        return await container.perform { loaded in\n"
-        "            Self.judge(candidate, following: context, bytes: bytes, with: loaded)\n"
-        "        }\n    }",
-        "        guard let container, !Task.isCancelled else { return [] }\n"
-        "        beginPass()\n        defer { endPass() }\n"
-        "        let bytes = vocabulary?.bytes ?? []\n"
-        "        let judged = await container.perform { loaded in\n"
-        "            Self.judge(candidate, following: context, bytes: bytes, with: loaded)\n"
-        "        }\n        bufferCache.hold()\n        defer { bufferCache.clear() }\n"
-        "        return judged\n    }",
+        "        // The forward pass runs on the whole candidate, so the result is the same for every typed prefix.\n"
+        "        if let line = judgementCache.recall(candidate: candidate) {\n"
+        "            judgementCacheHits += 1\n"
+        "            guard let container else { return [] }\n"
+        "            let bytes = vocabulary?.bytes ?? []\n"
+        "            return await container.perform { loaded in\n"
+        "                Self.judgedFromCache(\n"
+        "                    line, candidate: candidate, context: context, bytes: bytes, tokenizer: loaded.tokenizer)\n"
+        "            }\n        }",
+        "        // The forward pass runs on the whole candidate, so the result is the same for every typed prefix.\n"
+        "        if let line = judgementCache.recall(candidate: candidate) {\n"
+        "            judgementCacheHits += 1\n"
+        "            guard let container else { return [] }\n"
+        "            let bytes = vocabulary?.bytes ?? []\n"
+        "            let result = await container.perform { loaded in\n"
+        "                Self.judgedFromCache(\n"
+        "                    line, candidate: candidate, context: context, bytes: bytes, tokenizer: loaded.tokenizer)\n"
+        "            }\n            bufferCache.hold()\n            defer { bufferCache.clear() }\n"
+        "            return result\n        }",
         "cache",
     ),
     (

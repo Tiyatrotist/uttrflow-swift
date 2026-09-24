@@ -1,0 +1,81 @@
+// The per-token log-softmax rows a candidate produces, kept so the model is not re-run for every keystroke.
+
+import Foundation
+
+/// The full per-position log-softmax the model returns for one candidate, the raw material the scorer cuts to a span.
+struct JudgedLine: Sendable, Equatable {
+    /// The candidate's tokens with `leadIn` already prepended, each position aligned with `rows` and `texts`.
+    let tokens: [Int]
+    /// `rows[i]` is the log-softmax over the whole vocabulary at position i in `tokens`.
+    let rows: [[Float]]
+    /// `texts[i]` is the decoded text of `tokens[i]`, so a span reads the same surface the forward pass did.
+    let texts: [String]
+
+    var isEmpty: Bool { tokens.isEmpty }
+
+    /// The per-token log-probability the model gave the candidate at each position past its typed opening, with the cut case conditioned by `span`.
+    static func judged(
+        from line: JudgedLine, typedTokens: [Int], bytes: [[UInt8]]
+    ) -> [JudgedToken] {
+        guard !line.tokens.isEmpty,
+            let span = ScoredSpan(whole: line.tokens, typed: typedTokens, bytes: bytes),
+            span.start < line.tokens.count
+        else { return [] }
+        let start = span.start
+        var taken: [Float] = []
+        taken.reserveCapacity(line.tokens.count - start)
+        for i in start..<line.tokens.count {
+            taken.append(line.rows[i - 1][line.tokens[i]])
+        }
+        let continuing = ScoredSpan.continuing(span.owed, in: bytes)
+        let mass: Float? =
+            continuing.isEmpty
+            ? nil
+            : {
+                var rivals: [Float] = []
+                rivals.reserveCapacity(continuing.count)
+                for token in continuing { rivals.append(line.rows[start - 1][token]) }
+                return ScoredSpan.logSumExp(rivals)
+            }()
+        let scores = ScoredSpan.conditioned(taken, onMass: mass)
+        return zip(line.texts[start...], scores).map {
+            text, logProbability in JudgedToken(text: text, logProbability: logProbability)
+        }
+    }
+}
+
+/// A bounded LRU of the lines the model has already scored, so a keystroke only re-averages from the new `start`.
+struct JudgementCache: Sendable {
+    /// How many lines are kept, since a session sees a few candidates and forgets the rest.
+    static let capacity = 16
+
+    /// Each entry against the candidate the model was asked to score.
+    private var held: [String: JudgedLine] = [:]
+    /// The candidates in the order they were first remembered, which is what capacity drops from.
+    private var order: [String] = []
+
+    /// A cache holding nothing.
+    init() {}
+
+    /// The line for this candidate, nil when none is remembered.
+    func recall(candidate: String) -> JudgedLine? { held[candidate] }
+
+    /// Remembers a freshly-scored line, dropping the oldest to stay within capacity.
+    mutating func remember(_ line: JudgedLine, for candidate: String) {
+        if held[candidate] == nil { order.append(candidate) }
+        held[candidate] = line
+        while order.count > Self.capacity {
+            let dropped = order.removeFirst()
+            held.removeValue(forKey: dropped)
+        }
+    }
+
+    /// Drops every remembered line, which is what leaving a field or releasing the model both ask for.
+    mutating func forgetEverything() {
+        held.removeAll()
+        order.removeAll()
+    }
+
+    /// How many lines are remembered, for the diagnostics page.
+    var count: Int { held.count }
+}
