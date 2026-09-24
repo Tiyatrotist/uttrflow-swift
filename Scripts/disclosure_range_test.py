@@ -40,6 +40,14 @@ class Repository:
             ["git", "rev-parse", "HEAD"], cwd=self.root, capture_output=True, text=True
         ).stdout.strip()
 
+    def corrupt_tree(self, sha):
+        """Removes the loose object for a commit's tree, so `git show` on it fails."""
+        show = subprocess.run(
+            ["git", "cat-file", "-p", sha], cwd=self.root, capture_output=True, text=True
+        ).stdout
+        tree = show.splitlines()[0].split()[1]
+        os.remove(os.path.join(self.root, ".git", "objects", tree[:2], tree[2:]))
+
     def audit(self, named):
         return subprocess.run(
             [sys.executable, AUDIT, "--range", named], cwd=self.root, capture_output=True, text=True
@@ -63,6 +71,23 @@ class RangeTests(unittest.TestCase):
         run = self.repository.audit(f"{self.repository.second} --not --remotes=origin")
         self.assertEqual(run.returncode, 0, run.stderr)
         self.assertIn("2 commit(s)", run.stdout)
+
+    def test_a_zero_commit_range_between_the_same_revision_is_the_legitimate_empty_case(self):
+        run = self.repository.audit(f"{self.repository.second}..{self.repository.second}")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertIn("adds no commits", run.stdout)
+
+    def test_an_unresolvable_revision_fails_closed_instead_of_reading_as_empty(self):
+        run = self.repository.audit("definitely-missing-revision..HEAD")
+        self.assertNotEqual(run.returncode, 0)
+        self.assertNotIn("adds no commits", run.stdout)
+        self.assertIn("could not be read", run.stdout)
+
+    def test_a_commit_whose_diff_cannot_be_read_fails_closed(self):
+        self.repository.corrupt_tree(self.repository.second)
+        run = self.repository.audit(f"{self.repository.first}..{self.repository.second}")
+        self.assertNotEqual(run.returncode, 0)
+        self.assertNotIn("clean", run.stdout)
 
 
 if __name__ == "__main__":

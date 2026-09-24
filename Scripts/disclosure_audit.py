@@ -219,14 +219,28 @@ def hits(text, patterns):
 
 
 def git(*args):
-    return subprocess.run(
-        ["git", *args], capture_output=True, text=True, errors="ignore"
-    ).stdout
+    return subprocess.run(["git", *args], capture_output=True, text=True, errors="ignore")
+
+
+def git_out(*args):
+    return git(*args).stdout
+
+
+class GitCommandFailed(Exception):
+    """Raised when a Git command whose output an audit decision depends on fails."""
+
+
+def git_checked(*args):
+    """Runs Git and raises with its stderr if it exits nonzero, so a failure can't read as empty output."""
+    result = git(*args)
+    if result.returncode != 0:
+        raise GitCommandFailed(f"git {' '.join(args)}: {result.stderr.strip()}")
+    return result.stdout
 
 
 def tree_files():
     """Every file a clone would carry, plus every file written but not yet staged."""
-    listed = git("ls-files", "--cached", "--others", "--exclude-standard").split("\n")
+    listed = git_out("ls-files", "--cached", "--others", "--exclude-standard").split("\n")
     return [path for path in listed if path and path not in SELF]
 
 
@@ -385,19 +399,23 @@ def update_baseline(counts, absorb=False):
 def scan_range(named):
     """Every commit message and every added line in a range of commits, however git names it."""
     revisions = shlex.split(named)
-    shas = [s for s in git("log", "--format=%H", *revisions).split("\n") if s]
-    if not shas:
-        print(f"  ✓ {named} adds no commits")
-        return 0
-    bad = False
-    for sha in shas:
-        subject = git("log", "-1", "--format=%s", sha).strip()
-        message = git("log", "-1", "--format=%B", sha)
-        if scan_text(message, f"commit {sha[:8]} message ({subject})"):
-            bad = True
-        patch = git("show", "--format=", "--no-color", sha)
-        if scan_diff(patch, f"commit {sha[:8]} diff ({subject})"):
-            bad = True
+    try:
+        shas = [s for s in git_checked("log", "--format=%H", *revisions).split("\n") if s]
+        if not shas:
+            print(f"  ✓ {named} adds no commits")
+            return 0
+        bad = False
+        for sha in shas:
+            subject = git_checked("log", "-1", "--format=%s", sha).strip()
+            message = git_checked("log", "-1", "--format=%B", sha)
+            if scan_text(message, f"commit {sha[:8]} message ({subject})"):
+                bad = True
+            patch = git_checked("show", "--format=", "--no-color", sha)
+            if scan_diff(patch, f"commit {sha[:8]} diff ({subject})"):
+                bad = True
+    except GitCommandFailed as failure:
+        print(f"  ✗ {named} could not be read: {failure}")
+        return 1
     if not bad:
         print(f"  ✓ {len(shas)} commit(s) in {named}: messages and diffs clean")
     return 1 if bad else 0
@@ -405,14 +423,22 @@ def scan_range(named):
 
 def scan_history():
     """Every commit on every ref. What a repository about to go public is judged on."""
-    shas = [s for s in git("log", "--all", "--format=%H").split("\n") if s]
+    try:
+        shas = [s for s in git_checked("log", "--all", "--format=%H").split("\n") if s]
+    except GitCommandFailed as failure:
+        print(f"  ✗ could not enumerate history: {failure}")
+        return 1
     print(f"Scanning {len(shas)} commits across every ref")
     bad = False
     for sha in shas:
-        message = git("log", "-1", "--format=%B", sha)
+        try:
+            message = git_checked("log", "-1", "--format=%B", sha)
+            patch = git_checked("show", "--format=", "--no-color", sha)
+        except GitCommandFailed as failure:
+            print(f"  ✗ could not read commit {sha[:8]}: {failure}")
+            return 1
         if scan_text(message, f"commit {sha[:8]} message", strict=False):
             bad = True
-        patch = git("show", "--format=", "--no-color", sha)
         if scan_diff(patch, f"commit {sha[:8]} diff"):
             bad = True
     if not bad:
