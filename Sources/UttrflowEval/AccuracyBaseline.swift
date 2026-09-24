@@ -196,8 +196,11 @@ public struct BaselineComparison: Sendable, Equatable {
         return .unchanged
     }
 
-    /// Whether a build should stop here.
+    /// Whether a slice got worse. An incomparable comparison is not a regression; see `failsGate`.
     public var isRegression: Bool { verdict == .worsened }
+
+    /// Whether a gate should refuse to pass: a regression, or a comparison with no verdict, which must not count as a pass.
+    public var failsGate: Bool { verdict == .worsened || verdict == .incomparable }
 }
 
 extension AccuracyBaseline {
@@ -249,7 +252,16 @@ extension AccuracyBaseline {
             return "the baseline and this run share no samples"
         }
         if report.normalisation != normalisation {
-            return "the normalisation rules changed since the baseline, so the rates are not comparable"
+            if normalisation.isEmpty {
+                return "the baseline's normalisation rules are not recorded (a legacy baseline) "
+                    + "— re-measure the baseline so the new rules are saved alongside it"
+            }
+            if report.normalisation.isEmpty {
+                return "the run's normalisation rules are not recorded (a legacy result file) "
+                    + "— re-measure the run so the rules are saved alongside the scores"
+            }
+            return "the normalisation rules changed since the baseline, so the rates are not comparable "
+                + "— re-measure the baseline so the new rules are saved alongside it"
         }
         let (mismatched, unverifiable) = audioIdentityIssues(shared, before, after)
         if !mismatched.isEmpty {

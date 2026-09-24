@@ -276,6 +276,67 @@ struct AccuracyBaselineTests {
         #expect(comparison.reason == nil)
     }
 
+    /// The reason names the side that lost its rules, so the maintainer knows what to re-measure.
+    @Test("names the legacy run when the run's normalisation rules are not recorded")
+    func droppedNormalisationNamesLegacySide() {
+        let before = report([sample("a", errors: 5)])
+        let unnormalised = PassageScore(
+            caseID: "a", language: .english, stressor: .everyday,
+            wordErrorRate: .measure(reference: ["one"], hypothesis: ["one"]),
+            answeredIn: .latin, scoredAgainst: .latin, normalisation: [])
+        let comparison = AccuracyBaseline.capture(before, at: moment)
+            .compare(with: report([unnormalised]))
+        let reason = comparison.reason ?? ""
+        #expect(reason.contains("normalisation"))
+        #expect(reason.contains("re-measure"))
+        #expect(reason.contains("legacy result file"))
+    }
+
+    /// The legacy-baseline side is named, so the maintainer re-measures the right thing.
+    @Test("names the legacy baseline when the baseline's normalisation rules are not recorded")
+    func baselineWithNoNormalisationNamesLegacySide() {
+        let unnormalised = PassageScore(
+            caseID: "a", language: .english, stressor: .everyday,
+            wordErrorRate: .measure(reference: ["one"], hypothesis: ["one"]),
+            answeredIn: .latin, scoredAgainst: .latin, normalisation: [])
+        let comparison = AccuracyBaseline.capture(report([unnormalised]), at: moment)
+            .compare(with: report([sample("a", errors: 5)]))
+        let reason = comparison.reason ?? ""
+        #expect(reason.contains("normalisation"))
+        #expect(reason.contains("re-measure"))
+        #expect(reason.contains("legacy baseline"))
+    }
+
+    /// A real rule change also tells the maintainer to re-measure the baseline, not the run.
+    @Test("names the baseline to re-measure when both sides record different rules")
+    func changedNormalisationNamesBaseline() {
+        let before = report([sample("a", errors: 5)])
+        let looser = PassageScore(
+            caseID: "a", language: .english, stressor: .everyday,
+            wordErrorRate: .measure(reference: ["one"], hypothesis: ["one"]),
+            answeredIn: .latin, scoredAgainst: .latin, normalisation: [.caseFolding])
+        let comparison = AccuracyBaseline.capture(before, at: moment)
+            .compare(with: report([looser]))
+        let reason = comparison.reason ?? ""
+        #expect(reason.contains("normalisation"))
+        #expect(reason.contains("re-measure"))
+    }
+
+    /// --fail-on-regression must not pass a comparison the gate cannot give a verdict on.
+    @Test("treats an incomparable comparison as a gate failure, not a pass")
+    func incomparableIsAGateFailure() {
+        let before = report([sample("a", errors: 5)])
+        let unnormalised = PassageScore(
+            caseID: "a", language: .english, stressor: .everyday,
+            wordErrorRate: .measure(reference: ["one"], hypothesis: ["one"]),
+            answeredIn: .latin, scoredAgainst: .latin, normalisation: [])
+        let comparison = AccuracyBaseline.capture(before, at: moment)
+            .compare(with: report([unnormalised]))
+        #expect(comparison.verdict == .incomparable)
+        #expect(!comparison.isRegression, "an incomparable comparison is not a regression")
+        #expect(comparison.failsGate, "the gate must refuse to pass an incomparable comparison")
+    }
+
     /// Forty samples going unscorable is a regression even if every surviving rate improved.
     @Test("a sample that stopped being scorable is a regression")
     func newlyUnscorable() {

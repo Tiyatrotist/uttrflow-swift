@@ -102,7 +102,10 @@ uttrflow-eval transcribe --corpus-path ./corpus --engine whisperKit \
 `--fail-on-regression` exits non-zero when any slice has got worse, with `--tolerance` in
 percentage points. Results are reported **by language, by stressor and by cohort** and are
 never pooled into one number — an engine that improves on English and regresses on Hinglish
-has not improved, and `AccuracyBaseline` already refuses to average that away.
+has not improved, and `AccuracyBaseline` already refuses to average that away. A run the
+gate cannot give a verdict on — different label, no shared samples, a changed recording,
+or a baseline/run whose normalisation rules are not recorded — also exits non-zero, since
+"no verdict" is not "no regression". The printed reason names which side needs re-measuring.
 
 **The gate checks it is still the exact recording set, not just the same case IDs.** Every
 score carries a `recordingIdentity` — a digest of the WAV bytes for a local take, the
