@@ -49,7 +49,7 @@ Specified in the V2 product requirements. Status of the build:
 | The four resets | ✅ **Done** |
 | Telemetry, numeric by construction | ✅ **Done** |
 | Sidebar and the six new pages | ✅ **Done** |
-| Onboarding — seven steps, sign-in first | ✅ **Done** |
+| Onboarding — seven steps, welcome first | ✅ **Done** |
 | Corpus at scale — S3, upload, findings, regression gate | ✅ Built; needs a bucket and the recordings |
 
 ### What V2 measured that changed the design
