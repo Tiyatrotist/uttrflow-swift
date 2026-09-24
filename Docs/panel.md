@@ -76,13 +76,19 @@ unread list is an unknown, not a nothing.
 
 ## The line under the list
 
-Precedence: the undo offer, then the sheet's keys, then the empty state's reason, then
+Precedence: the sheet's keys, then the undo offer, then the empty state's reason, then
 the gesture.
 
-The undo wins while it is live because it expires in seconds. Press **⌘Z** while the offer
-is visible to restore the deleted clip. It is **offered, not merely available** — F7 trades
-the confirmation dialog away *for* that undo, so an undo nobody is told about turns the
-trade into a loss: the clip is gone with neither a question beforehand nor a way back.
+A sheet wins whenever one is open, because its keys are what the focused field actually
+obeys: teaching **⌘Z** over a field where Return saves and `esc` backs out would be the
+wrong key, and the undo offer being merely hidden costs nothing — the clip is not gone,
+only the sentence that says so.
+
+Outside a sheet, the undo wins while it is live because it expires in seconds. Press
+**⌘Z** while the offer is visible to restore the deleted clip. It is **offered, not merely
+available** — F7 trades the confirmation dialog away *for* that undo, so an undo nobody is
+told about turns the trade into a loss: the clip is gone with neither a question beforehand
+nor a way back.
 
 While a sheet is up, `esc` backs out of it and Return commits it. Saying so is the
 difference between one press of esc and two by reflex, the second of which loses the list.
