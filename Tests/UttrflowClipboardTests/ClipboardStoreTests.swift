@@ -263,6 +263,46 @@ struct ClipboardStoreTests {
         #expect(FileManager.default.fileExists(atPath: file.url.path(percentEncoded: false)) == false)
     }
 
+    /// The promise is a maximum, so a clip the clock stamped ahead must not buy a year of extra life.
+    @Test("a clip copied at a clock a year ahead is past its window, not kept until the clock catches up")
+    func aFutureStampIsDueRatherThanKept() async throws {
+        let file = TemporaryFile()
+        let store = ClipboardStore(file: file.url)
+        try await store.record(clip("ahead", at: 365 * 86_400), keeping: week())
+        try await store.record(clip("recent", at: -86_400), keeping: week())
+
+        #expect(await store.clips(keeping: week()).map(\.text) == ["recent"])
+        #expect(await ClipboardStore(file: file.url).clips(keeping: week()).map(\.text) == ["recent"])
+    }
+
+    /// The irreversible half: one read at a clock that jumped a year emptied the file.
+    @Test("a clock far ahead of the newest clip hides the history rather than deleting it")
+    func aJumpedClockLeavesTheDiskAlone() async throws {
+        let file = TemporaryFile()
+        let store = ClipboardStore(file: file.url)
+        try await store.record(clip("recent"), keeping: week())
+
+        let jumped = week(from: noon.addingTimeInterval(400 * 86_400))
+        #expect(await store.clips(keeping: jumped).isEmpty)
+        // And the words come back once the clock is put right, because nothing was deleted.
+        #expect(await ClipboardStore(file: file.url).clips(keeping: week()).map(\.text) == ["recent"])
+    }
+
+    /// A write is no more able to tell the time than a read is.
+    @Test("a copy taken at a clock far ahead does not take the history with it")
+    func aJumpedClockCannotSweepOnWrite() async throws {
+        let file = TemporaryFile()
+        let store = ClipboardStore(file: file.url)
+        try await store.record(clip("recent"), keeping: week())
+
+        let jumped = week(from: noon.addingTimeInterval(400 * 86_400))
+        _ = try await store.record(clip("ahead", at: 400 * 86_400), keeping: jumped)
+
+        #expect(
+            await ClipboardStore(file: file.url).clips(keeping: week()).map(\.text)
+                == ["recent"])
+    }
+
     /// A clip somebody named, filed or pinned never ages out, however old.
     @Test(
         "never ages out a clip the user kept",

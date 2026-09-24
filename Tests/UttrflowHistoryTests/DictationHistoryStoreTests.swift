@@ -199,6 +199,53 @@ struct DictationHistoryStoreTests {
         #expect(sandbox.onDisk() == nil)
     }
 
+    // MARK: A clock that cannot be trusted
+
+    /// The promise is a maximum, so a stamp the clock put in the future must not buy a year of extra life.
+    @Test("a dictation dated a year ahead is past its window, not kept until the clock catches up")
+    func aFutureStampIsDueRatherThanKept() async throws {
+        let sandbox = Sandbox()
+        try sandbox.seed([spoken("Ahead.", daysAgo: -365), spoken("Recent.", daysAgo: 1)])
+        let store = DictationHistoryStore(file: sandbox.file)
+        #expect(await store.records(keeping: week).map(\.text) == ["Recent."])
+        #expect(sandbox.onDisk()?.map(\.text) == ["Recent."])
+    }
+
+    /// A clock nudged backwards by a second is not a wrong clock, and must not expire what just arrived.
+    @Test("a dictation stamped a minute ahead is still within the window")
+    func aStampInsideTheSkewAllowanceSurvives() async throws {
+        let sandbox = Sandbox()
+        try sandbox.seed([spoken("Just now.", daysAgo: -1.0 / (24 * 60))])
+        #expect(
+            await DictationHistoryStore(file: sandbox.file).records(keeping: week).map(\.text)
+                == ["Just now."])
+    }
+
+    /// The irreversible half: one read at a clock that jumped a year deleted the whole history.
+    @Test("a clock far ahead of the newest dictation hides the history rather than deleting it")
+    func aJumpedClockLeavesTheDiskAlone() async throws {
+        let sandbox = Sandbox()
+        try sandbox.seed([spoken("Recent.", daysAgo: 1)])
+        let store = DictationHistoryStore(file: sandbox.file)
+        let jumped = Retention(days: 7, now: epoch.addingTimeInterval(400 * 86_400))
+        #expect(await store.records(keeping: jumped).isEmpty)
+        #expect(sandbox.onDisk()?.map(\.text) == ["Recent."])
+        // And the words come back once the clock is put right.
+        #expect(await store.records(keeping: week).map(\.text) == ["Recent."])
+    }
+
+    /// A write is no more able to tell the time than a read is.
+    @Test("a dictation appended at a clock far ahead does not take the history with it")
+    func aJumpedClockCannotSweepOnWrite() async throws {
+        let sandbox = Sandbox()
+        try sandbox.seed([spoken("Recent.", daysAgo: 1)])
+        let store = DictationHistoryStore(file: sandbox.file)
+        let jumped = Retention(days: 7, now: epoch.addingTimeInterval(400 * 86_400))
+        _ = try await store.append(
+            DictationRecord(text: "Ahead.", when: jumped.now), keeping: jumped)
+        #expect(sandbox.onDisk()?.map(\.text) == ["Ahead.", "Recent."])
+    }
+
     // MARK: The cap
 
     @Test("the cap holds, and the oldest is what goes")

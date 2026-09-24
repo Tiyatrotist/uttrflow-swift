@@ -107,6 +107,8 @@ public actor RecordingStore: RecordingKeeper {
             (try? FileManager.default.contentsOfDirectory(
                 at: directory, includingPropertiesForKeys: [.creationDateKey, .fileSizeKey]))
             ?? []
+        // The promise as the rule the three stores share states it; the clock is the caller's.
+        let window = RetentionWindow(span: retention.inSeconds, now: now)
         var kept: [KeptRecording] = []
         for file in files where file.pathExtension == "wav" {
             guard let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent),
@@ -115,8 +117,9 @@ public actor RecordingStore: RecordingKeeper {
             RecordingWriter.repair(file)
             let values = try? file.resourceValues(forKeys: [.creationDateKey, .fileSizeKey])
             let when = values?.creationDate ?? now
-            guard now.timeIntervalSince(when) < retention.inSeconds else {
-                await discard(id)
+            guard window.keeps(when) else {
+                // Unlisted either way; a clock too far ahead to be believed only stops the deleting.
+                if window.mayDelete(when) { await discard(id) }
                 continue
             }
             let frames = WAVEncoder.frames(inFileOf: values?.fileSize ?? 0)

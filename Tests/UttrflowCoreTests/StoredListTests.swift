@@ -117,7 +117,7 @@ struct StoredListTests {
         #expect(left == ["list.json", "other.json.unreadable-1"])
     }
 
-    @Test("Removing copies stamped before a moment keeps newer ones and any whose age is unknown.")
+    @Test("Removing copies stamped inside a range keeps newer ones and any whose age is unknown.")
     func removesOnlyOlderCopies() throws {
         let root = try folder()
         let file = root.appending(path: "list.json")
@@ -126,9 +126,24 @@ struct StoredListTests {
             "list.json.unreadable-soon",
         ]
         for name in names { try Data("x".utf8).write(to: root.appending(path: name)) }
-        try LocalStore.removeSetAside(file, stampedBefore: Date(timeIntervalSince1970: 200))
+        try LocalStore.removeSetAside(
+            file, stamped: Date(timeIntervalSince1970: 0)..<Date(timeIntervalSince1970: 200))
         let left = try FileManager.default.contentsOfDirectory(atPath: root.path).sorted()
         #expect(left == ["list.json.unreadable-300", "list.json.unreadable-soon"])
+    }
+
+    /// The range has a floor as well as a ceiling, so a clock that jumped cannot take an old copy with it.
+    @Test("Removing copies stamped inside a range keeps one stamped before the range begins.")
+    func keepsCopiesBelowTheRange() throws {
+        let root = try folder()
+        let file = root.appending(path: "list.json")
+        for name in ["list.json.unreadable-100", "list.json.unreadable-500"] {
+            try Data("x".utf8).write(to: root.appending(path: name))
+        }
+        try LocalStore.removeSetAside(
+            file, stamped: Date(timeIntervalSince1970: 400)..<Date(timeIntervalSince1970: 600))
+        let left = try FileManager.default.contentsOfDirectory(atPath: root.path).sorted()
+        #expect(left == ["list.json.unreadable-100"])
     }
 
     @Test("A folder that is not there has no copies to remove.")

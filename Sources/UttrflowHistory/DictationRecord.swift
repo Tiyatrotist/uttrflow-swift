@@ -1,3 +1,4 @@
+private import UttrflowCore
 public import struct Foundation.Date
 public import struct Foundation.UUID
 
@@ -52,7 +53,6 @@ public struct DictationRecord: Sendable, Equatable, Identifiable, Codable {
 
     /// Whether this is still within `days` of `now`; the one place "deleted after N days" is decided.
     public func survives(days: Int, now: Date) -> Bool {
-        guard days > 0 else { return false }
-        return when.addingTimeInterval(Double(days) * 86_400) > now
+        RetentionWindow(days: days, now: now).keeps(when)
     }
 }

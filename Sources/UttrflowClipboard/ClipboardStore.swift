@@ -86,10 +86,10 @@ public actor ClipboardStore {
     /// Everything still retained, newest first; the call ⇧⌘V waits on, and it does no I/O.
     public func clips(keeping retention: ClipRetention) -> [Clip] {
         let stored = loaded()
-        let kept = retained(stored, keeping: retention)
+        let onDisk = keptOnDisk(stored, keeping: retention)
         // Time passes while the app idles, so the window drops clips here; the catch-up is best-effort.
-        if kept.count != stored.count { try? save(kept) }
-        return kept
+        if onDisk.count != stored.count { try? save(onDisk) }
+        return retained(stored, keeping: retention)
     }
 
     // MARK: - Writing
@@ -115,9 +115,7 @@ public actor ClipboardStore {
         // Prepended, not sorted in: a machine whose clock moved must not shuffle what the user sees.
         let displaced = previous.map { [$0.id] } ?? []
         let updated = [arrival] + existing.filter { !displaced.contains($0.id) }
-        let kept = retained(updated, keeping: retention)
-        try save(kept)
-        return kept
+        return try settled(updated, keeping: retention)
     }
 
     /// Notes that a clip has just been reached for, in memory; the disk hears of it with the next write.
@@ -130,16 +128,16 @@ public actor ClipboardStore {
             return retained(clips, keeping: retention)
         }
         clips[index] = clips[index].used(at: moment)
-        let kept = retained(clips, keeping: retention)
+        let onDisk = keptOnDisk(clips, keeping: retention)
         // A clip that aged out is a real change, written now; a use alone is bookkeeping for a later eviction.
-        guard kept.count == clips.count else {
-            try? save(kept)
-            return kept
+        guard onDisk.count == clips.count else {
+            try? save(onDisk)
+            return retained(clips, keeping: retention)
         }
-        wholeList = kept
+        wholeList = onDisk
         hasUnwrittenUse = true
         scheduleUseFlush()
-        return kept
+        return retained(clips, keeping: retention)
     }
 
     /// Writes a use still held in memory; a disk that refuses costs only the eviction order.
@@ -169,9 +167,7 @@ public actor ClipboardStore {
         if holdingPicture, let file = loaded().first(where: { $0.id == id })?.image?.file {
             heldPictures.insert(file)
         }
-        let kept = retained(loaded().filter { $0.id != id }, keeping: retention)
-        try save(kept)
-        return kept
+        return try settled(loaded().filter { $0.id != id }, keeping: retention)
     }
 
     /// Forgets the history and deliberately not the saved clips. See `Docs/clipboard-store.md`.
@@ -197,9 +193,7 @@ public actor ClipboardStore {
         let stored = loaded()
         let left = stored.filter { !$0.isCopy(ofDictation: id, saying: spoken) }
         guard left.count != stored.count else { return retained(stored, keeping: retention) }
-        let kept = retained(left, keeping: retention)
-        try save(kept)
-        return kept
+        return try settled(left, keeping: retention)
     }
 
     /// Removes every clip, pinned ones included, which is what resetting personalisation promises.
@@ -380,9 +374,7 @@ public actor ClipboardStore {
         for index in clips.indices where clips[index].category == name {
             clips[index].category = destination
         }
-        let kept = retained(clips, keeping: retention)
-        try save(kept)
-        return kept
+        return try settled(clips, keeping: retention)
     }
 
     /// Deletes a collection and every clip filed in it, in one write.
@@ -390,9 +382,7 @@ public actor ClipboardStore {
     public func deleteCategory(
         _ name: String, keeping retention: ClipRetention
     ) throws(ClipboardStoreError) -> [Clip] {
-        let kept = retained(loaded().filter { $0.category != name }, keeping: retention)
-        try save(kept)
-        return kept
+        try settled(loaded().filter { $0.category != name }, keeping: retention)
     }
 
     // MARK: - The rules
@@ -451,16 +441,37 @@ public actor ClipboardStore {
     ) throws(ClipboardStoreError) -> [Clip] {
         var clips = loaded()
         if let index = clips.firstIndex(where: { $0.id == id }) { edit(&clips[index]) }
-        let kept = retained(clips, keeping: retention)
-        try save(kept)
-        return kept
+        return try settled(clips, keeping: retention)
+    }
+
+    /// Writes what may stay on the disk and answers with what may be shown. See `Docs/retention-clock.md`.
+    private func settled(
+        _ clips: [Clip], keeping retention: ClipRetention
+    ) throws(ClipboardStoreError) -> [Clip] {
+        try save(keptOnDisk(clips, keeping: retention))
+        return retained(clips, keeping: retention)
     }
 
     /// Spares every kept clip, then applies the window and the per-pool caps to the history.
     private func retained(_ clips: [Clip], keeping retention: ClipRetention) -> [Clip] {
+        held(clips, keeping: retention) { survives($0, keeping: retention) }
+    }
+
+    /// The same, plus what a clock too far ahead to be believed says is past. See `Docs/retention-clock.md`.
+    private func keptOnDisk(_ clips: [Clip], keeping retention: ClipRetention) -> [Clip] {
+        held(clips, keeping: retention) { clip in
+            let window = window(for: clip, keeping: retention)
+            return window.keeps(clip.copiedAt) || !window.mayDelete(clip.copiedAt)
+        }
+    }
+
+    /// The caps and quotas, over whichever clips the window has spared.
+    private func held(
+        _ clips: [Clip], keeping retention: ClipRetention, _ survives: (Clip) -> Bool
+    ) -> [Clip] {
         // Kept clips are not candidates at all: their pool has no tier to be an exception to.
         let history = clips.filter { ClipClass(of: $0).isEvictable }
-        let surviving = history.filter { survives($0, keeping: retention) }
+        let surviving = history.filter(survives)
 
         // Per pool, so a morning of dictating cannot push out yesterday's ⌘C or a picture.
         var taken: [ClipClass: Int] = [:]
@@ -524,14 +535,18 @@ public actor ClipboardStore {
 
     /// Whether an unkept clip is still inside its window; zero days keeps nothing.
     private func survives(_ clip: Clip, keeping retention: ClipRetention) -> Bool {
+        window(for: clip, keeping: retention).keeps(clip.copiedAt)
+    }
+
+    /// The promise this clip is held to, as the rule the three stores share states it.
+    private func window(for clip: Clip, keeping retention: ClipRetention) -> RetentionWindow {
         // The pool's own window where it has one, and the user's transcript setting for a dictation.
         let clipClass = ClipClass(of: clip)
         let days =
             clipClass == .dictation
             ? (retention.dictationDays ?? budget.tier(for: clipClass)?.days ?? retention.days)
             : (budget.tier(for: clipClass)?.days ?? retention.days)
-        guard days > 0 else { return false }
-        return clip.copiedAt.addingTimeInterval(Double(days) * 86_400) > retention.now
+        return RetentionWindow(days: days, now: retention.now)
     }
 
     // MARK: - The two files

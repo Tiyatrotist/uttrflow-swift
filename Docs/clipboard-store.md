@@ -134,6 +134,11 @@ Anything kept survives unconditionally: it is exempt from the window and is not 
 the cap. Not as a special case checked in three places, but absent from the candidate list
 entirely — the `kept` pool has no tier, so there is no rule for it to be an exception to.
 
+The window is `RetentionWindow`, shared with the history and the recordings, and it is asked two
+questions rather than one: whether a clip may still be shown, and whether this clock may be
+believed to delete it. They differ only for a clip the window has passed on a clock too far
+ahead of it to be believed, which is hidden but left on the disk — `Docs/retention-clock.md`.
+
 The history gets the window, then the per-pool count cap, then the memory quota, then the picture
 disk budget. The cap is per pool for the reason the panel's two tabs exist: a morning of dictating
 must not push out yesterday's ⌘C, and neither may push out a picture.
