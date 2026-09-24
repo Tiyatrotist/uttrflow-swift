@@ -513,21 +513,53 @@ def check_cache(tree, findings, report):
     for path in mlx_files:
         text = tree.files[path]
         bodies = list(functions(text))
-        guarded = {}
+
+        # The offsets of a function's own `.hold()` and `defer { … .clear() }`, not just
+        # whether they appear — a defer registers when its statement runs, so one written
+        # after the pass it is meant to guard never covers it, and neither does a `.hold()`
+        # taken out only afterward.
+        guard_pos = {}
         for name, start, opening, end, private in bodies:
             body = text[opening:end]
-            guarded[(name, start)] = bool(re.search(r"\.hold\s*\(\s*\)", body) and re.search(r"\bdefer\s*\{[^}]*\.clear\s*\(\s*\)", body))
+            hold_match = re.search(r"\.hold\s*\(\s*\)", body)
+            defer_match = re.search(r"\bdefer\s*\{[^}]*\.clear\s*\(\s*\)", body)
+            guard_pos[(name, start)] = (
+                opening + hold_match.start() if hold_match else None,
+                opening + defer_match.start() if defer_match else None,
+            )
+
+        def covers(entry, position):
+            """Whether entry's own hold()/defer(clear) both precede `position` in its body."""
+            hold_pos, defer_pos = guard_pos[(entry[0], entry[1])]
+            return hold_pos is not None and hold_pos < position and defer_pos is not None and defer_pos < position
+
+        # A private helper with neither `.hold()` nor `defer { … .clear() }` of its own
+        # relies entirely on whichever caller reaches it having already taken the cap
+        # before that call — so propagation credits it only when every caller's own guard
+        # precedes the specific line that calls it, not merely when the caller is guarded
+        # somewhere in its body.
+        guarded = {(name, start): guard_pos[(name, start)] != (None, None) for name, start, opening, end, private in bodies}
+
+        def credit(entry, position):
+            key = (entry[0], entry[1])
+            if guard_pos[key] != (None, None):
+                return covers(entry, position)
+            return guarded[key]
+
         changed = True
         while changed:
             changed = False
             for name, start, opening, end, private in bodies:
                 if guarded[(name, start)] or not private:
                     continue
-                callers = [
-                    other for other in bodies
-                    if other[1] != start and re.search(r"(?<![\w])(?:self\.|Self\.)?" + name + r"\s*\(", text[other[2] : other[3]])
+                call_sites = [
+                    (other, other[2] + call.start())
+                    for other in bodies
+                    if other[1] != start
+                    for call in [re.search(r"(?<![\w])(?:self\.|Self\.)?" + name + r"\s*\(", text[other[2] : other[3]])]
+                    if call
                 ]
-                if callers and all(guarded[(other[0], other[1])] for other in callers):
+                if call_sites and all(credit(other, call_pos) for other, call_pos in call_sites):
                     guarded[(name, start)] = True
                     changed = True
         for match in PASS_CALL.finditer(text):
@@ -536,14 +568,14 @@ def check_cache(tree, findings, report):
                 continue
             passes += 1
             innermost = max(owner, key=lambda entry: entry[2])
-            outermost_guarded = any(guarded[(entry[0], entry[1])] for entry in owner)
+            outermost_guarded = any(credit(entry, match.start()) for entry in owner)
             line = line_of(text, match.start())
             if outermost_guarded:
                 report.append(f"  ✓ {path}:{line} pass inside {innermost[0]}(), which caps and clears the cache")
             else:
                 findings.fail(
                     "cache", path, line,
-                    f"a model pass in {innermost[0]}() that neither caps MLX's cache nor clears it on the way out",
+                    f"a model pass in {innermost[0]}() that neither caps MLX's cache nor clears it before or after it",
                     (path, "cache", innermost[0]),
                 )
         for name, start, opening, end, private in bodies:
@@ -708,6 +740,27 @@ INJECTIONS = (
     (
         "Sources/UttrflowLocalModel/MLXCandidateScorer.swift",
         "        await weights.unload()\n        bufferCache.clear()", "        await weights.unload()", "cache",
+    ),
+    (
+        # Same guard statements, moved after the pass they are meant to cap — the audit
+        # used to accept this because it only checked whether both appeared anywhere in
+        # the function, not whether either preceded the pass.
+        "Sources/UttrflowLocalModel/MLXCandidateScorer.swift",
+        "        bufferCache.hold()\n        defer { bufferCache.clear() }\n"
+        "        guard let container, !Task.isCancelled else { return [] }\n"
+        "        beginPass()\n        defer { endPass() }\n"
+        "        let bytes = vocabulary?.bytes ?? []\n"
+        "        return await container.perform { loaded in\n"
+        "            Self.judge(candidate, following: context, bytes: bytes, with: loaded)\n"
+        "        }\n    }",
+        "        guard let container, !Task.isCancelled else { return [] }\n"
+        "        beginPass()\n        defer { endPass() }\n"
+        "        let bytes = vocabulary?.bytes ?? []\n"
+        "        let judged = await container.perform { loaded in\n"
+        "            Self.judge(candidate, following: context, bytes: bytes, with: loaded)\n"
+        "        }\n        bufferCache.hold()\n        defer { bufferCache.clear() }\n"
+        "        return judged\n    }",
+        "cache",
     ),
     (
         "Sources/UttrflowLocalModel/GPUBufferCache.swift",
