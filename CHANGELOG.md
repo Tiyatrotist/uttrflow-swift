@@ -12,6 +12,12 @@ Each released version is a git tag and a build at
 ## [Unreleased]
 
 ### Fixed
+- **The performance doc's memory headline no longer reads as a whole-app claim.** It reported
+  a suggestions-off dictation reading (379 MB peak footprint) as unconditional 8 GB-Mac safety,
+  while the same document budgets AI suggestions on as a separate multi-gigabyte mode. The
+  headline now names the mode it was measured under and points at that budget and at the open
+  soak result tracking it (#475), and a documentation check keeps a future edit from dropping
+  the mode again (#1240).
 - **Inline ghost stops at the host window's edge when the field's frame is unusable.** When the
   focused field's Accessibility frame was a caret-shaped 3pt rectangle or the caret was scrolled
   outside it, the ghost ran all the way to the screen's right edge, painting over the host

@@ -751,7 +751,58 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6. Every artboard text row clears WCAG AA contrast against its translucent backing.
+# 6. A performance headline stating a memory figure must name its suggestion mode.
+# ---------------------------------------------------------------------------
+#
+# Issue #1240: the third headline in Docs/performance.md reported a dictation-only,
+# suggestions-off memory reading as an unconditional whole-app claim, though the same
+# document budgets a separate multi-gigabyte suggestions-on mode a few sections down.
+# A headline that states a memory figure (MB or GB) must say which mode it was measured
+# under, so a future edit cannot silently drop the other mode again.
+printf '\nPerformance headline scope\n'
+
+PERF_DOC="Docs/performance.md"
+if [[ ! -f "$PERF_DOC" ]]; then
+    fail "$PERF_DOC is missing" \
+        "The performance headlines this check pins no longer exist to check."
+else
+    read -r -d '' HEADLINE_PROGRAM <<'PYTHON' || true
+import re
+import sys
+
+text = open("Docs/performance.md", errors="ignore").read()
+start = text.find("**Three headlines, in the order they matter.**")
+end = text.find("\n## ", start)
+if start == -1 or end == -1:
+    print("Docs/performance.md  cannot find the headline section")
+    sys.exit()
+
+section = text[start:end]
+# Each headline is a bold sentence followed by prose, up to the next bold sentence or the
+# section's end.
+headlines = re.split(r"\n\n(?=\*\*)", section)
+for headline in headlines:
+    if not re.search(r"\d[\d,]*\s*(?:MB|GB)\b", headline):
+        continue
+    if not re.search(r"suggestion", headline, re.IGNORECASE):
+        first_line = headline.strip().splitlines()[0]
+        print(f"Docs/performance.md  {first_line}")
+PYTHON
+    headline_issues="$(python3 -c "$HEADLINE_PROGRAM")"
+
+    if [[ -n "${headline_issues//[[:space:]]/}" ]]; then
+        fail "a performance headline states a memory figure without naming its suggestion mode" \
+            "AI suggestions on is a separate, multi-gigabyte budget from dictation alone;" \
+            "a headline that gives a memory number for one mode and says nothing about the" \
+            "other reads as a whole-app claim. Name the mode the figure was measured under." \
+            "" $'\n'"$headline_issues"
+    else
+        pass "every memory figure in the performance headlines names its suggestion mode"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# 7. Every artboard text row clears WCAG AA contrast against its translucent backing.
 # ---------------------------------------------------------------------------
 #
 # The artboard generators draw a translucent menu over a gradient, and a backdrop blur
@@ -784,7 +835,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 7. CLAUDE.md, if it exists, delegates to AGENTS.md by import or symlink.
+# 8. CLAUDE.md, if it exists, delegates to AGENTS.md by import or symlink.
 # ---------------------------------------------------------------------------
 #
 # A tracked CLAUDE.md is a claim about what Claude Code will load as project memory: with
@@ -854,4 +905,4 @@ if [[ "$failures" -gt 0 ]]; then
     exit 1
 fi
 
-printf 'docs audit: the paths, links, test count, worktree cleanup order, release bullets, CLAUDE.md delegation and uttrflow-eval examples in %s documents all check out.\n\n' "$DOC_COUNT"
+printf 'docs audit: the paths, links, test count, worktree cleanup order, release bullets, performance headline scope, CLAUDE.md delegation and uttrflow-eval examples in %s documents all check out.\n\n' "$DOC_COUNT"
