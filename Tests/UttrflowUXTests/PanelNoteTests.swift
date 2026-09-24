@@ -110,7 +110,7 @@ struct PanelNoteTests {
                 == .open)
     }
 
-    /// How much of a hidden thing is done is still something about it.
+    /// The masking rule says as little as possible until reveal, and progress is not an exception.
     @Test("a masked row does not report its progress")
     func maskedRowsSayNothing() {
         let secret = Clip(

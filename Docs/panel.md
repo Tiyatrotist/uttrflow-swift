@@ -47,7 +47,8 @@ A masked row also loses its excerpt, its language chip and its tooltip:
   the pointer is entitled to. A panel of bullets appearing under the cursor reads as the
   mask being lifted.
 
-The checklist count stays: how much of a hidden thing is done is still something about it.
+The checklist count is withheld too: how much of a hidden thing is done is still something
+about it, and the masking rule is to say as little as possible until it is revealed.
 
 ## Empty states, and being specific and wrong
 
