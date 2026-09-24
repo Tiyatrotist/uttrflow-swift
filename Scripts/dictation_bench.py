@@ -227,16 +227,28 @@ def render_clip(clip):
     write_wav(clip["wav"], joined)
 
 
+AR1_COEFFICIENT = 0.97
+# The steady-state standard deviation of `level = AR1_COEFFICIENT * level + N(0, 1)`, so the
+# raw AR(1) sequence can be rescaled to a chosen standard deviation rather than assumed unit.
+AR1_STD = 1 / math.sqrt(1 - AR1_COEFFICIENT**2)
+
+
 def noisy(snr_db, seed):
-    """Brown noise at `snr_db` below the speech's power, closer to a room than white noise is."""
+    """Brown noise mixed in at exactly `snr_db` below the speech's RMS power."""
     def mix(samples):
         rng = random.Random(seed)
         power = sum(x * x for x in samples) / max(1, len(samples))
-        scale = math.sqrt(power / (10 ** (snr_db / 10))) * 0.35
-        out, level = array.array("h"), 0.0
+        target_std = math.sqrt(power / (10 ** (snr_db / 10)))
+        scale = target_std / AR1_STD
+        out, level, clipped = array.array("h"), 0.0, 0
         for x in samples:
-            level = 0.97 * level + rng.gauss(0, 1)
-            out.append(max(-32768, min(32767, int(x + level * scale))))
+            level = AR1_COEFFICIENT * level + rng.gauss(0, 1)
+            mixed = x + level * scale
+            if mixed > 32767 or mixed < -32768:
+                clipped += 1
+            out.append(max(-32768, min(32767, int(mixed))))
+        if clipped:
+            print(f"noisy: {clipped} of {len(samples)} sample(s) clipped mixing snr {snr_db} dB", file=sys.stderr)
         return out
     return mix
 
