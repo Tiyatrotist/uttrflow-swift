@@ -31,11 +31,23 @@ it is outside spec and the App Store would refuse it. The date alone is three in
 
 ## A test build
 
-No Apple account, no certificate, nothing to configure.
+No Apple account, no certificate, nothing to configure — for the local build:
 
 ```bash
 make app               # ad-hoc signature, no hardened runtime — what a test build ships
 make dmg               # dist/Uttrflow-<version>.dmg
+```
+
+That produces a `.dmg` on this Mac and nothing more. **`make publish` is a separate,
+externally visible step**, not part of a test build: it pushes to the public
+`uttrflow/releases` repository and can make this unsigned image the default download at
+`/releases/latest/download/Uttrflow.dmg`. It needs a `gh` login authenticated against
+`uttrflow/releases` and a Sparkle EdDSA private key `publish.sh` can find, in the login
+keychain or `SPARKLE_PRIVATE_KEY` — `Scripts/publish.sh` refuses without either. Run
+`make publish-dry-run` first to see what it would do without doing it:
+
+```bash
+make publish-dry-run   # say what would happen, do none of it
 make publish           # a release on uttrflow/releases, with the signed update archive
 ```
 
