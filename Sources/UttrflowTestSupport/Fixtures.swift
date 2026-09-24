@@ -38,7 +38,8 @@ extension AppContext {
         documentName: String? = "#engineering",
         selectedText: String? = nil,
         precedingText: String? = nil,
-        followingText: String? = nil
+        followingText: String? = nil,
+        isSecure: Bool = false
     ) -> AppContext {
         AppContext(
             applicationName: applicationName,
@@ -46,7 +47,8 @@ extension AppContext {
             documentName: documentName,
             selectedText: selectedText,
             precedingText: precedingText,
-            followingText: followingText
+            followingText: followingText,
+            isSecure: isSecure
         )
     }
 }

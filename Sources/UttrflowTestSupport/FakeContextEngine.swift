@@ -28,7 +28,8 @@ public actor FakeContextEngine: ContextEngine {
             documentName: context.documentName,
             selectedText: context.selectedText,
             precedingText: insertion.precedingText,
-            followingText: insertion.followingText
+            followingText: insertion.followingText,
+            isSecure: context.isSecure
         )
     }
 }

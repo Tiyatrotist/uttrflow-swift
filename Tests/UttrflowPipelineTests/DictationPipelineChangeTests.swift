@@ -625,6 +625,17 @@ struct DictationPipelineContextTests {
         #expect(cleaner.requests.map(\.context) == [.fixture()])
     }
 
+    @Test("Scripting a new insertion point keeps a secure context secure")
+    func setInsertionPointKeepsSecureFlag() async {
+        let context = FakeContextEngine(context: .fixture(isSecure: true))
+
+        await context.setInsertionPoint(InsertionPoint(precedingText: "because "))
+
+        let after = await context.currentContext()
+        #expect(after.isSecure)
+        #expect(after.precedingText == "because ")
+    }
+
     @Test("Hands the tidier the situation the screen resolves to, caret and all")
     func resolvesTheSituation() async {
         let context = FakeContextEngine(context: .fixture())
