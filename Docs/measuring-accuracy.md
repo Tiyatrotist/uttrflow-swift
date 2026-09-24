@@ -71,10 +71,12 @@ regresses usually regresses on names and numbers first, and both are already iso
 This was the other assumption worth checking, because it is what stops a contributor
 running any of it. Both defaults are already the local ones:
 
-- **`record` writes to disk first.** `--corpus-path` is where recordings go; `--sync` is an
-  opt-in extra that offers them to the corpus service afterwards. The comment in
-  `RecordCorpus.swift` is explicit that the local write is the commit and uploading is
-  layered on top, so a dead connection costs an upload and never a take.
+- **`record` writes to disk first.** `--corpus-path` is where recordings go; `--upload` is
+  an opt-in extra that offers each take to the corpus service as it is recorded. `--sync`
+  is a separate, later step — it sends whatever `--upload` could not and does no
+  recording of its own, so it is not something to add to a first recording run. The
+  comment in `RecordCorpus.swift` is explicit that the local write is the commit and
+  uploading is layered on top, so a dead connection costs an upload and never a take.
 - **`transcribe` reads local recordings by default.** `--from-catalogue` is the flag that
   goes to the backend instead. Nobody needs `CORPUS_BUCKET` or an operator token to measure
   a change.
