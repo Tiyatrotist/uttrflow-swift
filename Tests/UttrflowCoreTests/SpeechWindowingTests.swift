@@ -165,6 +165,22 @@ struct SpeechWindowingTests {
         #expect(cut > 5 * Take.rate && cut <= 30 * Take.rate)
     }
 
+    @Test("windowing a finished recording does not slow down quadratically with its length")
+    func windowsScalesLinearly() {
+        func elapsed(_ seconds: Double) -> Duration {
+            let audio = Take.speech(seconds, level: 0.3)
+            let clock = ContinuousClock()
+            let start = clock.now
+            _ = windowing.windows(in: audio, sampleRate: Take.rate)
+            return clock.now - start
+        }
+        _ = elapsed(60)  // warm up allocation/caches before timing.
+        let short = elapsed(60)
+        let long = elapsed(240)
+        // Quadratic work would make the 4x-longer recording take roughly 16x as long.
+        #expect(long < short * 10)
+    }
+
     @Test("carries the lengths it was given")
     func carriesParameters() {
         let custom = SpeechWindowing(
