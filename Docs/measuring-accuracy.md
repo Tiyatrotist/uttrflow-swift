@@ -102,6 +102,15 @@ percentage points. Results are reported **by language, by stressor and by cohort
 never pooled into one number — an engine that improves on English and regresses on Hinglish
 has not improved, and `AccuracyBaseline` already refuses to average that away.
 
+**The gate checks it is still the exact recording set, not just the same case IDs.** Every
+score carries a `recordingIdentity` — a digest of the WAV bytes for a local take, the
+catalogue's own key for a backend sample — and `--save-baseline` stores it per passage.
+A later `--fail-on-regression` run refuses an ordinary verdict, rather than reporting a
+regression or a pass, when a shared case ID's identity has changed: the passage was read
+again since the baseline, and the movement is the new recording's, not the engine's. A
+baseline captured before this existed is reported the same way against a freshly identified
+run — unverifiable rather than silently treated as the same take.
+
 ## What this would have said about WhisperKit 1.1.0
 
 The decision that could not be made, made:

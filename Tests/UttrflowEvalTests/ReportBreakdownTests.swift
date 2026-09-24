@@ -15,14 +15,15 @@ func score(
     heard: [String],
     lost: [String] = [],
     answeredIn: Script = .latin,
-    failure: TranscriptionFailure? = nil
+    failure: TranscriptionFailure? = nil,
+    recordingIdentity: String? = nil
 ) -> PassageScore {
     PassageScore(
         caseID: id, language: language, stressor: stressor,
         wordErrorRate: failure?.isScorable == false
             ? nil : .measure(reference: reference, hypothesis: heard),
         answeredIn: answeredIn, scoredAgainst: .latin, lost: lost, failure: failure,
-        stresses: stresses, cohortID: cohort)
+        stresses: stresses, cohortID: cohort, recordingIdentity: recordingIdentity)
 }
 
 @Suite("Reading a thousand results")

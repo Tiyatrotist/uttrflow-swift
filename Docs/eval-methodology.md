@@ -17,6 +17,10 @@ code relies on, so the one-line comments in the source can stay short.
 - The normalisation rules are printed before the numbers, every time. The same transcripts
   score differently under a different rule set, and a rate quoted without them cannot be
   compared with anything.
+- Matching a shared case ID is not enough: `recordingIdentity` (a WAV digest locally, a
+  catalogue sample's own key from the backend) has to match too, or the gate reports it as
+  unverifiable instead of comparing rates that may belong to two different takes. See
+  `Docs/measuring-accuracy.md`.
 
 ## What is scored and what is only timed
 

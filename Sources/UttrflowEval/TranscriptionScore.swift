@@ -62,6 +62,8 @@ public struct PassageScore: Sendable, Equatable, Codable, Identifiable {
     public let stresses: [String]
     /// Who read it and where; `nil` for an unattributed recording, which reports as its own row.
     public let cohortID: String?
+    /// The exact audio scored, from ``RecordedPassage/recordingIdentity``; `nil` for an untracked take.
+    public let recordingIdentity: String?
     /// `nil` only when there is no transcript to align against; see ``TranscriptionFailure/isScorable``.
     public let wordErrorRate: WordErrorRate?
     /// The script the engine answered in; `.devanagari` means clean-up also has to transliterate.
@@ -90,13 +92,15 @@ public struct PassageScore: Sendable, Equatable, Codable, Identifiable {
         failure: TranscriptionFailure? = nil,
         normalisation: [NormalisationRule] = TextNormaliser.standard.rules,
         stresses: [String] = [],
-        cohortID: String? = nil
+        cohortID: String? = nil,
+        recordingIdentity: String? = nil
     ) {
         self.caseID = caseID
         self.language = language
         self.stressor = stressor
         self.stresses = stressor.labels(from: stresses)
         self.cohortID = cohortID
+        self.recordingIdentity = recordingIdentity
         self.wordErrorRate = wordErrorRate
         self.answeredIn = answeredIn
         self.scoredAgainst = scoredAgainst
@@ -115,6 +119,7 @@ public struct PassageScore: Sendable, Equatable, Codable, Identifiable {
         stressor = try container.decode(TranscriptionCase.Stressor.self, forKey: .stressor)
         stresses = try container.decodeIfPresent([String].self, forKey: .stresses) ?? [stressor.rawValue]
         cohortID = try container.decodeIfPresent(String.self, forKey: .cohortID)
+        recordingIdentity = try container.decodeIfPresent(String.self, forKey: .recordingIdentity)
         wordErrorRate = try container.decodeIfPresent(WordErrorRate.self, forKey: .wordErrorRate)
         answeredIn = try container.decode(Script.self, forKey: .answeredIn)
         scoredAgainst = try container.decode(Script.self, forKey: .scoredAgainst)
