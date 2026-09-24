@@ -39,6 +39,10 @@ public actor PasteboardTextInsertionEngine: TextInsertionEngine {
         guard !Task.isCancelled else {
             throw .insertionRejected(description: TextInsertion.dictationEnded)
         }
+        // Re-checked here rather than trusted from `canInsert()`, whose answer can go stale by now.
+        guard !focus.isSelfFrontmost() else {
+            throw .noFocusedTextField
+        }
         // Concealed for a field that hides what is typed, so no clipboard history keeps the words.
         if focus.focusedFieldIsSecure() {
             pasteboard.setConcealedText(text)

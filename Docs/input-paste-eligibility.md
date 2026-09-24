@@ -33,3 +33,16 @@ their insertion. So the engine volunteers and the coordinator finds out by tryin
 The one refusal. Uttrflow's own windows are where the user is choosing a shortcut or
 reading their clip history, and a ⌘V posted while one of them is in front lands in the
 app's own text rather than in the document the dictation was for.
+
+## Checked twice, because the answer can go stale between the two
+
+`canInsert()` and `insert()` are two separate `await`s on the same actor, so real time
+passes between them — long enough for the user to switch to Uttrflow while a dictation
+is still being recognised or cleaned up. A `canInsert()` answered for another app must
+not be trusted by the time the write actually happens.
+
+So `insert()` asks `isSelfFrontmost()` again, immediately before it writes the clipboard
+and posts ⌘V — not only once, up front. If Uttrflow has become frontmost since
+`canInsert()` ran, `insert()` throws `.noFocusedTextField` without touching the clipboard,
+and `TextInsertionCoordinator`'s fallback chain takes over from there, same as any other
+strategy declining.

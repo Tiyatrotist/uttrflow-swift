@@ -122,6 +122,22 @@ final class CountingFocus: AccessibilityFocus, @unchecked Sendable {
     var readCount: Int { reads.withLock { $0 } }
 }
 
+/// Focus whose frontmost app can be flipped between `canInsert()` and `insert()`, modelling a switch to Uttrflow.
+final class SwitchableFocus: AccessibilityFocus, @unchecked Sendable {
+    private let selfIsFrontmost = Mutex(false)
+
+    func focusedTextField() -> (any FocusedTextField)? { nil }
+    func hasFocusedElement() -> Bool { true }
+    func isSelfFrontmost() -> Bool { selfIsFrontmost.withLock { $0 } }
+    func tail(upTo count: Int) -> FieldTail { .text("") }
+    func frontmostApplication() -> InsertionDestination? { nil }
+    func focusedFieldIsSecure() -> Bool { false }
+    func precedingText(_ count: Int) -> String? { nil }
+
+    /// Brings Uttrflow itself to the front, as the user would by switching to it.
+    func becomeSelfFrontmost() { selfIsFrontmost.withLock { $0 = true } }
+}
+
 @Suite("PasteboardTextInsertionEngine")
 struct PasteboardTextInsertionEngineTests {
     private func engine(
@@ -147,6 +163,25 @@ struct PasteboardTextInsertionEngineTests {
     @Test("accepts when something is focused")
     func acceptsWithAFocusedField() async {
         #expect(await engine(FakePasteboard(), FakeKeystrokeSender()).canInsert())
+    }
+
+    /// The guard's whole point: eligibility answered for another app must not survive a switch to Uttrflow.
+    @Test("rejects the paste and leaves the clipboard alone when Uttrflow becomes frontmost after eligibility")
+    func revalidatesFrontmostBeforeWriting() async {
+        let focus = SwitchableFocus()
+        let pasteboard = FakePasteboard()
+        let keystrokes = FakeKeystrokeSender()
+        let sut = engine(pasteboard, keystrokes, focus: focus)
+
+        #expect(await sut.canInsert(), "another app is frontmost when eligibility is asked")
+        focus.becomeSelfFrontmost()
+
+        await #expect(throws: TextInsertionError.self) {
+            try await sut.insert("private words")
+        }
+
+        #expect(pasteboard.writes.isEmpty, "the clipboard must not be touched once Uttrflow is frontmost")
+        #expect(keystrokes.pasteCount == 0, "no paste may be posted into Uttrflow's own window")
     }
 
     @Test("copies the text and presses paste exactly once")
