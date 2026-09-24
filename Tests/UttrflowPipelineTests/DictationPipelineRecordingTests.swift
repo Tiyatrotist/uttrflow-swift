@@ -338,6 +338,30 @@ struct DictationPipelineRecordingTests {
         await keeper.discard(UUID())
         await #expect(throws: AudioCaptureError.self) { _ = try await keeper.audio(of: UUID()) }
     }
+
+    @Test("the fake keeper refuses audio for an ID it never kept")
+    func fakeKeeperRejectsUnknownID() async {
+        let recordings = FakeRecordingKeeper(waiting: [recording])
+        await #expect(throws: AudioCaptureError.self) { _ = try await recordings.audio(of: UUID()) }
+    }
+
+    @Test("the fake keeper refuses audio for an ID it discarded")
+    func fakeKeeperRejectsDiscardedID() async {
+        let recordings = FakeRecordingKeeper(waiting: [recording])
+        await recordings.discard(recording.id)
+        await #expect(throws: AudioCaptureError.self) { _ = try await recordings.audio(of: recording.id) }
+    }
+
+    @Test("a retry after the recording is gone follows the failure path")
+    func retryAfterMissingRecordingFails() async {
+        let recordings = FakeRecordingKeeper()
+        let pipeline = makePipeline(recordings: recordings)
+
+        await pipeline.retry(recording.id)
+
+        #expect(await pipeline.currentState.failure != nil)
+        #expect(await recordings.discarded == [recording.id])
+    }
 }
 
 /// The state that exists so a tick cannot be shown before the words are on screen.
