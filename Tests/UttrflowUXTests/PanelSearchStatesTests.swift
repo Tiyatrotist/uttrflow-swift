@@ -76,6 +76,35 @@ struct PanelResultCapTests {
         #expect(PanelPresenter.present(PanelFixture.panel(Self.many)).rows.count == 20)
     }
 
+    /// The overflow sentence is the presenter's, not invented by the view, and says how to see the rest.
+    @Test("the overflow sentence names the count and how to narrow it")
+    func overflowSentenceIsComplete() {
+        let page = PanelPresenter.present(PanelFixture.panel(Self.many, query: "prod"))
+        let expected = 20 - PanelPresenter.rowsPerGroup
+
+        #expect(page.groups.first?.moreLine == "\(expected) more · keep typing to narrow it")
+    }
+
+    /// A group with nothing left out has no sentence to show.
+    @Test("no overflow sentence when nothing was left out")
+    func noOverflowSentenceWhenNothingHidden() {
+        let clips = [PanelFixture.clip("a single prod match", minutesAgo: 1)]
+        let page = PanelPresenter.present(PanelFixture.panel(clips, query: "prod"))
+
+        #expect(page.groups.first?.moreLine == nil)
+    }
+
+    /// One left-out row reads as singular, not "1 more" pluralised oddly.
+    @Test("a single hidden row still reads naturally")
+    func singularOverflowSentence() {
+        let clips = (1...(PanelPresenter.rowsPerGroup + 1)).map {
+            PanelFixture.clip("prod server \($0)", minutesAgo: $0)
+        }
+        let page = PanelPresenter.present(PanelFixture.panel(clips, query: "prod"))
+
+        #expect(page.groups.first?.moreLine == "1 more · keep typing to narrow it")
+    }
+
     /// A row the cap left out must not be reachable by arrow key, or a paste arrives from nowhere.
     @Test("the arrows cannot reach a row the cap left out")
     func hiddenRowsAreUnreachable() {

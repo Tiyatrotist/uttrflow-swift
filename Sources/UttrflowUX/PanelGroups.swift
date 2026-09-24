@@ -16,6 +16,12 @@ public struct PanelResultGroup: Sendable, Equatable, Identifiable {
     /// The title, which is unique in the list.
     public var id: String { title }
 
+    /// Admits that the list is capped and says how to see the rest; nil when nothing was left out.
+    public var moreLine: String? {
+        guard more > 0 else { return nil }
+        return "\(more) more · keep typing to narrow it"
+    }
+
     /// Builds a group.
     public init(field: PanelMatchField, title: String, rows: [PanelRow], more: Int) {
         self.field = field

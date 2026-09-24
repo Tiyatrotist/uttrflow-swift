@@ -276,7 +276,7 @@ struct QuickPanelView: View {
                             // Keyed by section as well as clip, or SwiftUI keeps the old rendering.
                             rowView(row).id(section.key(for: row))
                         }
-                        if section.more > 0 { moreLine(section.more) }
+                        if let text = section.moreLine { moreLine(text) }
                     }
                 }
                 .padding(.horizontal, 8)
@@ -306,11 +306,12 @@ struct QuickPanelView: View {
     /// The list as drawn: one unnamed run while browsing, one run per heading while searching.
     private var sections: [QuickPanelSection] {
         guard !presentation.groups.isEmpty else {
-            return [QuickPanelSection(id: "all", title: nil, rows: presentation.rows, more: 0)]
+            return [QuickPanelSection(id: "all", title: nil, rows: presentation.rows, moreLine: nil)]
         }
         return presentation.groups.map {
             QuickPanelSection(
-                id: String(describing: $0.field), title: $0.title, rows: $0.rows, more: $0.more)
+                id: String(describing: $0.field), title: $0.title, rows: $0.rows,
+                moreLine: $0.moreLine)
         }
     }
 
@@ -388,9 +389,9 @@ struct QuickPanelView: View {
             .accessibilityAddTraits(.isHeader)
     }
 
-    /// Admits that the list is capped, so the user does not read it as complete.
-    private func moreLine(_ count: Int) -> some View {
-        Text("\(count) more · keep typing to narrow it")
+    /// Draws the presenter's overflow sentence, so the user does not read the list as complete.
+    private func moreLine(_ text: String) -> some View {
+        Text(text)
             .font(.system(size: 10.5))
             .foregroundStyle(Color.panelLabelDim)
             .padding(.horizontal, 10)

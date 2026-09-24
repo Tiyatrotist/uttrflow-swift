@@ -31,7 +31,7 @@ struct QuickPanelSection: Identifiable {
     let id: String
     let title: String?
     let rows: [PanelRow]
-    let more: Int
+    let moreLine: String?
 
     /// A row's identity in the list: the run it is in as well as the clip it is.
     func key(for row: PanelRow) -> String { "\(id)-\(row.id)" }
