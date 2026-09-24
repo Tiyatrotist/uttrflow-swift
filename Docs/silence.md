@@ -113,13 +113,17 @@ Recognisers also emit explicit non-speech markers — `[BLANK_AUDIO]`, `(music)`
 the one above and still earns its place: a recording that *does* hold speech can carry a
 marker in the middle of it.
 
-Three conditions have to hold together before a bracket is treated as a marker, because
+Four conditions have to hold together before a bracket is treated as a marker, because
 each one alone destroys real dictation:
 
 - the bracket stands alone, not attached to a word — otherwise `get_user(id)` loses its
   argument, and dictating code is a headline use of this product;
 - the contents are only letters — otherwise `[1, 2, 3]` disappears;
-- there are at most three words — otherwise a spoken aside in parentheses goes with them.
+- there are at most three words — otherwise a spoken aside in parentheses goes with them;
+- and, the decisive one, **every word is in `markerWords`** — the closed vocabulary a
+  recogniser actually writes for non-speech. The first three are shape checks a spoken
+  aside can also satisfy, as "(version two)" does; the vocabulary check is what tells
+  them apart, and it is why "version two" survives while "(music)" does not.
 
 A marker is removed from the recogniser's **words** as well as from its text, and where the
 words were reported the text is derived from them. The two used to be edited separately, so
