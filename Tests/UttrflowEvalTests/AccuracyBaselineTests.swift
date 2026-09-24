@@ -19,13 +19,15 @@ struct AccuracyBaselineTests {
         language: TranscriptionCase.Language = .english,
         stresses: [String] = ["punctuation"],
         cohort: String? = "naveen-quiet",
-        words: Int = 400
+        words: Int = 400,
+        recordingIdentity: String? = nil
     ) -> PassageScore {
         let reference = (1...words).map { "w\($0)" }
         var heard = reference
         for index in 0..<errors { heard[index] = "wrong\(index)" }
         return score(
-            id, language: language, stresses: stresses, cohort: cohort, reference: reference, heard: heard)
+            id, language: language, stresses: stresses, cohort: cohort, reference: reference, heard: heard,
+            recordingIdentity: recordingIdentity)
     }
 
     // MARK: Capturing
@@ -297,6 +299,67 @@ struct AccuracyBaselineTests {
         #expect(comparison.regressed.map(\.label) == ["big", "small"])
         // 5 errors in 400 words to 50: 1.25% to 12.5%.
         #expect(comparison.regressed.first?.delta == 0.1125)
+    }
+
+    // MARK: Recording identity — #1221
+
+    /// The ordinary case: the same take, scored twice, is a verdict like any other.
+    @Test("gives a verdict when the shared samples carry the same recording identity")
+    func sameRecordingIdentity() {
+        let baseline = AccuracyBaseline.capture(
+            report([sample("a", errors: 2, recordingIdentity: "sha256:take-one")]), at: moment)
+        let comparison = baseline.compare(
+            with: report([sample("a", errors: 20, recordingIdentity: "sha256:take-one")]))
+        #expect(comparison.verdict == .worsened)
+        #expect(comparison.reason == nil)
+    }
+
+    /// The bug: a passage re-recorded under the same case ID used to score as an ordinary regression.
+    @Test("refuses a verdict when a shared case ID points to a different recording")
+    func replacementRecording() {
+        let baseline = AccuracyBaseline.capture(
+            report([sample("a", errors: 0, recordingIdentity: "sha256:take-one")]), at: moment)
+        let comparison = baseline.compare(
+            with: report([sample("a", errors: 400, recordingIdentity: "sha256:take-two")]))
+        #expect(comparison.verdict == .incomparable)
+        #expect(comparison.reason?.contains("a") == true)
+        #expect(comparison.reason?.contains("recording changed") == true)
+    }
+
+    /// One replaced take taints the whole verdict even when every other sample is untouched.
+    @Test("refuses a verdict over a mixed corpus where only one take changed")
+    func mixedCorpusOneTakeChanged() {
+        let before = report([
+            sample("steady", errors: 2, recordingIdentity: "sha256:steady-take"),
+            sample("replaced", errors: 0, recordingIdentity: "sha256:take-one"),
+        ])
+        let after = report([
+            sample("steady", errors: 2, recordingIdentity: "sha256:steady-take"),
+            sample("replaced", errors: 400, recordingIdentity: "sha256:take-two"),
+        ])
+        let comparison = AccuracyBaseline.capture(before, at: moment).compare(with: after)
+        #expect(comparison.verdict == .incomparable)
+        #expect(comparison.reason?.contains("replaced") == true)
+        #expect(comparison.reason?.contains("steady") == false)
+    }
+
+    /// Neither side ever tracked identity: no worse than before this feature existed.
+    @Test("gives a verdict when neither side tracked recording identity at all")
+    func neitherSideTracksIdentity() {
+        let baseline = AccuracyBaseline.capture(report([sample("a", errors: 2)]), at: moment)
+        let comparison = baseline.compare(with: report([sample("a", errors: 20)]))
+        #expect(comparison.verdict == .worsened)
+        #expect(comparison.reason == nil)
+    }
+
+    /// A baseline captured before this feature meeting a freshly identified run is not silently trusted.
+    @Test("reports a legacy baseline against a freshly identified run as unverifiable")
+    func legacyBaselineMeetsFreshRun() {
+        let baseline = AccuracyBaseline.capture(report([sample("a", errors: 2)]), at: moment)
+        let comparison = baseline.compare(
+            with: report([sample("a", errors: 20, recordingIdentity: "sha256:take-one")]))
+        #expect(comparison.verdict == .incomparable)
+        #expect(comparison.reason?.contains("no recording identity") == true)
     }
 
     @Test("a change with no rate on one side has no delta to report")

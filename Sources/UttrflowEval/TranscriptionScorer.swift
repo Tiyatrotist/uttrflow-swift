@@ -10,7 +10,8 @@ public enum TranscriptionScorer {
         normaliser: TextNormaliser = .standard,
         stages: [StageMeasurement] = [],
         failure: TranscriptionFailure? = nil,
-        cohortID: String? = nil
+        cohortID: String? = nil,
+        recordingIdentity: String? = nil
     ) -> PassageScore {
         // An unreadable recording is the harness's fault, so it reports as a failure with no rate.
         if let failure, !failure.isScorable {
@@ -18,7 +19,7 @@ public enum TranscriptionScorer {
                 caseID: passage.id, language: passage.language, stressor: passage.stressor,
                 wordErrorRate: nil, answeredIn: .latin, scoredAgainst: .latin,
                 stages: stages, failure: failure, normalisation: normaliser.rules,
-                stresses: passage.stresses, cohortID: cohortID
+                stresses: passage.stresses, cohortID: cohortID, recordingIdentity: recordingIdentity
             )
         }
 
@@ -40,7 +41,8 @@ public enum TranscriptionScorer {
             failure: failure,
             normalisation: normaliser.rules,
             stresses: passage.stresses,
-            cohortID: cohortID
+            cohortID: cohortID,
+            recordingIdentity: recordingIdentity
         )
     }
 

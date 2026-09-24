@@ -12,6 +12,8 @@ public struct BaselineEntry: Sendable, Equatable, Codable, Identifiable {
     public let referenceWordCount: Int
     /// Whether the passage produced nothing to score; counted separately from the rates.
     public let isUnscorable: Bool
+    /// The exact audio scored; `nil` for an entry captured before this was tracked.
+    public let recordingIdentity: String?
 
     public init(
         caseID: String,
@@ -20,7 +22,8 @@ public struct BaselineEntry: Sendable, Equatable, Codable, Identifiable {
         cohortID: String?,
         errors: Int,
         referenceWordCount: Int,
-        isUnscorable: Bool
+        isUnscorable: Bool,
+        recordingIdentity: String? = nil
     ) {
         self.caseID = caseID
         self.language = language
@@ -29,6 +32,7 @@ public struct BaselineEntry: Sendable, Equatable, Codable, Identifiable {
         self.errors = errors
         self.referenceWordCount = referenceWordCount
         self.isUnscorable = isUnscorable
+        self.recordingIdentity = recordingIdentity
     }
 
     public init(_ score: PassageScore) {
@@ -39,7 +43,8 @@ public struct BaselineEntry: Sendable, Equatable, Codable, Identifiable {
             cohortID: score.cohortID,
             errors: score.wordErrorRate?.errors ?? 0,
             referenceWordCount: score.wordErrorRate?.referenceWordCount ?? 0,
-            isUnscorable: score.wordErrorRate == nil
+            isUnscorable: score.wordErrorRate == nil,
+            recordingIdentity: score.recordingIdentity
         )
     }
 
@@ -204,7 +209,7 @@ extension AccuracyBaseline {
         let before = Dictionary(entries.map { ($0.caseID, $0) }) { first, _ in first }
         let shared = Set(before.keys).intersection(after.keys).sorted()
 
-        let mismatch = incomparability(with: report, shared: shared)
+        let mismatch = incomparability(with: report, shared: shared, before: before, after: after)
         let sharedBefore = shared.compactMap { before[$0] }
         let sharedAfter = shared.compactMap { after[$0] }
 
@@ -232,7 +237,10 @@ extension AccuracyBaseline {
     }
 
     /// Why these two runs are not about the same thing, if they are not; growth is not a reason.
-    private func incomparability(with report: TranscriptionReport, shared: [String]) -> String? {
+    private func incomparability(
+        with report: TranscriptionReport, shared: [String],
+        before: [String: BaselineEntry], after: [String: BaselineEntry]
+    ) -> String? {
         if report.label != label {
             return "the baseline measured \(label) and this run measured \(report.label), "
                 + "so the rates are not comparable"
@@ -243,7 +251,37 @@ extension AccuracyBaseline {
         if report.normalisation != normalisation {
             return "the normalisation rules changed since the baseline, so the rates are not comparable"
         }
+        let (mismatched, unverifiable) = audioIdentityIssues(shared, before, after)
+        if !mismatched.isEmpty {
+            return "the recording changed since the baseline for "
+                + mismatched.joined(separator: ", ") + ", so the movement there is not the engine's"
+        }
+        if !unverifiable.isEmpty {
+            return "no recording identity to check " + unverifiable.joined(separator: ", ")
+                + " against the baseline, so a replacement recording cannot be ruled out"
+        }
         return nil
+    }
+
+    /// Where a shared case ID's audio provably changed, and where it cannot be checked either way.
+    private func audioIdentityIssues(
+        _ shared: [String], _ before: [String: BaselineEntry], _ after: [String: BaselineEntry]
+    ) -> (mismatched: [String], unverifiable: [String]) {
+        var mismatched: [String] = []
+        var unverifiable: [String] = []
+        for caseID in shared {
+            switch (before[caseID]?.recordingIdentity, after[caseID]?.recordingIdentity) {
+            case (let some?, let other?):
+                if some != other { mismatched.append(caseID) }
+            case (nil, nil):
+                // Neither side ever tracked identity; no signal either way, so the pair is left alone.
+                break
+            default:
+                // One side tracked identity and the other did not — a legacy baseline meeting a fresh run.
+                unverifiable.append(caseID)
+            }
+        }
+        return (mismatched.sorted(), unverifiable.sorted())
     }
 
     private func change(

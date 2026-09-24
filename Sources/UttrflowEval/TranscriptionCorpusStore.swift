@@ -11,19 +11,23 @@ public struct RecordedPassage: Sendable, Equatable, Codable, Identifiable {
     public let sampleRate: Int
     /// Who read it and in what conditions; optional so older single-speaker recordings still decode.
     public let cohort: RecordingCohort?
+    /// The exact audio's own identity; `nil` only for recordings kept before this was tracked.
+    public let recordingIdentity: String?
 
     public init(
         passage: TranscriptionCase,
         recordedAt: Date,
         durationSeconds: Double,
         sampleRate: Int,
-        cohort: RecordingCohort? = nil
+        cohort: RecordingCohort? = nil,
+        recordingIdentity: String? = nil
     ) {
         self.passage = passage
         self.recordedAt = recordedAt
         self.durationSeconds = durationSeconds
         self.sampleRate = sampleRate
         self.cohort = cohort
+        self.recordingIdentity = recordingIdentity
     }
 }
 

@@ -15,10 +15,12 @@ struct TranscriptionRunnerTests {
         TranscriptionCase(id: id, language: language, stressor: stressor, romanised: text)
     }
 
-    private func recording(_ passage: TranscriptionCase) -> RecordedPassage {
+    private func recording(
+        _ passage: TranscriptionCase, recordingIdentity: String? = nil
+    ) -> RecordedPassage {
         RecordedPassage(
             passage: passage, recordedAt: Date(timeIntervalSince1970: 0), durationSeconds: 4,
-            sampleRate: 16_000)
+            sampleRate: 16_000, recordingIdentity: recordingIdentity)
     }
 
     private func timings(_ seconds: Double, succeeded: Bool = true) -> [StageMeasurement] {
@@ -177,6 +179,24 @@ struct TranscriptionRunnerTests {
                 TranscriptionScorer.score("x", against: passage("other"), normaliser: .standard)
             ])
         #expect(mixed.hasMixedNormalisation)
+    }
+
+    /// #1221: a baseline can only tell a replacement take from the one it captured if this rides along.
+    @Test("carries the recording's identity onto the score it produced")
+    func carriesRecordingIdentity() async {
+        let recordings = [recording(passage("with"), recordingIdentity: "sha256:take-one")]
+        let report = await TranscriptionRunner().run(label: "test", over: recordings) { recorded in
+            .transcribed(recorded.passage.romanised, stages: [])
+        }
+        #expect(report.scores.first?.recordingIdentity == "sha256:take-one")
+    }
+
+    @Test("leaves the identity nil when the recording never tracked one")
+    func noRecordingIdentity() async {
+        let report = await TranscriptionRunner().run(
+            label: "test", over: [recording(passage("without"))]
+        ) { recorded in .transcribed(recorded.passage.romanised, stages: []) }
+        #expect(report.scores.first?.recordingIdentity == nil)
     }
 
     @Test("reports nothing measured as nothing, not as a perfect score")

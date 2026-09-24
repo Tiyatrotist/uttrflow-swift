@@ -147,11 +147,13 @@ struct RecordCorpus: AsyncParsableCommand {
             print("  Return to keep it, or 'r' then return to read it again: ", terminator: "")
             if readLine()?.trimmingCharacters(in: .whitespaces).lowercased() == "r" { continue }
 
+            let wav = WAVEncoder.encode(audio)
             let recorded = RecordedPassage(
                 passage: passage, recordedAt: Date(), durationSeconds: seconds,
-                sampleRate: audio.sampleRate, cohort: recordingCohort())
+                sampleRate: audio.sampleRate, cohort: recordingCohort(),
+                recordingIdentity: RecordingIdentity.digest(of: wav))
             // Disk first: everything after this line can fail without costing the take.
-            try store.save(recorded, audio: WAVEncoder.encode(audio))
+            try store.save(recorded, audio: wav)
             print("  kept as \(passage.id).wav")
 
             if let outbox {
