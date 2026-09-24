@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
-"""Fails when an attention-menu text row in the menu-bar artboard falls below WCAG AA contrast.
+"""Fails when an artboard's text or icon falls below WCAG contrast against its fill.
 
-The menu bar artboard draws a translucent native-style menu (`rgba(250,250,253,0.72)`) over
-a radial gradient with three declared stops. The two text rows in the attention state — the
-status row and the recovery action — must clear 4.5:1 against every composited background the
-gradient can produce, because the backdrop blur cannot lift the menu above the gradient's
-brightest source stop.
+Two independent checks:
 
-Source: `Design/_gen_menubar.py`. The artboard generator writes a single static file, so the
-audit runs against the generator and the regeneration contract is that a second run leaves the
-worktree clean (`Scripts/docs_audit.sh` enforces that separately).
+- The menu bar artboard draws a translucent native-style menu (`rgba(250,250,253,0.72)`)
+  over a radial gradient with three declared stops. The two text rows in the attention
+  state — the status row and the recovery action — must clear 4.5:1 against every
+  composited background the gradient can produce, because the backdrop blur cannot lift
+  the menu above the gradient's brightest source stop.
+- The errors artboard draws every repair-state glyph in white on an opaque tile. Each
+  tile's fill must clear 3:1 against white, the WCAG non-text threshold for an icon that
+  carries meaning on its own.
+
+Sources: `Design/_gen_menubar.py` and `Design/_gen_errors.py`. Both artboard generators
+write a single static file, so the audit runs against the generator and the regeneration
+contract is that a second run leaves the worktree clean (`Scripts/docs_audit.sh` enforces
+that separately).
 """
 
 import argparse
@@ -31,11 +37,19 @@ ATTENTION_STYLE = re.compile(
     r"ATTENTION_MENU\s*=\s*menu\(f?\"\"\"(?P<body>.*?)\"\"\"\s*\)", re.DOTALL
 )
 INLINE_COLOR = re.compile(r'style="color:\s*(?P<color>#[0-9A-Fa-f]{6}|var\(--[\w-]+\))"')
+BANNER_CALL = re.compile(
+    r'banner\(\s*(?:"(?P<fill>#[0-9A-Fa-f]{6})"|(?P<fill_name>[A-Za-z_]\w*))\s*,\s*'
+    r'\w+\s*,\s*"(?P<title>[^"]*)"'
+)
+FILL_CONSTANT = re.compile(r'^(?P<name>[A-Z_]\w*)\s*=\s*"(?P<hex>#[0-9A-Fa-f]{6})"', re.MULTILINE)
 
 
 REQUIRED_RATIO = 4.5
+NONTEXT_REQUIRED_RATIO = 3.0
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SOURCE = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "Design", "_gen_menubar.py"))
+ERRORS_SOURCE = os.path.normpath(os.path.join(SCRIPT_DIR, "..", "Design", "_gen_errors.py"))
+WHITE = (1.0, 1.0, 1.0)
 
 
 def hex_to_rgb(value):
@@ -109,6 +123,34 @@ def load_colors(path):
     return stops, menu_fill, rows
 
 
+def load_error_tiles(path):
+    """Pull each error tile's fill colour and title from `banner(...)` calls.
+
+    Returns [(title, fill_hex)]. A tile's fill is either an inline hex literal or a
+    module-level `NAME = "#hex"` constant, resolved against the constants in the same file.
+    """
+    text = open(path).read()
+    constants = {name: hexv for name, hexv in FILL_CONSTANT.findall(text)}
+
+    tiles = []
+    for match in BANNER_CALL.finditer(text):
+        title = match.group("title")
+        fill = match.group("fill")
+        if fill is None:
+            name = match.group("fill_name")
+            if name not in constants:
+                raise SystemExit(
+                    f"design contrast audit: unknown fill constant {name!r} in {path}"
+                )
+            fill = constants[name]
+        tiles.append((title, fill))
+
+    if not tiles:
+        raise SystemExit(f"design contrast audit: no banner(...) tiles found in {path}")
+
+    return tiles
+
+
 # Resolve a foreground token. The accent is the only `var(--…)` token the menu uses as text;
 # if a future generator routes the recovery row through a deeper accent, the check stays
 # pinned to whatever the file says.
@@ -131,16 +173,22 @@ def resolve(color):
 # A foreground / composited-background pair that fails or passes 4.5:1; the self-test exercises
 # both the pass and the fail arms so the audit cannot regress to a no-op.
 SELF_TEST_PAIRS = (
-    ("#793F15", (0.827, 0.863, 0.886), 5.97, "pass"),
-    ("#C2560C", (0.827, 0.863, 0.886), 3.27, "fail"),
+    ("#793F15", (0.827, 0.863, 0.886), REQUIRED_RATIO, 5.97, "pass"),
+    ("#C2560C", (0.827, 0.863, 0.886), REQUIRED_RATIO, 3.27, "fail"),
+)
+
+# A tile fill against white, at the 3:1 non-text threshold; same pass/fail shape as above.
+NONTEXT_SELF_TEST_PAIRS = (
+    ("#C25E00", WHITE, NONTEXT_REQUIRED_RATIO, 4.29, "pass"),
+    ("#FF8D28", WHITE, NONTEXT_REQUIRED_RATIO, 2.31, "fail"),
 )
 
 
 def self_test():
     wrong = []
-    for fg_hex, bg_rgb, expected, outcome in SELF_TEST_PAIRS:
+    for fg_hex, bg_rgb, threshold, expected, outcome in SELF_TEST_PAIRS + NONTEXT_SELF_TEST_PAIRS:
         ratio = contrast_ratio(hex_to_rgb(fg_hex), bg_rgb)
-        passes = ratio >= REQUIRED_RATIO
+        passes = ratio >= threshold
         if outcome == "pass" and not passes:
             wrong.append((fg_hex, ratio, outcome))
         if outcome == "fail" and passes:
@@ -197,6 +245,41 @@ def audit():
     return 0
 
 
+def audit_errors():
+    if not os.path.isfile(ERRORS_SOURCE):
+        print(f"design contrast audit: {ERRORS_SOURCE} not found", file=sys.stderr)
+        return 1
+
+    tiles = load_error_tiles(ERRORS_SOURCE)
+
+    print("Errors artboard, white glyph contrast against each tile fill")
+    failures = []
+    for title, fill_hex in tiles:
+        ratio = contrast_ratio(WHITE, hex_to_rgb(fill_hex))
+        verdict = "pass" if ratio >= NONTEXT_REQUIRED_RATIO else "FAIL"
+        print(f"  {title}  {fill_hex}  {ratio:.2f}:1  [{verdict}]")
+        if ratio < NONTEXT_REQUIRED_RATIO:
+            failures.append((title, fill_hex, ratio))
+
+    if failures:
+        print(
+            f"\n  ✗ {len(failures)} error tile(s) fall below the WCAG non-text contrast "
+            f"threshold ({NONTEXT_REQUIRED_RATIO:.2f}:1) for their white glyph:",
+            file=sys.stderr,
+        )
+        for title, fill_hex, ratio in failures:
+            print(f"    {title}  {fill_hex}  {ratio:.2f}:1", file=sys.stderr)
+        print(
+            "    Use the semantic warning fill role for a white warning glyph; see\n"
+            "    `Design/_gen_errors.py` and `BrandPalette.Semantic.warningFill`.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"\ndesign contrast audit: every error tile glyph clears {NONTEXT_REQUIRED_RATIO:.2f}:1.\n")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -215,7 +298,9 @@ def main():
             return 1
         return 0
 
-    return audit()
+    menubar_result = audit()
+    errors_result = audit_errors()
+    return menubar_result or errors_result
 
 
 if __name__ == "__main__":

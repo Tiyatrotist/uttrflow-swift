@@ -39,17 +39,20 @@ P = '<button class="btn sm primary">%s</button>'
 S = '<button class="btn sm">%s</button>'
 L = '<button class="btn sm plain">%s</button>'
 
+# BrandPalette.Semantic.warningFill: deep enough that a white glyph on it clears 3:1.
+WARNING_FILL = "#C25E00"
+
 cards = [
     banner("#FF383C", MIC, "Microphone access is turned off",
            "Uttrflow cannot hear you until macOS lets it use the microphone.",
            [P % "Open System Settings", L % "Learn why"],
            "Blocking. Dictation is disabled rather than failing silently when you press the key."),
-    banner("#FF8D28", ACCESSIBILITY, "Uttrflow can&rsquo;t type into other apps",
+    banner(WARNING_FILL, ACCESSIBILITY, "Uttrflow can&rsquo;t type into other apps",
            "Without Accessibility access, finished text is copied to your clipboard "
            "instead of being typed for you.",
            [P % "Open System Settings", S % "Keep using the clipboard"],
            "Degraded, not broken. The product still does its job &mdash; you press &#8984;V."),
-    banner("#FF8D28", DOWNLOAD, "Setup couldn&rsquo;t finish",
+    banner(WARNING_FILL, DOWNLOAD, "Setup couldn&rsquo;t finish",
            "The download stopped at 413 MB. This is the only step that needs the internet.",
            [P % "Try Again", S % "Do this later"],
            "Recoverable. Progress is kept, so retrying resumes rather than restarting."),
@@ -58,7 +61,7 @@ cards = [
            "and let go when you&rsquo;re done.",
            [S % "Got it"],
            "Not an error, and worded so it doesn&rsquo;t read like one. Auto-dismisses."),
-    banner("#FF8D28", WARN, "Nowhere to put the text",
+    banner(WARNING_FILL, WARN, "Nowhere to put the text",
            "Nothing on screen accepts typing right now, so your words are on the clipboard.",
            [P % "Paste", S % "Copy again"],
            "The transcript is never lost. Every insertion failure ends with the text in hand."),
