@@ -1412,6 +1412,54 @@ public enum EvaluationCorpus {
             mustBeginWith: "Bump",
             mustEndWith: "20"
         ),
+        .init(
+            id: "code-editor-code-keeps-no-stop", category: .contextual,
+            spoken: "um this invalidates the cache after every write",
+            expected: "this invalidates the cache after every write",
+            mustKeep: ["invalidates", "cache"],
+            context: AppContext(
+                applicationName: "Xcode",
+                bundleIdentifier: "com.apple.dt.Xcode",
+                documentName: "Cache.swift",
+                precedingText: "func read() -> Value {"
+            ),
+            mustNotAdd: ["um", "."],
+            destination: .codeEditor,
+            mustBeginWith: "this",
+            mustEndWith: "write"
+        ),
+        .init(
+            id: "code-editor-comment-gets-a-stop", category: .contextual,
+            spoken: "um the comment explains why the cache clears",
+            expected: "the comment explains why the cache clears.",
+            mustKeep: ["comment", "cache clears"],
+            context: AppContext(
+                applicationName: "Xcode",
+                bundleIdentifier: "com.apple.dt.Xcode",
+                documentName: "Cache.swift",
+                precedingText: "// "
+            ),
+            mustNotAdd: ["um"],
+            destination: .codeEditor,
+            mustBeginWith: "the",
+            mustEndWith: "clears."
+        ),
+        .init(
+            id: "code-editor-comment-keeps-its-stop", category: .contextual,
+            spoken: "um the retry count resets after a failure.",
+            expected: "the retry count resets after a failure.",
+            mustKeep: ["retry count", "failure"],
+            context: AppContext(
+                applicationName: "Xcode",
+                bundleIdentifier: "com.apple.dt.Xcode",
+                documentName: "Cache.swift",
+                precedingText: "// "
+            ),
+            mustNotAdd: ["um", ".."],
+            destination: .codeEditor,
+            mustBeginWith: "the",
+            mustEndWith: "failure."
+        ),
         // A question mark from the shape of a sentence needs the model; the rules are not asked to pass this one.
         .init(
             id: "message-question-keeps-its-mark", category: .contextual,

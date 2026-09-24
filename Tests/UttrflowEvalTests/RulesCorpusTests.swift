@@ -48,6 +48,8 @@ struct RulesCorpusTests {
         "sql-editor-numerals", "sql-editor-large-number-ungrouped",
         "code-editor-large-number-ungrouped",
         "code-editor-line-break-preserved", "code-editor-numeral-no-stop",
+        "code-editor-code-keeps-no-stop", "code-editor-comment-gets-a-stop",
+        "code-editor-comment-keeps-its-stop",
         "message-short-no-stop", "email-greeting-kept", "email-continues-mid-sentence",
         "email-two-paragraphs",
         "numbered-items-for-a-trip", "numbered-items-three-of-them", "numbered-items-a-plan",
@@ -91,7 +93,7 @@ struct RulesCorpusTests {
         // Grammar cases name a destination too, but repairs are the model's alone; the floor is below.
         let named = Set(
             EvaluationCorpus.all.filter { $0.destination != .plain && $0.category != .grammar }.map(\.id))
-        #expect(named.count == 50)
+        #expect(named.count == 53)
         #expect(named.subtracting(Self.modelOnly).isSubset(of: Self.rulesMustPass))
         #expect(Self.modelOnly.isSubset(of: named))
         #expect(Self.modelOnly.isDisjoint(with: Self.rulesMustPass))
@@ -199,6 +201,9 @@ struct RulesCorpusTests {
             ("spreadsheet-percentage-in-cell", "churn rate is 4.5%"),
             ("code-editor-line-break-preserved", "Retry the request\nlog the failure"),
             ("code-editor-numeral-no-stop", "Bump the retry count to 20"),
+            ("code-editor-code-keeps-no-stop", "this invalidates the cache after every write"),
+            ("code-editor-comment-gets-a-stop", "the comment explains why the cache clears."),
+            ("code-editor-comment-keeps-its-stop", "the retry count resets after a failure."),
             ("message-short-no-stop", "Leaving now see you at the cafe"),
             ("email-continues-mid-sentence", "the quote you sent last week."),
             ("spoken-email-address", "Forward the logs to support@example.com."),

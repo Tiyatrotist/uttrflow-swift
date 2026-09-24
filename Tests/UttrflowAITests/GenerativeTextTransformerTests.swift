@@ -167,6 +167,30 @@ struct GenerativeTextTransformerTests {
         #expect(try await sut.transform(fresh).text == "The deployment script timed out.")
     }
 
+    /// The same decision the rules take: a code editor finishes comment prose but never executable code.
+    @Test("gives a code editor's comment a stop and its code none, on the model path too")
+    func codeEditorDistinguishesCommentsFromCode() async throws {
+        func situation(preceding: String) -> Situation {
+            let app = AppContext(documentName: "Cache.swift", precedingText: preceding)
+            return Situation(app: app, insertion: app.insertionPoint, destination: .codeEditor)
+        }
+        func request(preceding: String) -> TransformationRequest {
+            TransformationRequest(
+                transcription: .fixture(text: "this invalidates the cache", language: .english),
+                situation: situation(preceding: preceding))
+        }
+
+        let comment = GenerativeTextTransformer(
+            kind: .foundationModels, model: FakeCleanupModel { _ in "this invalidates the cache" })
+        #expect(try await comment.transform(request(preceding: "// ")).text == "this invalidates the cache.")
+
+        let code = GenerativeTextTransformer(
+            kind: .foundationModels, model: FakeCleanupModel { _ in "this invalidates the cache" })
+        #expect(
+            try await code.transform(request(preceding: "func read() -> Value {")).text
+                == "this invalidates the cache")
+    }
+
     /// The echo pass runs before the guard, so a word inside the echo is not a word the model lost.
     @Test("preserves a faithful repeated prefix in both message and piece finishing")
     func preservesFaithfulRepeatedPrefix() async throws {
