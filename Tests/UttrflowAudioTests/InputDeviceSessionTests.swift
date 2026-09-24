@@ -200,6 +200,28 @@ struct InputDeviceSessionTests {
         #expect(device.log.withLock(\.opens) == 5)
     }
 
+    /// The race this closes: a change landing before `.live` is published used to be discarded.
+    @Test("a second change landing while the reopen's own open is in flight is not discarded")
+    func secondChangeWhileOpeningIsNotDiscarded() async throws {
+        let device = ScriptedDevice()
+        let session = InputDeviceSession(
+            device: device, schedule: ReopenSchedule(delays: [.zero, .zero]), pause: { _ in })
+        try session.open { _ in }
+
+        device.during(open: 2) {
+            _ = session.deviceChanged()
+            return true
+        }
+
+        let retry = session.deviceChanged()
+        await retry?.value
+
+        #expect(session.health == .live)
+        #expect(device.isOpen)
+        // The compromised open is retried once more instead of being published as live.
+        #expect(device.opens == 3)
+    }
+
     @Test("a second change while one reopen is in flight does not start another")
     func oneReopenAtATime() async throws {
         let device = FlakyDevice(failing: 0)
@@ -209,12 +231,14 @@ struct InputDeviceSessionTests {
 
         device.log.withLock { $0.failuresLeft = 2 }
         let retry = session.deviceChanged()
+        // Coalesced into the retry already under way, rather than starting a second task.
         #expect(session.deviceChanged() == nil)
-        for _ in 0..<3 { gate.letGo() }
+        // Two refused opens, then the coalesced change costs one more open before publishing live.
+        for _ in 0..<4 { gate.letGo() }
         await retry?.value
 
         #expect(session.health == .live)
-        #expect(device.log.withLock(\.opens) == 4)
+        #expect(device.log.withLock(\.opens) == 5)
     }
 
     /// A stop landing mid-reopen used to report nothing, so the truncated recording read as whole.

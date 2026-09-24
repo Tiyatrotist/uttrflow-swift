@@ -42,6 +42,15 @@ public final class InputDeviceSession: Sendable {
         var health: DeviceHealth = .gone
         var reopening: Task<Void, Never>?
         var report: (@Sendable (CaptureInterruption) -> Void)?
+        // A change seen while already reopening, so the in-flight open cannot be published as live.
+        var pendingChange = false
+    }
+
+    /// What a change should do, depending on whether a reopen is already under way.
+    private enum ChangeAction {
+        case begin(@Sendable (CaptureInterruption) -> Void)
+        case coalesced
+        case ignored
     }
 
     private let device: any InputDevice
@@ -72,7 +81,10 @@ public final class InputDeviceSession: Sendable {
             state.withLock { $0.report = nil }
             throw error
         }
-        state.withLock { $0.health = .live }
+        state.withLock {
+            $0.health = .live
+            $0.pendingChange = false
+        }
     }
 
     /// Closes the device and abandons any reopen in flight.
@@ -85,15 +97,23 @@ public final class InputDeviceSession: Sendable {
         device.close()
     }
 
-    /// Reopens after a configuration change, returning the retry so a caller can await it, or nil when none began.
+    /// Reopens after a configuration change, or coalesces it into a retry already under way; nil when coalesced or gone.
     @discardableResult
     public func deviceChanged() -> Task<Void, Never>? {
-        let begun = state.withLock { state -> (@Sendable (CaptureInterruption) -> Void)? in
-            guard state.health == .live else { return nil }
-            state.health = .reopening
-            return state.report ?? { _ in }
+        let action = state.withLock { state -> ChangeAction in
+            switch state.health {
+            case .live:
+                state.health = .reopening
+                state.pendingChange = false
+                return .begin(state.report ?? { _ in })
+            case .reopening:
+                state.pendingChange = true
+                return .coalesced
+            case .gone:
+                return .ignored
+            }
         }
-        guard let begun else { return nil }
+        guard case .begin(let begun) = action else { return nil }
         // Said before the retry, because a stop landing mid-reopen would otherwise report nothing at all.
         begun(.began)
         device.close()
@@ -111,15 +131,29 @@ public final class InputDeviceSession: Sendable {
             guard state.withLock(\.health) == .reopening else { return }
             do {
                 try device.open()
-                let kept = state.withLock { state -> Bool in
-                    guard state.health == .reopening else { return false }
+                let outcome = state.withLock { state -> Bool? in
+                    guard state.health == .reopening else { return nil }
+                    // Another change landed before this open could be trusted; it is not live yet.
+                    guard !state.pendingChange else {
+                        state.pendingChange = false
+                        return false
+                    }
                     state.health = .live
                     state.reopening = nil
                     return true
                 }
-                // A close that landed while this was opening leaves a device nothing else would shut.
-                if !kept { device.close() }
-                return
+                switch outcome {
+                case true:
+                    return
+                case false:
+                    // Close what just opened and keep going: the schedule still has budget.
+                    device.close()
+                    continue
+                case nil:
+                    // A close that landed while this was opening leaves a device nothing else would shut.
+                    device.close()
+                    return
+                }
             } catch {
                 continue
             }
