@@ -146,6 +146,9 @@ public enum CodeReindent {
 
             // A double-quoted string left open continues onto the next line, and its end is unknown.
             if !unescapedQuoteCount(line).isMultiple(of: 2) { return true }
+
+            // A POSIX single-quoted string left open continues onto the next line; backslash is not an escape inside one.
+            if !line.count(where: { $0 == "'" }).isMultiple(of: 2) { return true }
         }
         return false
     }
