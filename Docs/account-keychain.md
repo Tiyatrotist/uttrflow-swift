@@ -23,10 +23,13 @@ Adding the entitlement anyway is worse than not having it: the process is killed
 launch. So both keychains are tried, for writing and for reading, and a token that lands
 in neither is reported as `AccountError.sessionCouldNotBeKept` rather than swallowed.
 
-Reading asks both in order rather than only the one that took the write. Which keychain a
-build can use is a property of how it is signed, so a token written by an ad-hoc build and
-read by a notarised one (the same Mac, after an update) is in one keychain and looked for
-in the other. Asking both makes that update keep the session instead of silently ending it.
+Reading asks both in order rather than only the one that took the write, but that does not
+carry a session across a change of code identity. The file-based item is named after this
+build's own code directory hash (see below), so an ad-hoc build, a notarised replacement,
+and the next ad-hoc rebuild each look for a file-based item under a different name and
+never find another build's token; a notarised build also never wrote to the file-based
+keychain in the first place. Every changed code identity signs in again — the fallback
+isolates builds from each other, deliberately, rather than migrating a session between them.
 
 A Developer ID build never reaches the fallback: it has a team identifier, so the
 data-protection keychain takes the token on the first attempt.
