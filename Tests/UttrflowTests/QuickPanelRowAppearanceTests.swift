@@ -134,8 +134,8 @@ struct QuickPanelSectionTests {
     @Test("a row's key names the run it is drawn in as well as the clip")
     func keysIncludeTheRun() {
         let clip = row("a clip")
-        let browsing = QuickPanelSection(id: "all", title: nil, rows: [clip], more: 0)
-        let searching = QuickPanelSection(id: "content", title: "Contents", rows: [clip], more: 0)
+        let browsing = QuickPanelSection(id: "all", title: nil, rows: [clip], moreLine: nil)
+        let searching = QuickPanelSection(id: "content", title: "Contents", rows: [clip], moreLine: nil)
 
         #expect(browsing.key(for: clip) != searching.key(for: clip))
         #expect(browsing.key(for: clip).contains(clip.id.uuidString))
@@ -145,7 +145,7 @@ struct QuickPanelSectionTests {
     @Test("two rows in one run keep separate keys")
     func rowsInARunAreDistinct() {
         let section = QuickPanelSection(
-            id: "all", title: nil, rows: [row("first"), row("second")], more: 0)
+            id: "all", title: nil, rows: [row("first"), row("second")], moreLine: nil)
 
         #expect(section.key(for: section.rows[0]) != section.key(for: section.rows[1]))
     }
