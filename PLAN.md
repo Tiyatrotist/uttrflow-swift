@@ -37,7 +37,7 @@ Specified in the V2 product requirements. Status of the build:
 | `uttrflow-backend` — identity, entitlement, devices, corpus, telemetry | ✅ **Done**, 160 tests |
 | Sign-in with Google, GitHub and Apple | ✅ Built; needs the operator's OAuth credentials |
 | Entitlement, cached and signed, four-state gate | ✅ **Done** |
-| The app talking to the real backend — `HTTPAuthenticationService`, Keychain, devices | ✅ **Done**; needs a deployed URL in the Info.plist and the public key compiled in |
+| The app talking to the real backend — `HTTPAuthenticationService`, Keychain, devices | ✅ **Done**; the deployed URL and the compiled-in public key are both configured, see `Docs/operator-runbook.md` |
 | Sign-in over the loopback redirect of RFC 8252, with PKCE | ✅ **Done**, proven end to end against the Go backend |
 | Signing in by code where no port can be bound — RFC 8628 | ✅ **Done**, fallback is automatic and proven end to end |
 | Server as the source of truth — `GET /v1/me`, cached with its validator | ✅ **Done**, re-read at every launch |

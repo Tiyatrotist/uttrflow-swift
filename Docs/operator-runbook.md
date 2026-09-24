@@ -32,13 +32,17 @@ Run `npm run keygen` in `uttrflow-backend` for the three it generates rather tha
 obtains — `ENTITLEMENT_SIGNING_KEY`, `SESSION_SIGNING_KEY`, `ADMIN_TOKEN`. It prints them
 and writes nothing.
 
-**Then one thing in the app**, and it is release-blocking: put the 32 raw public-key bytes
-into `Ed25519EntitlementVerifier.releasePublicKeyBytes`, which is empty today. It fails
-closed, so a build shipped without it signs nobody in — which is the safe direction, and
-deliberate. **Do not fill it with zeroes.** An all-zero Ed25519 key is a small-order point
-that CryptoKit verifies without the cofactor: measured here, an all-zero signature
-verified against it for 491 of 2000 messages. Anyone could grant themselves Pro. A test
-asserts the trap is real so nobody "fixes" the empty constant that way.
+**One thing in the app is already configured, and a deliberate change to it is
+release-blocking:** `Ed25519EntitlementVerifier.releasePublicKeyBase64` holds the
+backend's public key, base64, and `releasePublicKeyBytes` decodes it — `isConfigured` is
+`true` today, proven by `ReleaseVerifierTests`. Rotating the backend's signing key means
+generating a new one with `npm run keygen`, replacing `releasePublicKeyBase64` with the
+new public half, and shipping both sides together: an app built against the old key
+rejects entitlements a rotated backend signs, failing closed rather than open. **Never
+fill it with zeroes.** An all-zero Ed25519 key is a small-order point that CryptoKit
+verifies without the cofactor: measured here, an all-zero signature verified against it
+for 491 of 2000 messages. Anyone could grant themselves Pro. A test asserts the trap is
+real so nobody "fixes" the constant that way.
 
 ---
 
