@@ -23,7 +23,7 @@
 
   An already-granted Mac keeps working either way, because the check is skipped once TCC
   has an answer — which is precisely why this cannot be caught by testing on the machine
-  that built the app. Scripts/bundle.sh check 5 and Scripts/notarise.sh both refuse a
+  that built the app. Scripts/bundle.sh check 7 and Scripts/notarise.sh both refuse a
   build that has lost it.
 
   Deliberately absent, each verified unnecessary by running the app under the hardened
@@ -47,7 +47,7 @@
         Ad-hoc signatures have no Team ID at all, so an ad-hoc *hardened* build cannot
         load the framework — it dies at launch with "different Team IDs". That is the
         `rehearsal` mode in Scripts/bundle.sh, and only that mode, which signs with this
-        entitlement added to a copy of this file and says so while it does it. Check 7
+        entitlement added to a copy of this file and says so while it does it. Check 4c
         refuses a distribution build that carries it.
     com.apple.security.cs.allow-jit
     com.apple.security.cs.allow-unsigned-executable-memory

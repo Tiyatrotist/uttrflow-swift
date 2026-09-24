@@ -471,7 +471,7 @@ fi
 # With the entitlement present, the hardened runtime changes nothing there either: the
 # prompt appears, the grant is recorded, real audio arrives.
 #
-# So the risk is entirely conditional on the entitlement being absent — and check 5 below
+# So the risk is entirely conditional on the entitlement being absent — and check 7 below
 # refuses to ship a bundle that has lost it. The old position was to leave the runtime off
 # for ever, which paid a permanent cost (an app nobody can be given, since notarisation
 # requires it) to avoid a failure one check prevents.
@@ -501,7 +501,7 @@ if [[ "$MODE" == "rehearsal" && -d "$APP/Contents/Frameworks" ]]; then
     ENTITLEMENTS="$REHEARSAL_ENTITLEMENTS"
     printf 'Rehearsal: library validation disabled, because an ad-hoc signature has no\n'
     printf '  Team ID for the embedded framework to match. A distribution build does not\n'
-    printf '  do this and does not need to — check 7 refuses one that carries it.\n\n'
+    printf '  do this and does not need to — check 4c refuses one that carries it.\n\n'
 fi
 
 REQUIREMENT="$(expected_designated_requirement "$BUNDLE_ID" "$REAL_CERTIFICATE" "$SIGNING_IDENTITY")" \
@@ -787,9 +787,10 @@ else
     )"
 fi
 
-# 7. The audio-input entitlement made it into the signature. Inert today, because we
-#    do not enable the hardened runtime — but the day someone does, its absence is a
-#    silent microphone denial, so it is checked now while the failure is still cheap.
+# 7. The audio-input entitlement made it into the signature. Inert in a local build,
+#    which does not enable the hardened runtime — but rehearsal and distribution both
+#    do, where its absence is a silent microphone denial, so it is checked on every
+#    build while the failure is still cheap.
 codesign -d --entitlements - --xml "$APP" 2>/dev/null \
     | grep -q 'com.apple.security.device.audio-input' \
     || fail "$(
