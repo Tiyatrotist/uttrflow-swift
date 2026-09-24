@@ -89,6 +89,16 @@ enum CommandGrammar {
 
     /// The words of the last simple command in the text, which is the one the next word belongs to.
     static func simpleCommand(before leading: String) -> [String] {
+        // The shell grammar, not a space split, decides where a quoted or adjacent operator falls.
+        guard let commands = ShellWords.commands(in: leading, home: "") else {
+            return legacySimpleCommand(before: leading)
+        }
+        guard let last = commands.last, last.separator == .end else { return [] }
+        return last.words.map(\.text)
+    }
+
+    /// The naive split used where the shell grammar refuses the text, as an unclosed quote mid-word does.
+    private static func legacySimpleCommand(before leading: String) -> [String] {
         let words = leading.split(separator: " ").map(String.init)
         // An operator stands alone or hangs off the word before it, as `cd x;` does.
         guard
