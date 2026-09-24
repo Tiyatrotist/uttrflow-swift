@@ -132,6 +132,7 @@ automatically — its pack is a designed set rather than a predictable archive.
 `Scripts/bundle.sh` needs no change; `.process("Resources")` already seals whatever is
 there into `Contents/Resources`.
 
-**A decision, not a task.** Onboarding currently puts sign-in *before* welcome, taking
-"the first thing anyone sees" literally. Pitching before charging is usually better.
-Swapping them is two lines in `OnboardingStep.position`.
+**Settled.** Onboarding puts welcome *before* sign-in: `OnboardingStep.position` gives
+`.welcome` position 1 and `.signIn` position 2, so the app says what it is for before it
+asks who the user is. Pitching before charging won out over "the first thing anyone
+sees" literally being the sign-in step.
