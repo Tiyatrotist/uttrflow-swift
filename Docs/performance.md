@@ -1250,8 +1250,7 @@ below is one run of the commands under [re-running it](#re-running-it), taken on
 **14 September 2026** at `1cfd688`, Release build, the same M5 Pro, load average 6–30.
 
 **One process loads the recogniser once and plays every clip.** Separate processes, one per clip,
-stall each other: every one of them compiles for the Neural Engine at the same moment, and a
-freshly built binary does not inherit the compiled copy — 205 s for this run's first load, and
+stall each other: every one of them compiles for the Neural Engine at the same moment — 205 s for this run's first load, and
 527–882 s on the same day under a load average of 100–200. `uttrflow-dev dictate` is one clip per
 process, which is why it cannot run a corpus.
 
@@ -1402,7 +1401,7 @@ temporary print over 528 decodes of the same corpus, not part of the harness:
 
 | | seconds | processor seconds | footprint once loaded |
 |---|---|---|---|
-| first load of a freshly built binary, load average 8–80 | 205–254 | 25–26 | 156–222 MB |
+| Cold first load (no compiled copy), load average 8–80 | 205–254 | 25–26 | 156–222 MB |
 | a later process, compiled copy cached, WhisperKit's prewarm on (shipping) | 2.2–2.5 | 2.2 | 109 MB |
 | the same without prewarm | 1.2–1.3 | 1.2 | 95 MB |
 
