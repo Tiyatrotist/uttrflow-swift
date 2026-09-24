@@ -12,7 +12,7 @@ open dist/Uttrflow-Dev.app
 
 ## What differs, and what it buys
 
-`Scripts/bundle.sh development` takes `Resources/Uttrflow-Info.plist` and changes three
+`Scripts/bundle.sh development` takes `Resources/Uttrflow-Info.plist` and changes four
 things in a temporary copy. Nothing else in the build differs, and `make app` is
 untouched.
 
@@ -21,6 +21,7 @@ untouched.
 | `CFBundleIdentifier` | `com.uttrflow.Uttrflow` | `com.uttrflow.Uttrflow.dev` |
 | `CFBundleName` | `Uttrflow` | `Uttrflow Dev` |
 | `SUFeedURL`, `SUPublicEDKey`, `SUEnableAutomaticChecks` | set | removed |
+| `UttrflowBackendURL` | set | removed |
 
 The identifier is the whole mechanism. macOS keys almost everything an app owns off it,
 so changing it separates all of them at once:
@@ -35,6 +36,12 @@ so changing it separates all of them at once:
 
 The update feed is removed because a development build that found the release would
 install it over itself, which is the one way this build can turn back into the other one.
+
+**It signs in against nothing, on purpose.** `OnboardingAccountLayer.forThisBuild()`
+only reaches the real backend when the bundle has both `UttrflowBackendURL` and a
+compiled-in release key; with the URL gone, it always falls back to
+`InMemoryAuthenticationService`, so the development build never opens a real account
+session against the production service.
 
 ## What it costs
 
