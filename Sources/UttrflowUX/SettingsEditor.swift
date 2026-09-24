@@ -32,7 +32,7 @@ public enum SettingsEditor {
         case .anchor(let anchor):
             updated.floatingButtonAnchor = anchor
         case .shortcut(let action, let binding):
-            if let rejection = rejection(forShortcut: binding) { throw rejection }
+            if let rejection = rejection(forShortcut: binding, for: action) { throw rejection }
             if let clash = clash(for: action, binding: binding, in: updated) { throw clash }
             updated.shortcuts.replace(at: 0, with: binding, for: action)
             updated.shortcutsReturnedToDefault.remove(action)
@@ -163,9 +163,14 @@ public enum SettingsEditor {
     static let bareModifier =
         "That key alone is part of too many other shortcuts. Add a key or another modifier, or hold fn."
 
-    /// The one gate a shortcut passes to be saved, asked by both the recorder and the editor.
+    /// Said for a held-modifier chord on an action Carbon registers, which cannot arm it. See `Docs/core-hotkeys.md`.
+    static let heldChordNotClaimable =
+        "A held combination of modifiers can only be the Dictate shortcut. Add a letter or number key."
 
-    static func rejection(forShortcut binding: HotkeyBinding) -> SettingsRejection? {
+    /// The one gate a shortcut passes to be saved, asked by both the recorder and the editor.
+    static func rejection(
+        forShortcut binding: HotkeyBinding, for action: ShortcutAction
+    ) -> SettingsRejection? {
         if binding.isBareModifier {
             return SettingsRejection(reason: bareModifier)
         }
@@ -181,6 +186,12 @@ public enum SettingsEditor {
             // Reached only by a key code no keyboard sends; modifier-only combinations are fine.
             return SettingsRejection(
                 reason: "That key did not come from the keyboard, so it cannot start a dictation.")
+        }
+        if binding.heldModifier != nil,
+            ShortcutRegistry.descriptor(for: action).delivery == .claimed
+        {
+            // Deliverable in general, but Carbon refuses every held-modifier-only combination.
+            return SettingsRejection(reason: heldChordNotClaimable)
         }
         return nil
     }

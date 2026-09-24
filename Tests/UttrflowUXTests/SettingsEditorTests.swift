@@ -62,11 +62,21 @@ struct SettingsShortcutValidationTests {
     }
 
     /// The sentence covers only what it can mean: a key code no keyboard sends.
-    @Test("accepts a modifier combination held on its own")
+    @Test("accepts a modifier combination held on its own for the observed action")
     func acceptsHeldModifierCombination() {
         // 58 is Option's own key code — what arrives when ⌃⌥ is pressed in the field.
         #expect(
             refusal(.shortcut(.dictate, HotkeyBinding(keyCode: 58, modifiers: [.control, .option]))) == nil)
+    }
+
+    /// Issue 1207: Carbon rejects a held-modifier-only combination outright, so a claimed action can never arm it.
+    @Test("refuses a held modifier combination for every claimed action, and says why")
+    func refusesHeldModifierCombinationForClaimedAction() {
+        let heldChord = HotkeyBinding(keyCode: 58, modifiers: [.control, .option])
+        for action: ShortcutAction in [.clipboard, .pasteLastTranscript, .copyLastTranscript] {
+            #expect(
+                refusal(.shortcut(action, heldChord)) == SettingsEditor.heldChordNotClaimable, "\(action)")
+        }
     }
 
     /// Issue 342: ⌘C, ⌥→ and ⌥A all fired a bare-modifier binding, so the sentence has to say why and what to do.

@@ -173,6 +173,22 @@ struct SettingsShortcutRecorderTests {
         }
     }
 
+    /// Issue 1207: Carbon cannot arm a claimed action with a held-modifier-only combination, so the recorder refuses it too.
+    @Test("refuses a held modifier combination for a claimed action and keeps the previous shortcut")
+    func heldModifiersAreRefusedForAClaimedAction() {
+        for action: ShortcutAction in [.clipboard, .pasteLastTranscript, .copyLastTranscript] {
+            var recorder = SettingsShortcutRecorder(binding: .optionSpace, action: action)
+            recorder.beginRecording()
+            let outcome = recorder.record(keyCode: 58, modifiers: [.control, .option])
+
+            #expect(
+                outcome == .refused(SettingsRejection(reason: SettingsEditor.heldChordNotClaimable)),
+                "\(action)")
+            #expect(recorder.binding == .optionSpace, "\(action)")
+            #expect(recorder.isRecording, "\(action)")
+        }
+    }
+
     /// Issue 342: one of these alone is part of every shortcut that uses it, so the field refuses it and keeps listening.
     @Test("refuses a modifier pressed on its own and keeps the previous shortcut")
     func bareModifiersAreRefused() {
