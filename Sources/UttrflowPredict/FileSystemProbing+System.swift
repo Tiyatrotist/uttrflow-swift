@@ -31,6 +31,8 @@ public struct SystemFileSystem: FileSystemProbing {
     private let now: @Sendable () -> Date
     /// The volumes that missed a deadline, and until when they are skipped.
     private let slow = SlowVolumes()
+    /// The volumes with a worker still out, so a retry never starts a second one while the first has not returned.
+    private let inFlight = InFlightVolumes()
 
     /// The filesystem of this Mac, its search path read from the launch environment and `/etc/paths`.
     public init(
@@ -71,8 +73,19 @@ public struct SystemFileSystem: FileSystemProbing {
     public func kind(atPath path: String) -> PathKind {
         guard let volume = Self.remoteVolume(of: path) else { return probe(path) }
         guard !slow.isSlow(volume, at: now()) else { return .unknown }
+        // A worker still running past its own deadline is not restarted; only the one that started it may end it.
+        guard inFlight.begin(volume) else { return .unknown }
         let probe = self.probe
-        guard let kind = timeBox(budget, { probe(path) }) else {
+        let inFlight = self.inFlight
+        guard
+            let kind = timeBox(
+                budget,
+                {
+                    let kind = probe(path)
+                    inFlight.end(volume)
+                    return kind
+                })
+        else {
             slow.markSlow(volume, until: now().addingTimeInterval(Self.slowVolumeLifetimeInSeconds))
             return .unknown
         }
@@ -147,5 +160,23 @@ private final class SlowVolumes: Sendable {
 
     func markSlow(_ volume: String, until moment: Date) {
         until.withLock { $0[volume] = moment }
+    }
+}
+
+/// The volumes with a probe out right now, each claimed by the one worker allowed to run it.
+private final class InFlightVolumes: Sendable {
+    private let volumes = Mutex<Set<String>>([])
+
+    /// Claims this volume for one probe, answering whether it was free to claim; only that call may later end it.
+    func begin(_ volume: String) -> Bool {
+        volumes.withLock {
+            guard !$0.contains(volume) else { return false }
+            $0.insert(volume)
+            return true
+        }
+    }
+
+    func end(_ volume: String) {
+        volumes.withLock { _ = $0.remove(volume) }
     }
 }
