@@ -286,6 +286,8 @@ if [[ "$MODE" == "development" ]]; then
     plutil -remove SUFeedURL "$DEVELOPMENT_PLIST" >/dev/null 2>&1 || true
     plutil -remove SUPublicEDKey "$DEVELOPMENT_PLIST" >/dev/null 2>&1 || true
     plutil -remove SUEnableAutomaticChecks "$DEVELOPMENT_PLIST" >/dev/null 2>&1 || true
+    # Without this, OnboardingAccountLayer.forThisBuild() finds the production backend anyway.
+    plutil -remove UttrflowBackendURL "$DEVELOPMENT_PLIST" >/dev/null 2>&1 || true
     SOURCE_PLIST="$DEVELOPMENT_PLIST"
     BUNDLE_ID="$(plist_value CFBundleIdentifier "$SOURCE_PLIST")" \
         || fail "the development Info.plist lost its CFBundleIdentifier"
