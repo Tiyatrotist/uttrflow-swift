@@ -33,17 +33,12 @@ answer in more than one place. This page holds what was measured so the code can
   abandoned in a `defer`. An abandoned poller outlives the call that started it, can take one more
   reading and attribute it to work that has already finished, and the stack it belongs to may be
   torn down underneath it. Waiting costs one scheduler hop.
-- The wait between readings is injectable, and for a sharper reason than convenience: the
-  default waits on the wall clock, so a test asserting that polling happened would be asserting
-  that the machine was not busy, and on a loaded Mac it fails. A test supplies a wait it controls
-  and gets an exact number of readings. A `Clock` would not do: every manual clock in this
-  codebase returns from `sleep` immediately, which turns the poller into a spin and makes the
-  count less predictable. Returning `false` from the wait is how cancellation is reported and how
-  a test says it has seen enough.
-- The default wait is a named function, not a closure literal in the default argument. A default
-  argument is compiled at the call site, so an `async` closure written there has its frame
-  allocated by whichever task evaluates it, and when that is not the task that later awaits it
-  the runtime's allocator is entitled to object.
+- The clock between readings is injectable, and for a sharper reason than convenience: the
+  default sleeps on the wall clock, so a test asserting that polling happened would be asserting
+  that the machine was not busy, and on a loaded Mac it fails. A test supplies `ManualClock`,
+  which genuinely suspends `sleep(for:)` until the test advances it, and gets an exact number of
+  readings — see `PeakMemoryTests` in `MemoryReadingTests.swift`. Cancelling the poller's sleep is
+  how the loop stops; it never spins.
 
 ## Processor time: two interfaces, half of each
 

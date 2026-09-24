@@ -65,18 +65,18 @@ public enum PeakMemory {
     /// How often memory is read: fast enough to catch a model materialising, slow enough not to be the cost.
     public static let defaultInterval = Duration.milliseconds(20)
 
-    /// Runs `operation` sampling memory throughout; `wait` is injectable so tests control the reading count.
+    /// Runs `operation` sampling memory throughout; `clock` is injectable so a test controls the reading count.
     public static func observed<Success, Failure: Error>(
         interval: Duration = defaultInterval,
         read: @escaping @Sendable () -> MemoryReading? = MemoryFootprint.reading,
-        wait: @escaping @Sendable (Duration) async -> Bool = PeakMemory.sleeping,
+        clock: some Clock<Duration> = ContinuousClock(),
         during operation: () async throws(Failure) -> Success
     ) async throws(Failure) -> (value: Success, peak: MemoryReading?) {
         let recorder = Recorder(read: read)
         await recorder.observe()
         let poller = Task {
-            while await wait(interval) {
-                // Checked after the wait too: a reading after cancellation belongs to the caller's next work.
+            while (try? await clock.sleep(for: interval)) != nil {
+                // Checked after the sleep too: a reading after cancellation belongs to the caller's next work.
                 guard !Task.isCancelled else { break }
                 await recorder.observe()
             }
@@ -94,12 +94,6 @@ public enum PeakMemory {
         // One last reading after the work, so a peak in the final milliseconds does not fall between polls.
         await recorder.observe()
         return (value, await recorder.peak)
-    }
-
-    /// The default wait: sleeps, then carries on unless cancelled. Named; see Docs/eval-profiling.md.
-    public static func sleeping(for interval: Duration) async -> Bool {
-        do { try await Task.sleep(for: interval) } catch { return false }
-        return true
     }
 
     private static func stop(_ poller: Task<Void, Never>) async {
