@@ -50,8 +50,13 @@ paragraph. `nil` when nothing was timed.
 ## Streak
 
 Counted back from the most recent day, not from today, so a streak is not reported broken
-at breakfast. A streak that reaches the oldest thing kept is a floor, and the comment says
-"at least".
+at breakfast. A streak that merely reaches the oldest entry the app happens to have is not
+evidence of anything: a new user's whole history is "the oldest thing kept". The "at
+least — anything older has been deleted" comment only appears when the run's length
+reaches the retention window itself, since entries older than that are already filtered
+out before the streak is counted — reaching that many days without a gap is the actual
+evidence that something older existed and was deleted. Short of that, the comment reads
+plainly: "days in a row".
 
 ## Comparisons
 
