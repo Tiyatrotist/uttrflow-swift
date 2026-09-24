@@ -47,9 +47,10 @@ being discovered a launch later as a model that will not load.
 
 The weights download into `<root>/.partial/<variant>/`, never into the model's directory. Only
 when every weight file is there are they moved in: a tokenizer already in the model's directory is
-carried into staging, and staging then replaces the directory in one `replaceItemAt`. A process
-killed at any point before that leaves the model's directory as it was, so nothing half-fetched is
-ever mistaken for a model.
+copied into staging, not moved, so the model's directory keeps its own tokenizer until staging
+replaces the whole directory in one `replaceItemAt`. A process killed at any point before that —
+including between the copy and the swap — leaves the model's directory as it was, so nothing
+half-fetched is ever mistaken for a model.
 
 The model root, staging folders, installed model folders and tokenizer files are marked
 `isExcludedFromBackup`. They are public downloaded data and can be fetched again, so backup tools

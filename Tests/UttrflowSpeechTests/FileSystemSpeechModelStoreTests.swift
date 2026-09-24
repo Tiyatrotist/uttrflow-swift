@@ -298,6 +298,51 @@ struct FileSystemSpeechModelStoreTests {
         #expect(store.isInstalled(.base))
     }
 
+    /// A failed swap after the tokenizer is staged must leave the destination's own tokenizer alone.
+    @Test("keeps the destination's tokenizer when the swap that follows staging it fails")
+    func tokenizerSurvivesAFailedSwap() async throws {
+        let sandbox = Sandbox()
+        let hasLockedRootOnce = Mutex(false)
+        let store = FileSystemSpeechModelStore(root: sandbox.root) { _, component, destination, _ in
+            switch component {
+            case .weights:
+                try writeWeights(into: destination, bytesEach: 16)
+                // Locked only on the first attempt, so a retry after this test unlocks it can finish.
+                let wasLocked = hasLockedRootOnce.withLock { locked -> Bool in
+                    defer { locked = true }
+                    return locked
+                }
+                if !wasLocked {
+                    try FileManager.default.setAttributes(
+                        [.posixPermissions: 0o555], ofItemAtPath: sandbox.root.path)
+                }
+            case .tokenizer:
+                try writeTokenizer(into: destination)
+            }
+        }
+        let folder = store.location(of: .base)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try writeTokenizer(into: folder)
+        let original = try Data(contentsOf: folder.appending(path: TokenizerAssets.fileNames[0]))
+
+        // Root read-only after the weights land, so the swap needs a rename root now refuses.
+        await #expect(throws: SpeechEngineError.self) { try await store.install(.base) { _ in } }
+
+        #expect(!store.isInstalled(.base), "the swap did not happen")
+        for name in TokenizerAssets.fileNames {
+            #expect(
+                FileManager.default.fileExists(atPath: folder.appending(path: name).path),
+                "the destination's own \(name) must survive a swap that never happened")
+        }
+        #expect(try Data(contentsOf: folder.appending(path: TokenizerAssets.fileNames[0])) == original)
+
+        // Recovery: once the directory can be swapped, the very same install finishes normally.
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: sandbox.root.path)
+        try await store.install(.base) { _ in }
+        #expect(store.isInstalled(.base))
+    }
+
     /// Files a failed download already fetched stay in staging, so asking again resumes rather than restarts.
     @Test("keeps a failed weights download in staging and leaves the model's directory alone")
     func failedWeightsDownloadStaysStaged() async throws {
