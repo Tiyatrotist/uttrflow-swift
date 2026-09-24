@@ -29,6 +29,8 @@ GHOST_RE='(GENERATE .* got=[1-9][0-9]* |VERIFY .* out=[1-9][0-9]* )'
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(mktemp -d)"
 HELPER="$WORK/helper"
+# Installed as soon as WORK exists, so a preflight exit below still removes it.
+trap finish EXIT
 SHOTS="${REPORT%.md}-shots"
 JSON="${REPORT%.md}.json"
 LRM="$(printf '\xe2\x80\x8e')"
@@ -532,13 +534,14 @@ EOF
   say "json:   $JSON"
 }
 
-# Runs once on exit, tolerating errors so a partial or aborted run still closes its windows and writes a report.
+# Runs once on exit, tolerating errors so a partial or aborted run still closes its windows and writes a
+# report; removes the compiled helper and scratch directory last, since write_report reads out of it.
 finish() {
   trap - EXIT
   set +e
   close_everything
   [ -s "$WORK/rows.tsv" ] && write_report
-  rm -f "$WORK"/excerpt-*.txt "$WORK/rows.tsv" "$WORK/finder-id"
+  rm -rf "$WORK"
 }
 
 # ---- main ---------------------------------------------------------------------------------------
@@ -549,7 +552,6 @@ APP_PID="$(pgrep -f 'Uttrflow-Dev.app/Contents/MacOS/Uttrflow' | head -n 1)" || 
 mkdir -p "$SHOTS" "$(dirname "$REPORT")"
 xcrun swiftc -O "$HERE/e2e_predict_helper.swift" -o "$HELPER"
 : >"$WORK/rows.tsv"
-trap finish EXIT
 
 wait_for_idle || { echo "the user was never idle ${IDLE_REQUIRED}s within ${MAX_WAIT}s; nothing was run" >&2; exit 4; }
 loop_alive || { echo "the log at $LOG has not advanced in 5 s; is the app running and the stream attached?" >&2; exit 2; }
