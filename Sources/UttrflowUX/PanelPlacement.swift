@@ -31,6 +31,11 @@ public enum PanelPlacement {
             x: min(max(origin.x, visible.minX), max(visible.maxX - size.width, visible.minX)),
             y: min(max(origin.y, visible.minY), max(visible.maxY - size.height, visible.minY)))
     }
+
+    /// Shrinks a size to fit the visible frame, so a panel taller or wider than the display can still open whole.
+    public static func fitted(_ size: CGSize, in visible: CGRect) -> CGSize {
+        CGSize(width: min(size.width, visible.width), height: min(size.height, visible.height))
+    }
 }
 
 /// Remembers where the user left the panel on each display, so a spot on one never places it on another.
