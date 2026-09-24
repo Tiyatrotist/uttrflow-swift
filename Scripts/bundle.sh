@@ -10,9 +10,10 @@
 #
 # Why the build is xcodebuild and not `swift build`
 #
-# Two of the dependencies the app links carry resources of their own —
-# swift-transformers' Hub and swift-crypto's Crypto — and the build system generates
-# a `Bundle.module` accessor for each of them. The accessor `swift build` generates
+# Three of the dependencies the app links carry resources of their own —
+# swift-transformers' Hub, swift-crypto's Crypto, and mlx-swift's Cmlx (its compiled
+# Metal shader library, default.metallib) — and the build system generates a
+# `Bundle.module` accessor for each of them. The accessor `swift build` generates
 # knows exactly two places to look:
 #
 #     <Bundle.main.bundleURL>/swift-transformers_Hub.bundle
@@ -60,6 +61,21 @@ set -euo pipefail
 fail() {
     echo "error: $*" >&2
     exit 1
+}
+
+# The app target depends on UttrflowLocalModel, which links MLX, so every build this
+# script produces compiles Cmlx and needs the Metal Toolchain — not only `make
+# bakeoff`. Checked before xcodebuild starts, so a Mac missing the optional component
+# fails in one line instead of partway through MLX compilation.
+metal_toolchain_available() {
+    xcrun metal --version >/dev/null 2>&1
+}
+
+require_metal_toolchain() {
+    metal_toolchain_available || fail "$(
+        printf 'Metal Toolchain missing — the app links UttrflowLocalModel, which compiles MLX.\n'
+        printf '  Install it with: xcodebuild -downloadComponent MetalToolchain'
+    )"
 }
 
 adhoc_designated_requirement() {
@@ -168,8 +184,22 @@ run_requirement_self_test() {
     printf 'bundle designated-requirement self-test passed\n'
 }
 
+run_metal_toolchain_self_test() {
+    xcrun() { return 1; }
+    if metal_toolchain_available; then
+        fail "metal toolchain probe reported present when xcrun could not find metal"
+    fi
+    xcrun() { [[ "$1" == metal && "$2" == --version ]]; }
+    metal_toolchain_available \
+        || fail "metal toolchain probe reported missing when xcrun found metal"
+    unset -f xcrun
+
+    printf 'metal toolchain prerequisite self-test passed\n'
+}
+
 if [[ "${1:-}" == "--requirement-self-test" ]]; then
     run_requirement_self_test
+    run_metal_toolchain_self_test
     exit 0
 fi
 
@@ -277,12 +307,12 @@ if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode.app/Contents/Developer ]
 fi
 command -v xcodebuild >/dev/null 2>&1 \
     || fail "xcodebuild is not on PATH — the full Xcode is required, the Command Line Tools alone will not do"
+require_metal_toolchain
 
-# -scheme Uttrflow builds the app target's own dependency graph and nothing else, so
-# MLX — which is reachable only from uttrflow-bakeoff — is never compiled and the Metal
-# Toolchain is not needed here. (`make bakeoff` is the target that does need it.)
-# Package *resolution* still fetches every dependency the manifest names, MLX
-# included, so the first run on a fresh clone spends a while in the network.
+# -scheme Uttrflow builds the app target's own dependency graph, which includes
+# UttrflowLocalModel and therefore MLX — so Cmlx is compiled here too, not only by
+# `make bakeoff`. Package *resolution* still fetches every dependency the manifest
+# names, MLX included, so the first run on a fresh clone spends a while in the network.
 echo "Building $SCHEME ($CONFIGURATION) with xcodebuild — a few minutes from cold."
 
 # ENABLE_CODE_COVERAGE=NO, because a Release build of this package is instrumented

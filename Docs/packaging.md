@@ -7,11 +7,13 @@ to rediscover.
 
 ## The bind
 
-Two of the dependencies the app links carry resources of their own —
-swift-transformers' `Hub`, which ships fallback tokeniser configurations, and
-swift-crypto's `Crypto`, which ships a privacy manifest. Each gets a generated
-`Bundle.module` accessor, and the accessor decides at runtime where to look for its
-`.bundle`. The accessor `swift build` generates knows exactly two places:
+Three of the dependencies the app links carry resources of their own —
+swift-transformers' `Hub`, which ships fallback tokeniser configurations,
+swift-crypto's `Crypto`, which ships a privacy manifest, and mlx-swift's `Cmlx`, which
+ships the compiled Metal shader library the local model runs on
+(`default.metallib`). Each gets a generated `Bundle.module` accessor, and the accessor
+decides at runtime where to look for its `.bundle`. The accessor `swift build`
+generates knows exactly two places:
 
 ```swift
 let mainPath = Bundle.main.bundleURL.appendingPathComponent("swift-transformers_Hub.bundle").path
@@ -63,6 +65,7 @@ missing quietly.
 
 Beyond the Info.plist and entitlement checks it has always made:
 
+- The Metal Toolchain is installed, before `xcodebuild` is invoked — see Cost, above.
 - `codesign --verify --deep --strict` passes. This is the headline: it is what the old
   layout could not do.
 - The designated requirement is pinned to the bundle identifier, not to a cdhash.
@@ -101,9 +104,14 @@ dist/Uttrflow.app: a sealed resource is missing or invalid
 
 ## Cost
 
-`-scheme Uttrflow` builds the app target's own dependency graph and nothing else. MLX is
-reachable only from `uttrflow-bakeoff`, so `Cmlx` is never compiled and **the Metal
-Toolchain is not required for `make app`** — only for `make bakeoff`.
+`-scheme Uttrflow` builds the app target's own dependency graph — and that graph
+includes `UttrflowLocalModel`, which depends on MLX for the shipped suggestion
+feature. So `Cmlx` **is** compiled by `make app`, `make app-dev`, `make app-hardened`,
+and `make app-dist` alike, and **the Metal Toolchain is required for all four**, the
+same optional Xcode component `make bakeoff` needs. `Scripts/bundle.sh` checks for it
+before starting the `xcodebuild` build and fails with the install command
+(`xcodebuild -downloadComponent MetalToolchain`) rather than letting the build run
+long enough to fail inside MLX compilation.
 
 Package *resolution* still fetches every dependency the manifest names, MLX included,
 so a fresh clone spends a while in the network before the first build starts. Measured
