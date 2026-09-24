@@ -66,23 +66,32 @@ Nothing else.
 > computes at **14.7 minutes**. If the question is "did this engine change break anything?",
 > read [`measuring-accuracy.md`](measuring-accuracy.md) and stop here.
 
-About a thousand samples, roughly sixteen hours. Read them in sittings:
+About a thousand samples, roughly sixteen hours. Read them in sittings, uploading each
+take as it is accepted:
 
 ```bash
-uttrflow-eval record --backend <url> --cohort naveen-quiet --sync
+uttrflow-eval record --backend <url> --cohort <reader>-quiet --upload
 ```
 
 It is resumable, so stopping after twenty passages leaves the rest. **The local write is
 the commit** — audio is saved to disk before it is offered to the backend, so a crash or
-dead Wi-Fi costs an upload and never a take. Failed uploads retry next sitting.
+dead Wi-Fi costs an upload and never a take. If a sitting ends with uploads still owed —
+the backend was unreachable, say — retry them on their own with `--sync`, which sends
+whatever is outstanding and records nothing new:
+
+```bash
+uttrflow-eval record --backend <url> --sync
+```
 
 Slug validity is checked before you speak, because a name Postgres refuses discovered
 after forty passages is discovered too late.
 
-Then, unattended:
+Then, unattended, against the backend's catalogue — `--from-catalogue` measures only
+what is already cached locally, so pull first:
 
 ```bash
-uttrflow-eval transcribe --from-catalogue --save-baseline
+uttrflow-eval pull --backend <url>
+uttrflow-eval transcribe --from-catalogue --backend <url> --baseline ./baseline.json --save-baseline
 ```
 
 Results are never pooled into one number: by language, by stressor, by cohort. Any slice

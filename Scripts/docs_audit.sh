@@ -211,6 +211,96 @@ check_claude_md_delegation() {
     return 0
 }
 
+# Two argument rules `uttrflow-eval` enforces at runtime, re-derived statically so a
+# documented example can be checked without a build. See RecordCorpus.swift and
+# TranscribeCorpus.swift. Factored so `--self-test` can call it against fixtures.
+read -r -d '' UTTRFLOW_EVAL_CONTRACT_PROGRAM <<'PYTHON' || true
+import sys
+
+documents = sys.stdin.read().split("\n")
+findings = []
+for document in documents:
+    if not document:
+        continue
+    in_fence = False
+    for number, line in enumerate(open(document, errors="ignore"), 1):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence or "uttrflow-eval" not in line:
+            continue
+        tokens = line.split()
+        if "record" in tokens and "--sync" in tokens and (
+            "--cohort" in tokens or "--speaker" in tokens or "--setting" in tokens
+        ):
+            findings.append((
+                document, number, stripped,
+                "record --sync exits before the recording queue exists — a recording "
+                "flag (--cohort/--speaker/--setting) alongside it documents a command "
+                "that records nothing",
+            ))
+        if "transcribe" in tokens and (
+            "--save-baseline" in tokens or "--fail-on-regression" in tokens
+        ) and "--baseline" not in tokens:
+            findings.append((
+                document, number, stripped,
+                "transcribe --save-baseline/--fail-on-regression needs --baseline "
+                "<path>, or TranscribeCorpus.validate() rejects it",
+            ))
+
+for document, number, line, reason in findings:
+    print(f"{document}:{number}\t{line}\t{reason}")
+PYTHON
+
+uttrflow_eval_contract_findings() {
+    python3 -c "$UTTRFLOW_EVAL_CONTRACT_PROGRAM"
+}
+
+run_uttrflow_eval_contract_self_test() {
+    local work
+    work="$(mktemp -d -t uttrflow-docs-audit-cli.XXXXXX)"
+
+    cat >"$work/good.md" <<'DOC'
+```bash
+uttrflow-eval record --backend <url> --cohort <reader>-quiet --upload
+uttrflow-eval record --backend <url> --sync
+uttrflow-eval transcribe --from-catalogue --backend <url> --baseline ./b.json --save-baseline
+```
+DOC
+    cat >"$work/bad.md" <<'DOC'
+```bash
+uttrflow-eval record --backend <url> --cohort <reader>-quiet --sync
+uttrflow-eval transcribe --from-catalogue --save-baseline
+```
+DOC
+
+    printf 'uttrflow-eval example self-test\n'
+
+    local good_report
+    good_report="$(printf '%s\n' "$work/good.md" | uttrflow_eval_contract_findings)"
+    if [[ -z "${good_report//[[:space:]]/}" ]]; then
+        pass "a compliant record/transcribe example passes"
+    else
+        fail "a compliant example was flagged" "$good_report"
+    fi
+
+    local bad_report
+    bad_report="$(printf '%s\n' "$work/bad.md" | uttrflow_eval_contract_findings)"
+    if [[ "$(printf '%s\n' "$bad_report" | grep -c .)" -eq 2 ]]; then
+        pass "record --sync-as-recording and transcribe without --baseline both fail"
+    else
+        fail "the self-test's two known-bad lines were not both caught" "$bad_report"
+    fi
+
+    rm -rf "$work"
+}
+
+if [[ "$SELF_TEST" -eq 1 ]]; then
+    run_uttrflow_eval_contract_self_test
+    printf '\n'
+fi
+
 # `--self-test` runs the CLAUDE.md delegation fixture before the normal scan, so the
 # audit's checks themselves fail noisily when they stop biting. Same pattern as
 # log_privacy_audit.py and perf_budget_audit.py.
@@ -735,10 +825,33 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 8. Documented `uttrflow-eval` commands obey their own argument rules.
+# ---------------------------------------------------------------------------
+#
+# Issue #1227 was two exit-early bugs wearing a code example: the runbook showed
+# `record --sync` as the command that reads a passage aloud, but `RecordCorpus.run()`
+# handles `sync` before the recording queue exists and returns immediately — and it
+# showed `transcribe --from-catalogue --save-baseline` with no `--baseline <path>`,
+# which `TranscribeCorpus.validate()` rejects outright (exit 64). Both read as working
+# commands. This re-derives the two argument rules statically and checks every fenced
+# `uttrflow-eval` invocation in the tree against them.
+printf '\n`uttrflow-eval` examples\n'
+
+cli_report="$(uttrflow_eval_contract_findings <<<"$DOCS")"
+
+if [[ -n "${cli_report//[[:space:]]/}" ]]; then
+    fail "a documented uttrflow-eval command violates its own argument rules" \
+        "Each line: where, the command as written, and which rule it breaks." \
+        "" $'\n'"$(printf '%s\n' "$cli_report" | sed 's/\t/  /g')"
+else
+    pass "every documented uttrflow-eval invocation satisfies its own argument rules"
+fi
+
+# ---------------------------------------------------------------------------
 printf '\n'
 if [[ "$failures" -gt 0 ]]; then
     printf 'docs audit: %s check(s) failed. The documentation contradicts the tree.\n\n' "$failures" >&2
     exit 1
 fi
 
-printf 'docs audit: the paths, links, test count, worktree cleanup order, release bullets and CLAUDE.md delegation in %s documents all check out.\n\n' "$DOC_COUNT"
+printf 'docs audit: the paths, links, test count, worktree cleanup order, release bullets, CLAUDE.md delegation and uttrflow-eval examples in %s documents all check out.\n\n' "$DOC_COUNT"
