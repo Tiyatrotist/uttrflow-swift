@@ -145,8 +145,12 @@ being left to notice it — which fixed `editor-identifier-casing` and
 until now: neither declared a doubtful run, and a case that declares none is never asked of
 a candidate source, so both were measuring a model noticing a spelling unaided. They declare
 one now, and every score recorded for them below predates that. Sequence lists and
-paragraph breaks still have no case, so the first step for each is a case, not a prompt
-line. `Docs/bakeoff.md` explains why: a prompt line that is not
+paragraph breaks are both covered now: `new-paragraph`, `full-stop-new-paragraph` and
+`email-two-paragraphs` are the paragraph-break cases, and `document-numbered-items-after-a-sentence`
+plus the ten-case `numbered-items-*` matrix cover numbered lists — `RulesCorpusTests` names
+every one of them as rule-answerable, and that is the source of truth for what is covered,
+not this paragraph. A gap that is still open gets a case before a prompt line, the same as
+these did. `Docs/bakeoff.md` explains why: a prompt line that is not
 measured is a guess, and two of the last three guesses made the output worse.
 
 **Seven cases fail on the shipping configuration, measured 2026-09-06 and left failing
