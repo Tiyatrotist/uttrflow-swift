@@ -13,17 +13,21 @@ as proof of coverage against the PRD. If the original text resurfaces, the first
 diff it against this list.
 
 Verdicts were produced by running the checks in the right-hand column, not by reading.
+✅ marks something enforced in code and covered by tests today; ⚠️ marks a recorded,
+deliberate deviation from the promise; ❓ marks a promise that is only partly checked —
+what was actually run is named, and what was not is named too, rather than folding the
+gap into a claim of "measured".
 
 ## The promises
 
 | § | The promise | How it is held | Verdict |
 |---|---|---|---|
 | 9 | Meaning must not change | `MeaningPreservationGuard` rejects a tidy-up that drops or invents content; English and Hindi number words are equated so "बीस" → "20" does not read as invention | ✅ enforced in code, covered by tests |
-| 14 | Never overwrite what the user did not select | Structural, not vigilance: `FocusedTextField` exposes exactly one mutating operation, `replaceSelection(with:)`. No code path exists that could reach the rest of the field | ✅ verified — that is the entire mutating surface of the protocol |
+| 14 | Never overwrite what the user did not select | `FocusedTextField` exposes exactly two mutating operations: `replaceSelection(with:)`, and `replaceSelection(replacing:with:)` for a completion, which `SelectionWriter` implements by moving the selection backward over the preceding text only after confirming that text is actually there, then replacing it in one write | ✅ verified — `Tests/UttrflowInputTests/SelectionWriterTests.swift` covers both operations, including the confirmation refusing to move over text that does not match |
 | 15 | The dictation states the interface must draw | `DictationState`: `idle`, `recording`, `transcribing`, `tidying`, `inserted`, plus `failed` as a way of leaving rather than a sixth kind of progress | ✅ matches |
 | 16 | The user must never learn which engine ran | Tests scan every string on every pane, page, menu and error for engine, model and vendor names. Six test files enforce it | ✅ enforced; the diagnostics page uses capability descriptions ("Downloaded speech model"), never a product name |
 | 19 | Whatever fails, the user's words stay reachable | `FallbackRunner` under insertion; a failed tidy-up inserts the raw transcript; a failed insertion keeps the text and routes the user to Recent | ✅ enforced, with the salvage path now actually writing to history |
-| 20 | Report idle memory, the speech model loaded, and the language model | `uttrflow-bakeoff profile` and `footprint` | ✅ measured: 10.9 MB idle, +113 MB for the speech model, 273.6 MB peak mid-dictation. Leak check over 30 dictations: **clean** — footprint falls. `Docs/performance.md` |
+| 20 | Report idle memory, the speech model loaded, and the language model | `uttrflow-bakeoff profile` and `footprint` | ❓ idle and speech-model memory are measured: 10.9 MB idle, +113 MB for the speech model, 273.6 MB peak mid-dictation, with a clean 30-dictation leak check — `Docs/performance.md`. The local MLX language model is not: none was installed when that page's numbers were taken, and it says so. `uttrflow-bakeoff footprint` can measure it; no dated result for that run is recorded here yet |
 | 22 | The numbers are for reading on the machine, never sent | Diagnostics is in-memory and bounded; nothing serialises or uploads it | ✅ — and see `Docs/offline.md` for the network audit |
 | 29 | No audio saved | **Deviated, deliberately (2026-09-04).** Each dictation's audio is written beside the live buffer and deleted the moment its words land; it is kept for a day only when the words were lost, so the dictation can be retried. Nothing leaves the Mac. `Docs/recordings.md` | ⚠️ recorded deviation; the privacy copy and `SettingsPrivacyCopyTests` say what is now true |
 | 31 | No tiny fallback LLM | **Deviated, deliberately.** A local open-weight model ships, because Apple's Foundation Models have no Hindi | ⚠️ recorded deviation |
@@ -54,7 +58,9 @@ Recorded in full under *Deviations from the PRD* in `PLAN.md`. In brief:
 - **Context does not turn speech into SQL.** The largest deviation, and the one that
   narrows the product most. Seven prompt designs were tried; every one strong enough to
   produce SQL also invented content the speaker never said. Context does spelling only.
-- **§29 is no longer a deviation** — the PRD was right and the plan was wrong.
+- **§29 is still a deviation.** `PLAN.md` and `Docs/recordings.md` both record it as
+  deliberate and current, matching the promise table above; an earlier draft of this
+  section said the opposite and was wrong.
 
 ## What this document cannot tell you
 
