@@ -5,6 +5,11 @@ the module that owns it by its path under Sources/<Module>/.
 
 Exclusions are listed here with their reason and printed on every run. A coverage
 gate that hides what it skipped reports a number nobody can trust.
+
+The rule an exclusion has to keep — that the file is small enough for reading it to be
+a sufficient review — is checked here too, with `--check-exclusions`, because for years
+it was only written down: the list had grown to hold a 2,263-line file while still
+claiming every entry could be reviewed by reading.
 """
 
 from __future__ import annotations
@@ -12,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 THRESHOLD = float(os.environ.get("THRESHOLD", "95"))
@@ -25,8 +31,10 @@ EXCLUDED_MODULES = {
     "uttrflow-bakeoff": "measurement harness; argument wiring and printing only",
 }
 
-# Files whose behaviour can only be exercised by real hardware or a real user. Each
-# one must be small enough that reading it is a sufficient review.
+# Files whose behaviour can only be exercised by real hardware or a real user. Each one
+# must be small enough that reading it is a sufficient review, which `REVIEWABLE_LINES`
+# below is the measure of; an entry over that size is listed in `OVERSIZED_EXCLUSIONS`
+# with where its decisions are tested instead.
 EXCLUDED_FILES = {
     "UttrflowAudio/AVAudioEngineMicrophoneSource.swift": "drives a physical microphone",
     "UttrflowAudio/RecordingCue+System.swift": "plays a sound out of the speakers",
@@ -143,7 +151,10 @@ EXCLUDED_FILES = {
     ),
     "Uttrflow/Suggestion/SuggestionView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Panel/QuickPanelController.swift": "owns an on-screen floating window",
-    "Uttrflow/Panel/QuickPanelView.swift": "SwiftUI, drawn from a tested presentation",
+    "Uttrflow/Panel/QuickPanelView.swift": (
+        "SwiftUI, drawn from a tested presentation, apart from the ⌘-chord and Escape handling "
+        "it decides itself, which #630 moves into a pure type in UttrflowUX"
+    ),
     "Uttrflow/Dock/DockView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/MenuBar/MenuBarController.swift": "owns a menu bar item",
     "UttrflowSpeech/TokenizerDownload.swift": "fetches the tokenizer over the real network at install time",
@@ -166,6 +177,41 @@ EXCLUDED_FILES = {
     ),
 }
 
+# The most lines an excluded file may have for reading it to be a sufficient review. Past
+# this a reviewer skims, so the exclusion rests on nobody's judgement. Chosen to leave the
+# entries below and nothing else over the line, so the check starts green and ratchets down.
+REVIEWABLE_LINES = 400
+
+# The excluded files over that size, each with what carries the review instead of reading.
+# Listed rather than waived so the check cannot grow quietly: a file that arrives over the
+# limit fails until its decisions are tested or it is added here with a reason, and an entry
+# whose file has come back under the limit fails too, so the list only shrinks.
+OVERSIZED_EXCLUSIONS = {
+    "Uttrflow/AppDelegate.swift": (
+        "nothing covers the assembly beyond the intents in MainIntentWiringTests; #145 holds the "
+        "app target's test gap and #661 the split that would let the rest be tested"
+    ),
+    "Uttrflow/Panel/QuickPanelView.swift": (
+        "the ⌘-chord and Escape handling in it has no test at all; #630 moves it into UttrflowUX"
+    ),
+    "Uttrflow/Suggestion/SuggestionCoordinator.swift": (
+        "the two rules it keeps are tested in SuggestionReadGateTests and SuggestionDebounceTests"
+    ),
+    "Uttrflow/Dock/DockView.swift": "what DockViewModel decides is tested in DockClockTests and DockBarsTests",
+    "Uttrflow/Onboarding/OnboardingView.swift": (
+        "OnboardingModel forwards every press to OnboardingFlow, which OnboardingFlowTests drives"
+    ),
+    "Uttrflow/Main/MainPieces.swift": (
+        "views, metrics and colour mappings; the one rule among them is RowReveal, tested in RowRevealTests"
+    ),
+    "UttrflowLocalModel/MLXCandidateScorer.swift": (
+        "CompletionText holds the text rules its answers are read through, and is tested without MLX"
+    ),
+    "UttrflowContext/FocusedFieldReader+System.swift": (
+        "FocusedFieldSnapshot holds everything decided from what it reads, and is tested"
+    ),
+}
+
 
 def relative(path: str) -> Path | None:
     try:
@@ -174,7 +220,111 @@ def relative(path: str) -> Path | None:
         return None
 
 
+def line_counts(sources_root: Path, excluded: Iterable[str] = EXCLUDED_FILES) -> dict[str, int | None]:
+    """Lines in each excluded file, or None where the entry names a file that is not there."""
+    counts: dict[str, int | None] = {}
+    for path in excluded:
+        file = sources_root / path
+        counts[path] = (
+            len(file.read_text(encoding="utf-8").splitlines()) if file.is_file() else None
+        )
+    return counts
+
+
+def exclusion_problems(
+    counts: dict[str, int | None],
+    oversized: dict[str, str] = OVERSIZED_EXCLUSIONS,
+    limit: int = REVIEWABLE_LINES,
+) -> list[str]:
+    """Says where the exclusion list has stopped describing the tree, one sentence per problem."""
+    problems = []
+    for path in sorted(counts):
+        lines = counts[path]
+        if lines is None:
+            problems.append(f"{path} is excluded but is not in the tree; delete the entry")
+            continue
+        if lines > limit and path not in oversized:
+            problems.append(
+                f"{path} is {lines} lines, past the {limit} that reading it as a review is worth: "
+                "test what it decides and drop the exclusion, or list it in OVERSIZED_EXCLUSIONS "
+                "with what reviews it instead"
+            )
+        if lines > limit and not oversized.get(path, "x").strip():
+            problems.append(
+                f"{path} is listed as oversized with no reason; say what reviews it instead, "
+                "since an exclusion nobody can read is the silence this list exists to break"
+            )
+        if lines <= limit and path in oversized:
+            problems.append(
+                f"{path} is {lines} lines, back inside the {limit}-line limit; "
+                "delete its OVERSIZED_EXCLUSIONS entry, which now excuses nothing"
+            )
+    for path in sorted(set(oversized) - set(counts)):
+        problems.append(f"{path} is listed as oversized but is not excluded; delete the entry")
+    return problems
+
+
+def self_test() -> int:
+    """Proves each exclusion check fails on the state it is there to catch."""
+    print("\nSelf-test: each check must fail on the state it polices")
+    cases = (
+        ("an excluded file that has grown past the limit", {"A.swift": 401}, {}, "past the 400"),
+        ("an exclusion whose file is gone", {"A.swift": None}, {}, "not in the tree"),
+        ("an oversized entry with a blank reason", {"A.swift": 401}, {"A.swift": " "}, "no reason"),
+        ("an oversized entry whose file has shrunk", {"A.swift": 400}, {"A.swift": "why"}, "back inside"),
+        ("an oversized entry for a file nobody excludes", {}, {"B.swift": "why"}, "is not excluded"),
+    )
+    failed = 0
+    for description, counts, oversized, expected in cases:
+        problems = exclusion_problems(counts, oversized=oversized)
+        if any(expected in problem for problem in problems):
+            print(f"  ✓ {description}")
+        else:
+            print(f"  ✗ {description}: the check no longer fails on it")
+            failed += 1
+    within = exclusion_problems({"A.swift": 400}, oversized={})
+    if within:
+        print(f"  ✗ a file inside the limit was reported: {within[0]}")
+        failed += 1
+    else:
+        print("  ✓ a file inside the limit passes")
+    return failed
+
+
+def report_exclusions(counts: dict[str, int | None], problems: list[str]) -> None:
+    """Prints the size of every exclusion, because a limit nobody sees is the one that drifted."""
+    print(f"\nExclusion sizes (limit {REVIEWABLE_LINES} lines, past which reading is not a review)")
+    print("-" * 52)
+    for path in sorted(counts, key=lambda path: -(counts[path] or 0)):
+        lines = counts[path]
+        if lines is None:
+            print(f"  MISSING  {path}")
+            continue
+        note = f"  over: {OVERSIZED_EXCLUSIONS[path]}" if path in OVERSIZED_EXCLUSIONS else ""
+        print(f"  {lines:>5}  {path}{note}")
+    for problem in problems:
+        print(f"error: {problem}", file=sys.stderr)
+
+
 def main() -> int:
+    counts = line_counts(SOURCES_ROOT)
+    problems = exclusion_problems(counts)
+    # Reads no coverage report, so it runs ahead of the build rather than after the tests.
+    if "--check-exclusions" in sys.argv[1:]:
+        report_exclusions(counts, problems)
+        if problems:
+            return 1
+        oversized = sum(1 for path in counts if path in OVERSIZED_EXCLUSIONS)
+        print(
+            f"\ncoverage exclusions: {len(counts)} files, all present, "
+            f"{oversized} over the limit and each saying what reviews it instead."
+        )
+        if "--self-test" in sys.argv[1:] and self_test():
+            print("\n  ✗ a check no longer fails on the state it polices\n", file=sys.stderr)
+            return 1
+        print()
+        return 0
+
     report = json.load(sys.stdin)
     totals: dict[str, list[int]] = {}
     skipped_files: list[str] = []
@@ -217,15 +367,19 @@ def main() -> int:
 
     print("\nNot measured")
     for module, reason in sorted(EXCLUDED_MODULES.items()):
-        print(f"  {module:<34} {reason}")
+        print(f"  {module:<34}        {reason}")
     for path, reason in sorted(EXCLUDED_FILES.items()):
         seen = "" if path in skipped_files else "  [not found in report]"
-        print(f"  {path:<34} {reason}{seen}")
+        lines = counts[path]
+        size = f"{lines:>5}L" if lines is not None else "    ?L"
+        print(f"  {path:<34} {size}  {reason}{seen}")
     print()
 
     for module, percent in failures:
         print(f"error: {module} is at {percent:.2f}%, below the {THRESHOLD:.0f}% floor", file=sys.stderr)
-    return 1 if failures else 0
+    for problem in problems:
+        print(f"error: {problem}", file=sys.stderr)
+    return 1 if failures or problems else 0
 
 
 if __name__ == "__main__":
