@@ -245,26 +245,25 @@ openai_whisper-large-v3-v20240930_turbo_632MB is not installed. Run: uttrflow-de
 
 In the app the same condition raises `.modelNotInstalled` — *"Speech recognition needs
 to finish setting up before you can dictate."* with a `.downloadSpeechModel` action.
-No hang, no crash. Two problems with it, though:
+No hang, no crash.
 
-### The model download path still has a gap
+### The model download path routes through onboarding
 
-The **Download** button for `.downloadSpeechModel` is no longer inert. `DockView` sends
-the recovery action through `DockPanelController`, and `AppDelegate.wireInterface()`
-assigns the handler. `AppDelegate.perform(_:)` responds by opening the Settings window
-on the **Dictation** tab.
+The **Download**/**Finish Setup** button for `.downloadSpeechModel` reopens the installer.
+`DockView` sends the recovery action through `DockPanelController`, and
+`AppDelegate.wireInterface()` assigns the handler. `AppDelegate.perform(_:)` routes an
+absent model straight to `show(.onboarding)`, whose setup page calls `beginInstall()` on
+the injected installer and shows progress — the same surface a first run uses.
 
-That is useful navigation, but it is not an installer. The Dictation settings pane
-offers the speed-and-accuracy choice and other preferences; it does not call
-`SpeechModelStore.install`. The actual download lives in the onboarding setup flow:
-`OnboardingFlow` enters `.setup`, then `beginInstall()` calls the injected installer.
+When the model was installed but failed to load, `perform(_:)` calls `repairSpeechModel()`
+first: it removes the broken install and resets readiness to `.notInstalled` before showing
+onboarding, so setup downloads a fresh copy instead of retrying the same failed load.
 
-This matters after somebody has dismissed onboarding. **Finish Setup** now opens Settings
-→ Dictation, where the user can see the speech-recognition choice but cannot start the
-download. The model can still be installed by the first-run setup flow when that flow is
-available, or with `uttrflow-dev models install`; the recovery action itself does not
-reopen the installer. The offline promise is therefore still conditional on the model
-having been installed somewhere before dictation is attempted.
+This matters after somebody has dismissed onboarding. **Finish Setup** reopens onboarding's
+setup page and starts the install from there, so dismissing onboarding once does not strand
+the user without a way back into the installer. The offline promise remains conditional on
+the model being installed, but the recovery action itself now gets it installed rather than
+only pointing at Settings.
 
 ### Startup now says what happened
 
