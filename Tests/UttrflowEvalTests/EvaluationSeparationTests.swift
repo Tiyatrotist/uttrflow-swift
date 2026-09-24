@@ -84,7 +84,7 @@ struct EvaluationSeparationTests {
     /// `UttrflowEval` is a library product, so any networking in it would be inherited by every importer.
     @Test("the harness library opens no connections of its own")
     func theHarnessLibraryHasNoNetworkCallSites() throws {
-        // The same pattern `Scripts/offline_audit.sh` uses on the dictation path.
+        // A module-local guard; `Scripts/offline_audit.sh` covers this module with a wider pattern.
         let patterns = ["URLSession", "URLRequest", "NWConnection", "import Network", "https://"]
         var offenders: [String] = []
         for file in try swiftFiles(in: "UttrflowEval") {
