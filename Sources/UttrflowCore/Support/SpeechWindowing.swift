@@ -92,10 +92,7 @@ public struct SpeechWindowing: Sendable, Equatable {
         let sentenceFrames = Swift.max(1, Int(sentencePause / VoiceActivity.frameDuration))
         let anyFrames = Swift.max(1, Int(anyPause / VoiceActivity.frameDuration))
         var runStart: Int?
-        // Nothing before `earliest` is scanned at all, so a pause that started earlier is only
-        // credited from there — never quite what the speaker made it, but never an absolute cut either.
-        // Every run past that point is measured from where it truly began: a pause is as long as the
-        // speaker made it, wherever the ordinary or comfortable length falls in it.
+        // A pause is measured from where it began, but never from before `earliest`, which is not scanned.
         for index in earliest..<loudness.count {
             if loudness[index] < threshold {
                 if runStart == nil { runStart = index }
