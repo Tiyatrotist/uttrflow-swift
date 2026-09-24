@@ -17,7 +17,9 @@ the refresh token there, and the next launch finds no credential.
   `ProfileRefresh.noCredential`, never `.signedOut`. A `.signedOut` answer makes
   `AccountRefresh` delete a cached profile the server still honours, which shows as
   "Not signed in" immediately after a completed sign-in.
-- `HTTPAuthenticationServiceTests.anEmptyKeychainKeepsTheProfile`: the same rule end to end,
-  with a real service and a real `AccountRefresh` over an empty token store.
+- `HTTPAuthenticationServiceTests.anEmptyTokenStoreKeepsTheProfile`: the same rule end to
+  end, with a real service and a real `AccountRefresh` over an empty `InMemoryTokenStore`;
+  it proves the empty-store contract, not the real-Keychain path `KeychainFallbackTests`
+  already owns.
 
 See also `Docs/account-keychain.md` for the rules `KeychainTokenStore` itself keeps.
