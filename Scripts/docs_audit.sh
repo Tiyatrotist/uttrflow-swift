@@ -835,6 +835,36 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 7b. Every shared artboard surface/text token matches BrandPalette.swift.
+# ---------------------------------------------------------------------------
+#
+# `Design/_gen_common.py` and `Design/_gen_shell.py` declare the page, card, rail, control,
+# separator and primary/muted/dim text colours every artboard inherits. Nothing tied those
+# to `BrandPalette.swift`, the shipped app's single source of truth for the same roles, so
+# #1162 found all 73 artboards still drawing system greys the product moved off years ago.
+printf '\nDesign token parity\n'
+
+if [[ ! -x "$PACKAGE_ROOT/Scripts/design_token_parity_audit.py" ]]; then
+    fail "Scripts/design_token_parity_audit.py is missing or not executable" \
+        "The audit pins the shared artboard tokens to BrandPalette.swift; without it either" \
+        "side can drift and nothing notices."
+else
+    if "$PACKAGE_ROOT/Scripts/design_token_parity_audit.py" --self-test; then
+        if "$PACKAGE_ROOT/Scripts/design_token_parity_audit.py" >&2; then
+            pass "every shared artboard surface/text token matches BrandPalette.swift"
+        else
+            fail "a shared artboard token disagrees with BrandPalette.swift" \
+                "The audit prints which role, which theme and which two hex values disagree." \
+                "Update the generator token to match, then regenerate every artboard."
+        fi
+    else
+        fail "Scripts/design_token_parity_audit.py --self-test failed" \
+            "The audit's own self-test could not resolve a BrandPalette identifier reference," \
+            "so the Swift parser is broken. Fix the audit, not the artboard."
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # 8. CLAUDE.md, if it exists, delegates to AGENTS.md by import or symlink.
 # ---------------------------------------------------------------------------
 #

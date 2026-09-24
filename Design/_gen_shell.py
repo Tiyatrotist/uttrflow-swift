@@ -46,29 +46,39 @@ SEARCH_GLYPH = '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/>'
 SHELL_CSS = """
     /* Surfaces the shared tokens do not name, so the dark block can swap them. */
     :root {
+      /* Matches BrandPalette.Surface.card.light. */
       --card-bg: #FFFFFF;
-      --control-bg: #FFFFFF;
+      /* Matches BrandPalette.Surface.control.light. */
+      --control-bg: #F1F0F5;
       --control-border: rgba(0,0,0,0.16);
       --accent-text: var(--accent);
       --hover-bg: rgba(0,0,0,0.038);
     }
     /* Dark mode, declared as its own set of the same tokens. */
     .theme-dark {
-      --label: rgba(255,255,255,0.851);
-      --label-2: rgba(255,255,255,0.549);
-      --label-3: rgba(255,255,255,0.278);
+      /* Matches BrandPalette.Text.primary.dark. */
+      --label: #F4F4F6;
+      /* Matches BrandPalette.Text.muted.dark. */
+      --label-2: #8B90A0;
+      /* Matches BrandPalette.Text.dim.dark. */
+      --label-3: #7A7F8E;
       --label-4: rgba(255,255,255,0.098);
-      --separator: rgba(255,255,255,0.129);
-      --window-bg: #1E1E1E;
+      /* Matches BrandPalette.Line.separator.dark. */
+      --separator: #1E212A;
+      /* Matches BrandPalette.Surface.ground.dark. */
+      --window-bg: #0B0C10;
       /* The mark reverses on dark: chalk, not the ink it uses on white. */
       --logo-ink: #F2F1EC;
-      --sidebar-bg: rgba(44,44,47,0.94);
+      /* Matches BrandPalette.Surface.rail.dark. */
+      --sidebar-bg: #08090C;
       --fill: rgba(255,255,255,0.075);
       --fill-2: rgba(255,255,255,0.13);
       --accent-wash: rgba(18,128,119,0.22);
       --accent-tint: rgba(18,128,119,0.46);
-      --card-bg: #262628;
-      --control-bg: #3A3A3D;
+      /* Matches BrandPalette.Surface.card.dark. */
+      --card-bg: #0E1016;
+      /* Matches BrandPalette.Surface.control.dark (the raised tone, not the card). */
+      --control-bg: #12151C;
       --control-border: rgba(255,255,255,0.15);
       --accent-text: var(--accent-dark);
       --hover-bg: rgba(255,255,255,0.062);
