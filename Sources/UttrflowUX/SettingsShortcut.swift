@@ -184,7 +184,7 @@ public struct SettingsShortcutRecorder: Sendable, Equatable {
         }
 
         let candidate = HotkeyBinding(keyCode: keyCode, modifiers: modifiers)
-        if let rejection = SettingsEditor.rejection(forShortcut: candidate) {
+        if let rejection = SettingsEditor.rejection(forShortcut: candidate, for: action) {
             self.rejection = rejection.reason
             return .refused(rejection)
         }

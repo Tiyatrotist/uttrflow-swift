@@ -51,13 +51,26 @@ coincidence of the layout tables:
 
 The window server refuses none of them and then never fires any: a shortcut with no
 modifier, a key code above `0x7F` that no keyboard can send, and a modifier held on its
-own. `isUsable` answers only the first, because the monitor's translator reports the three
-apart to say which one is wrong; `isDeliverable` answers the whole question for a yes or
-no, chiefly the settings store deciding whether a stored shortcut can be honoured.
+own. `isUsable` answers the first and the third — a bare modifier fails it too, not only
+the no-modifier case — leaving the key-code range to `isDeliverable` alone, which answers
+the whole question for a yes or no, chiefly the settings store deciding whether a stored
+shortcut can be honoured.
 
 The rules are stated twice, in `HotkeyBinding` and in the translator, because
 `UttrflowCore` cannot import the platform headers the translator names its key codes from.
 A test holds the two to the same answer.
+
+## A fourth way, only for a claimed action
+
+`isDeliverable` says a held-modifier-only combination is fine, because it is: for
+`ShortcutDelivery.observed` it is watched through flag changes, the case above. For
+`ShortcutDelivery.claimed` it is not — `CarbonHotkey.init` refuses every combination
+whose key code is itself a modifier, `.modifierUsedAsKey`, because `RegisterEventHotKey`
+accepts the registration for a bare modifier key and then never fires it, same as it does
+for a whole bare modifier. `SettingsEditor.rejection(forShortcut:for:)` is delivery-aware
+for exactly this: it refuses a held chord for a claimed action with
+`heldChordNotClaimable` before it ever reaches the registry, so Dictate keeps every held
+chord it always could and the other three actions never store one they cannot arm.
 
 ## `start(binding:)` is main-actor isolated
 
