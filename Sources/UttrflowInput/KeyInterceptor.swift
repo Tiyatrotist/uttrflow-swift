@@ -309,6 +309,18 @@ final class TapState: @unchecked Sendable {
         return reEnable
     }
 
+    /// Takes an armed key into the ring, arming Return for a captured arrow; false if unarmed or the ring is full.
+    @discardableResult
+    func takeIfArmed(_ slot: ArmedKeys) -> Bool {
+        guard armed.load(ordering: .relaxed) & slot.rawValue != 0 else { return false }
+        guard enqueue(slot.rawValue) else { return false }
+        // Claims Return only for a captured arrow, so a rejected arrow never blocks a Return the app should see.
+        if slot == .downArrow || slot == .upArrow {
+            armed.bitwiseOr(ArmedKeys.return.rawValue, ordering: .relaxed)
+        }
+        return true
+    }
+
     /// Everything written since the last drain, oldest first, then the tap giving up if it has.
     func take() -> [InterceptedEvent] {
         // Read before `written`, so every keystroke taken before the tap gave up is drained with it.
@@ -343,14 +355,9 @@ private let keyInterceptorCallback: CGEventTapCallBack = { _, type, event, userI
             keyCode: UInt16(truncatingIfNeeded: event.getIntegerValueField(.keyboardEventKeycode)),
             modifiers: KeyModifiers(event.flags))
         let slot = ArmedKeys.slot(of: stroke)
-        guard !slot.isEmpty, state.armed.load(ordering: .relaxed) & slot.rawValue != 0 else {
+        guard !slot.isEmpty, state.takeIfArmed(slot) else {
             return Unmanaged.passUnretained(event)
         }
-        // Swallowing a navigation key claims Return here and now, so a fast Down-then-Return never runs the command.
-        if slot == .downArrow || slot == .upArrow {
-            state.armed.bitwiseOr(ArmedKeys.return.rawValue, ordering: .relaxed)
-        }
-        state.enqueue(slot.rawValue)
         return nil
     case .tapDisabledByTimeout, .tapDisabledByUserInput:
         // Not the keystroke path: by the time this runs the system has already stopped delivering.

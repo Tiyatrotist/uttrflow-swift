@@ -72,6 +72,40 @@ struct TapStateRingTests {
         #expect(state.take().isEmpty)
     }
 
+    @Test("a full ring lets an armed key pass through instead of silently swallowing it")
+    func fullRingPassesArmedKeyThrough() {
+        let state = Self.makeState()
+        state.armed.store(ArmedKeys.tab.rawValue | ArmedKeys.escape.rawValue, ordering: .relaxed)
+        for _ in 0..<TapState.capacity { #expect(state.takeIfArmed(.tab)) }
+        #expect(!state.takeIfArmed(.escape))
+        #expect(state.take().count == TapState.capacity)
+    }
+
+    @Test("a rejected arrow does not arm Return, so a full ring never blocks it")
+    func rejectedArrowDoesNotArmReturn() {
+        let state = Self.makeState()
+        state.armed.store(ArmedKeys.downArrow.rawValue | ArmedKeys.tab.rawValue, ordering: .relaxed)
+        for _ in 0..<TapState.capacity { #expect(state.takeIfArmed(.tab)) }
+        #expect(!state.takeIfArmed(.downArrow))
+        #expect(state.armed.load(ordering: .relaxed) & ArmedKeys.return.rawValue == 0)
+    }
+
+    @Test("a captured arrow arms Return")
+    func capturedArrowArmsReturn() {
+        let state = Self.makeState()
+        state.armed.store(ArmedKeys.downArrow.rawValue, ordering: .relaxed)
+        #expect(state.takeIfArmed(.downArrow))
+        #expect(state.armed.load(ordering: .relaxed) & ArmedKeys.return.rawValue != 0)
+    }
+
+    @Test("an unarmed key is left alone")
+    func unarmedKeyIsLeftAlone() {
+        let state = Self.makeState()
+        state.armed.store(ArmedKeys.tab.rawValue, ordering: .relaxed)
+        #expect(!state.takeIfArmed(.escape))
+        #expect(state.take().isEmpty)
+    }
+
     @Test("one thread writing while another drains delivers every keystroke once, in order")
     func concurrentProducerAndConsumer() {
         let state = Self.makeState()
