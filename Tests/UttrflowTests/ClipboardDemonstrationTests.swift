@@ -1,26 +1,29 @@
 // Tests for the clipboard demonstration's clock and its choice of arrangement.
 
+import AppKit
 import CoreGraphics
 import Foundation
 import Testing
+import UttrflowSettings
 
 @testable import Uttrflow
+@testable import UttrflowUX
 
 /// The arrangement is settled from the width alone, so no frame of the animation has to measure anything.
 @Suite("The clipboard demonstration's arrangement")
 struct ClipboardDemonstrationArrangementTests {
     /// Padding both sides, the gap, the document, and the narrowest the words may be beside it.
-    private let threshold: CGFloat = 17 * 2 + 22 + 400 + 360
+    private let threshold: CGFloat = 17 * 2 + 22 + 410 + 360
 
-    @Test("is built from the dimensions Docs/app-main-window.md states, and is 816 points wide")
+    @Test("is built from the dimensions Docs/app-main-window.md states, and is 826 points wide")
     func theStatedDimensions() {
         #expect(ClipboardDemonstrationMetrics.padding == 17)
         #expect(ClipboardDemonstrationMetrics.columnSpacing == 22)
-        #expect(ClipboardDemonstrationMetrics.documentWidth == 400)
+        #expect(ClipboardDemonstrationMetrics.documentWidth == 410)
         #expect(ClipboardDemonstrationMetrics.stageHeight == 172)
         #expect(ClipboardDemonstrationMetrics.explanationMinimumWidth == 360)
         #expect(ClipboardDemonstrationMetrics.explanationMaximumWidth == 460)
-        #expect(threshold == 816)
+        #expect(threshold == 826)
     }
 
     @Test("stands side by side as soon as the words have their narrowest room")
@@ -69,9 +72,31 @@ struct ClipboardDemonstrationArrangementTests {
                 case .sideBySide(let explanationWidth) =
                     ClipboardDemonstrationMetrics.arrangement(forOfferedWidth: width)
             else { continue }
-            let used = 17 * 2 + explanationWidth + 22 + 400
+            let used = 17 * 2 + explanationWidth + 22 + 410
             #expect(used <= width)
         }
+    }
+}
+
+/// The document's own width has to hold the sentence it draws, not just the metric that names it.
+@Suite("The clipboard demonstration's pasted line")
+struct ClipboardDemonstrationLineFitTests {
+    /// Measures the shipped sentence the way `typedLine` draws it: two runs, footnote size, medium on the paste.
+    @Test("the shipped sentence fits the document without wrapping")
+    func theShippedSentenceFits() throws {
+        let demonstration = try #require(HomePresenter.demonstration(for: Settings()))
+        let pasted = try #require(demonstration.chosenRow?.text)
+
+        let size = MainMetrics.footnoteSize
+        let existing = NSAttributedString(
+            string: demonstration.existingText, attributes: [.font: NSFont.systemFont(ofSize: size)])
+        let arriving = NSAttributedString(
+            string: pasted, attributes: [.font: NSFont.systemFont(ofSize: size, weight: .medium)])
+        let line = NSMutableAttributedString(attributedString: existing)
+        line.append(arriving)
+
+        let innerWidth = ClipboardDemonstrationMetrics.documentWidth - 20
+        #expect(line.size().width <= innerWidth)
     }
 }
 
