@@ -96,19 +96,21 @@ signature.
 ## Pointing a build at the backend
 
 A shipped build needs two things before it talks to `uttrflow-backend`, and it needs
-**both** or neither:
+**both** or neither — both are checked in today:
 
-1. **`UttrflowBackendURL` in `Resources/Uttrflow-Info.plist`** — the origin of the deployed
-   service, e.g. `https://api.uttrflow.com`. Absent in this repository on purpose: there is
-   no deployment yet, and a placeholder that looks like a URL is worse than no key at all.
-2. **`Ed25519EntitlementVerifier.releasePublicKeyBytes`** — the 32 raw bytes of the
-   backend's entitlement public key, which `npm run keygen` prints on the backend side.
+1. **`UttrflowBackendURL` in `Resources/Uttrflow-Info.plist`** — the origin of the
+   deployed service, currently `https://api.uttrflow.com`.
+2. **`Ed25519EntitlementVerifier.releasePublicKeyBase64`** in
+   `Sources/UttrflowAccount/EntitlementSignature.swift` — the backend's entitlement
+   public key, base64, which `npm run keygen` prints on the backend side.
 
 `OnboardingAccountLayer.forThisBuild()` checks for both and falls back to the in-process
 development backend when either is missing. That pairing is deliberate: a build with an
 address and no key signs somebody in and then refuses the entitlement it was just handed,
 with a signature error nobody can act on. A build with a key and no address never reaches
-a server at all.
+a server at all. Rotating either value is a coordinated release: the app and the backend
+must agree on the same URL and key pair, or every build built against the old one starts
+failing closed against a rotated backend. See `Docs/operator-runbook.md`.
 
 Neither value is a secret. A public key is public, and the address is in every packet the
 app sends.
