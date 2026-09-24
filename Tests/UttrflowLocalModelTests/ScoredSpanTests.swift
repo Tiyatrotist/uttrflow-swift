@@ -1,5 +1,7 @@
 import Foundation
+import Hub
 import Testing
+import Tokenizers
 
 @testable import UttrflowLocalModel
 
@@ -45,6 +47,48 @@ struct ScoredSpanTests {
         #expect(ScoredSpan(whole: [0, 9, 5], typed: [0, 1], bytes: bytes) == ScoredSpan(start: 1, owed: []))
     }
 
+    @Test("The divergence read back from the line's own tokens is the one its typed opening gives.")
+    func theLineAloneGivesTheSameDivergence() {
+        let cases: [(whole: [Int], typed: [Int], continuation: String)] = [
+            ([0, 3, 5], [0, 1, 6], "t status"),
+            ([0, 10, 11, 5], [0, 12, 13], "s status"),
+            ([0, 2, 3, 5], [0, 1, 6], "git status"),
+            ([0, 4, 5], [0, 1, 6], "st status"),
+            ([0, 3, 5], [0, 3], " status"),
+        ]
+        for (whole, typed, continuation) in cases {
+            #expect(
+                ScoredSpan.divergence(whole: whole, continuation: Array(continuation.utf8), bytes: bytes)
+                    == ScoredSpan.divergence(whole: whole, typed: typed, bytes: bytes),
+                "continuation \(continuation.debugDescription)")
+        }
+    }
+
+    @Test("A line whose tokens cannot be read back as the continuation gives no divergence.")
+    func bytesThatDoNotSpellTheContinuation() {
+        // A vocabulary holding no bytes at all, an id it does not hold, and one that writes nothing.
+        #expect(ScoredSpan.divergence(whole: [0, 3, 5], continuation: [0x74], bytes: []) == nil)
+        #expect(
+            ScoredSpan.divergence(whole: [0, 99, 5], continuation: Array("gi status".utf8), bytes: bytes)
+                == nil)
+        #expect(
+            ScoredSpan.divergence(whole: [0, 9, 5], continuation: Array("gi status".utf8), bytes: bytes)
+                == nil)
+        // The tail spells something else, and the line runs out of tokens before the continuation does.
+        #expect(
+            ScoredSpan.divergence(whole: [0, 3, 5], continuation: Array("t statuz".utf8), bytes: bytes) == nil
+        )
+        #expect(ScoredSpan.divergence(whole: [3], continuation: Array("a git".utf8), bytes: bytes) == nil)
+    }
+
+    @Test("A line adding nothing past what was typed has nothing to judge, however the divergence is read.")
+    func nothingPastTheTypedOpening() {
+        let divergence = ScoredSpan.divergence(whole: [0, 3], continuation: [], bytes: bytes)
+        #expect(divergence == ScoredSpan.Divergence(index: 2, owed: []))
+        #expect(
+            ScoredSpan(whole: [0, 3], past: divergence ?? .init(index: 0, owed: []), bytes: bytes) == nil)
+    }
+
     @Test("The tokens a remainder could go on as are every token that writes it first.")
     func continuingTokens() {
         #expect(ScoredSpan.continuing(Array("gi".utf8), in: bytes) == [2, 3, 4])
@@ -64,5 +108,52 @@ struct ScoredSpanTests {
         #expect(ScoredSpan.conditioned([], onMass: -1).isEmpty)
         #expect(ScoredSpan.logSumExp([]) == nil)
         #expect(ScoredSpan.logSumExp([-.infinity]) == nil)
+    }
+}
+
+/// The context and the whole line a real pass judges, taken from the lines `Docs/predict.md` measures the floor and the mid-word cut on.
+private let realCandidates: [(context: String, candidate: String)] = [
+    ("ls", "ls -l"), ("ls", "ls -la"), ("ls", "ls --zzqx-bogus"), ("ls ", "ls -l"),
+    ("git c", "git commit -m"), ("git c", "git checkout main"), ("git c", "git cxq"),
+    ("git c", "git comit -m"), ("gi", "git status"), ("gi", "git checkout main"),
+    ("gi", "gizmo --frobnicate"), ("l", "ls -la"), ("git sta", "git stash pop"),
+    ("git s", "Git status"), ("gti s", "git status"), ("SELE", "SELECT * FROM uzqx WHERE"),
+    ("SELECT * FROM u", "SELECT * FROM users"), ("SELECT * FROM u", "SELECT * FROM uzqx WHERE"),
+    ("Deploy the re", "Deploy the release candidate to production"),
+    ("Deploy the re", "Deploy the rezzq flombat"), ("caf", "caf\u{E9} au lait, please"),
+    ("haan", "haan thik hai bhai"), ("https://exa", "https://example.com/pricing"),
+    ("Thanks for sending the draft ov", "Thanks for sending the draft over, I will check the venue"),
+    ("", "ls -l"), ("ls -l", "ls -l"),
+]
+
+@Suite("Reading a typed opening back from the line's own tokens")
+struct ScoredSpanProofTests {
+    /// The suggestion model's snapshot, when this Mac has it.
+    static let gemmaSnapshot = CachedSnapshot.complete(
+        identifier: LocalModel.gemma3.identifier,
+        in: FileManager.default.homeDirectoryForCurrentUser.appending(path: ".cache/huggingface/hub"),
+        minimumWeightBytes: 0)
+
+    @Test(
+        "With Gemma 3's own tokenizer, every real candidate's span is the one tokenising its opening gives.",
+        .enabled(if: gemmaSnapshot != nil, "needs Gemma 3 in the Hugging Face cache"))
+    func gemmaSpansAreIdentical() async throws {
+        let folder = try #require(Self.gemmaSnapshot)
+        let tokenizer = try await AutoTokenizer.from(modelFolder: folder)
+        var written: [[UInt8]] = []
+        for id in 0..<TokenHealing.Vocabulary.mostTokens {
+            guard let piece = tokenizer.convertIdToToken(id) else { break }
+            written.append(TokenHealing.Vocabulary.bytes(of: piece))
+        }
+        for (context, candidate) in realCandidates {
+            let whole = tokenizer.encode(text: MLXCandidateScorer.leadIn + candidate)
+            let typed = CompletionText.typedPart(of: candidate, following: context)
+            let read = ScoredSpan.divergence(
+                whole: whole, continuation: Array(candidate.dropFirst(typed.count).utf8), bytes: written)
+            let tokenised = ScoredSpan.divergence(
+                whole: whole,
+                typed: tokenizer.encode(text: MLXCandidateScorer.leadIn + typed), bytes: written)
+            #expect(read == tokenised, "\(context.debugDescription) -> \(candidate.debugDescription)")
+        }
     }
 }

@@ -12,8 +12,31 @@ struct ScoredSpan: Equatable {
         self.owed = owed
     }
 
+    /// Where a whole line's tokens leave its typed opening: the first of them that writes what the line adds, and the typed bytes that token writes before it.
+    struct Divergence: Equatable {
+        let index: Int
+        let owed: [UInt8]
+    }
+
     /// The span of a whole line past its typed opening, both as token ids, with each id's bytes read from `bytes`; nothing when no token is left to judge.
     init?(whole: [Int], typed: [Int], bytes: [[UInt8]]) {
+        self.init(whole: whole, past: Self.divergence(whole: whole, typed: typed, bytes: bytes), bytes: bytes)
+    }
+
+    /// The span a divergence leaves to judge, with each id's bytes read from `bytes`; nothing when no token is left.
+    init?(whole: [Int], past divergence: Divergence, bytes: [[UInt8]]) {
+        let start = max(divergence.index, 1)
+        guard whole.count > start else { return nil }
+        let first = Self.written(by: whole[start], in: bytes)
+        // Only a token that begins with the typed remainder can be conditioned on it; any other join is judged as it stands.
+        let holds =
+            start == divergence.index && first.count > divergence.owed.count
+            && first.starts(with: divergence.owed)
+        self.init(start: start, owed: holds ? divergence.owed : [])
+    }
+
+    /// Where the whole line's tokens stop agreeing with the typed opening's own, which costs a second tokenising of the opening.
+    static func divergence(whole: [Int], typed: [Int], bytes: [[UInt8]]) -> Divergence {
         var shared = 0
         while shared < typed.count, shared < whole.count, typed[shared] == whole[shared] {
             shared += 1
@@ -28,12 +51,23 @@ struct ScoredSpan: Equatable {
             owed.removeFirst(written.count)
             index += 1
         }
-        let start = max(index, 1)
-        guard whole.count > start else { return nil }
-        let first = Self.written(by: whole[start], in: bytes)
-        // Only a token that begins with the typed remainder can be conditioned on it; any other join is judged as it stands.
-        let holds = start == index && first.count > owed.count && first.starts(with: owed)
-        self.init(start: start, owed: holds ? owed : [])
+        return Divergence(index: index, owed: owed)
+    }
+
+    /// The same divergence from the whole line's tokens alone, walked back from its end until they have written `continuation`; nothing when their bytes do not spell it, which is the only case the opening is tokenised for.
+    static func divergence(whole: [Int], continuation: [UInt8], bytes: [[UInt8]]) -> Divergence? {
+        var tail: [UInt8] = []
+        var index = whole.count
+        while tail.count < continuation.count, index > 0 {
+            index -= 1
+            let written = Self.written(by: whole[index], in: bytes)
+            guard !written.isEmpty else { return nil }
+            tail = written + tail
+        }
+        // A tail that ends in anything but the continuation is a vocabulary that cannot be read back as text.
+        guard tail.count >= continuation.count, tail.suffix(continuation.count).elementsEqual(continuation)
+        else { return nil }
+        return Divergence(index: index, owed: Array(tail.dropLast(continuation.count)))
     }
 
     /// The bytes a token writes, or none for an id the vocabulary does not hold.

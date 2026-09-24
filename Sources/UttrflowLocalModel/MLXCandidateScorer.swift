@@ -441,9 +441,14 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         _ candidate: String, following context: String, bytes: [[UInt8]], with loaded: ModelContext
     ) -> [JudgedToken] {
         let whole = loaded.tokenizer.encode(text: leadIn + candidate)
-        let typed = loaded.tokenizer.encode(
-            text: leadIn + CompletionText.typedPart(of: candidate, following: context))
-        guard let span = ScoredSpan(whole: whole, typed: typed, bytes: bytes) else { return [] }
+        let typed = CompletionText.typedPart(of: candidate, following: context)
+        // The line's own tokens say where its typed opening ends, so only a vocabulary they cannot be read back through costs a second tokenising.
+        let divergence =
+            ScoredSpan.divergence(
+                whole: whole, continuation: Array(candidate.dropFirst(typed.count).utf8), bytes: bytes)
+            ?? ScoredSpan.divergence(
+                whole: whole, typed: loaded.tokenizer.encode(text: leadIn + typed), bytes: bytes)
+        guard let span = ScoredSpan(whole: whole, past: divergence, bytes: bytes) else { return [] }
         let start = span.start
 
         let tokens = MLXArray(whole.map(Int32.init)).expandedDimensions(axis: 0)
