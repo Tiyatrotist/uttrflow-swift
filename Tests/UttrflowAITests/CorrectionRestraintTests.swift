@@ -130,5 +130,9 @@ struct CorrectionRestraintTests {
         #expect(
             tempted.count >= 15,
             "only \(tempted.count) of \(Self.alreadyCorrect.count) sentences match anything")
+        // Pinned so Docs/ai-correction-thresholds.md's exact count is caught, not left to drift.
+        #expect(
+            tempted.count == 16,
+            "Docs/ai-correction-thresholds.md says 16 sentences tempt the dictionary; update it too")
     }
 }

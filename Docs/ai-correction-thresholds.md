@@ -87,6 +87,7 @@ doubted. A lookup that scanned the dictionary, or evidence rebuilt per run, fail
 `CorrectionRestraintTests` runs 28 correct sentences with every word doubted, three ways:
 with no screen, with the sentence itself on screen, and with the whole fixture dictionary on
 screen. The passing score is zero changes. A guard test asserts that at least fifteen of the
-sentences tempt the dictionary (seventeen do: "clawed" and "clod" find `Claude`, "sickle"
+sentences tempt the dictionary (sixteen do: "clawed" and "clod" find `Claude`, "sickle"
 finds `SQL`, "nickel" finds `Nikhil`, "smell" finds `XML`, "readies" finds `Redis`, "griffin"
 finds `Grafana`, "air well" finds `URL`), so silence is restraint rather than coincidence.
+That exact count is pinned by `corpusIsTempting`, so it cannot drift from this page unnoticed.
