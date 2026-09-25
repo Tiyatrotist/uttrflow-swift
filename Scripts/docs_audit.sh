@@ -997,10 +997,77 @@ PYTHON
 fi
 
 # ---------------------------------------------------------------------------
+# 10. Docs/bakeoff.md's corpus inventory must match EvaluationCorpus.
+# ---------------------------------------------------------------------------
+#
+# #236 corrected this once, from 36 cases to 84 by hand. #1191 caught the same drift a
+# second time — the corpus had reached 174 cases while the "Still open" paragraph still
+# said 105, and three of its six category counts were wrong too, because nothing tied
+# that paragraph to the source it describes. The historical prompt-v2 and prompt-v3 table
+# sizes earlier in the file are measurements from old runs and are deliberately left
+# alone; this check reads only the present-tense inventory sentence.
+printf '\nBake-off corpus inventory\n'
+
+CORPUS_SOURCE="Sources/UttrflowEval/EvaluationCorpus.swift"
+BAKEOFF_DOC="Docs/bakeoff.md"
+if [[ ! -f "$CORPUS_SOURCE" || ! -f "$BAKEOFF_DOC" ]]; then
+    fail "$CORPUS_SOURCE or $BAKEOFF_DOC is missing" \
+        "The corpus inventory this check reconciles no longer exists to check."
+else
+    read -r -d '' CORPUS_PROGRAM <<'PYTHON' || true
+import re
+
+SOURCE = "Sources/UttrflowEval/EvaluationCorpus.swift"
+DOC = "Docs/bakeoff.md"
+
+real = {}
+for match in re.finditer(r"category: \.([A-Za-z]+),", open(SOURCE, errors="ignore").read()):
+    real[match.group(1)] = real.get(match.group(1), 0) + 1
+real_total = sum(real.values())
+
+text = open(DOC, errors="ignore").read()
+sentence = re.search(
+    r"The corpus is ([0-9,]+) cases in six categories\*\*.*?written by hand\.",
+    text, re.DOTALL,
+)
+if sentence is None:
+    print(f"{DOC}  cannot find the corpus-inventory sentence in ## Still open")
+else:
+    stated_total = int(sentence.group(1).replace(",", ""))
+    stated = {
+        category: int(count.replace(",", ""))
+        for category, count in re.findall(r"`([a-zA-Z]+)`\s+([0-9,]+)", sentence.group(0))
+    }
+
+    if stated_total != real_total:
+        print(f"{DOC}  total: doc says {stated_total}, EvaluationCorpus.all has {real_total}")
+    if set(stated) != set(real):
+        print(f"{DOC}  categories: doc names {sorted(stated)}, corpus has {sorted(real)}")
+    else:
+        for category in sorted(real):
+            if stated[category] != real[category]:
+                print(
+                    f"{DOC}  {category}: doc says {stated[category]}, "
+                    f"corpus has {real[category]}"
+                )
+PYTHON
+    corpus_problems="$(python3 -c "$CORPUS_PROGRAM")"
+
+    if [[ -n "${corpus_problems//[[:space:]]/}" ]]; then
+        fail "Docs/bakeoff.md's corpus inventory no longer matches EvaluationCorpus" \
+            "The 'Still open' paragraph's total and per-category breakdown must track" \
+            "Sources/UttrflowEval/EvaluationCorpus.swift. This is the #1191 drift." \
+            "" $'\n'"$corpus_problems"
+    else
+        pass "Docs/bakeoff.md's corpus inventory matches EvaluationCorpus"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 printf '\n'
 if [[ "$failures" -gt 0 ]]; then
     printf 'docs audit: %s check(s) failed. The documentation contradicts the tree.\n\n' "$failures" >&2
     exit 1
 fi
 
-printf 'docs audit: the paths, links, test count, worktree cleanup order, release bullets, performance headline scope, CLAUDE.md delegation, uttrflow-eval examples and disk table arithmetic in %s documents all check out.\n\n' "$DOC_COUNT"
+printf 'docs audit: the paths, links, test count, worktree cleanup order, release bullets, performance headline scope, CLAUDE.md delegation, uttrflow-eval examples, disk table arithmetic and bake-off corpus inventory in %s documents all check out.\n\n' "$DOC_COUNT"
