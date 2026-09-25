@@ -55,14 +55,16 @@ private func makeEngine(
     window: @escaping @Sendable (FrontmostApplication) async -> FocusedWindow? = { _ in nil },
     ownBundleIdentifier: String? = uttrflowBundle,
     ownProcessIdentifier: Int32 = uttrflowProcess,
-    clock: any Clock<Duration> = GatedClock()
+    clock: any Clock<Duration> = GatedClock(),
+    observeActivations: (@escaping @Sendable (FrontmostApplication) -> Void) -> any Sendable = { _ in () }
 ) -> MacContextEngine {
     MacContextEngine(
         readFrontmostApplication: frontmost,
         readFocusedWindow: window,
         ownBundleIdentifier: ownBundleIdentifier,
         ownProcessIdentifier: ownProcessIdentifier,
-        clock: clock
+        clock: clock,
+        observeActivations: observeActivations
     )
 }
 
@@ -461,6 +463,44 @@ struct MacContextEngineTests {
         let context = await engine.currentContext()
 
         #expect(context.applicationName == "Xcode")
+    }
+
+    @Test("remembers an application activated between context reads")
+    func remembersAnApplicationActivatedBetweenReads() async {
+        let xcode = FrontmostApplication(
+            name: "Xcode", bundleIdentifier: "com.apple.dt.Xcode", processIdentifier: 28_165)
+        let report = Mutex<(@Sendable (FrontmostApplication) -> Void)?>(nil)
+        let engine = makeEngine(
+            frontmost: { uttrflow },
+            observeActivations: { callback in
+                report.withLock { $0 = callback }
+                return ()
+            }
+        )
+
+        _ = await engine.currentContext()
+        report.withLock { $0 }?(xcode)
+        report.withLock { $0 }?(slack)
+        let context = await engine.currentContext()
+
+        #expect(context.applicationName == "Slack", "Slack activated last, without a context read in between")
+    }
+
+    @Test("never files Uttrflow's own activation under the application behind it")
+    func neverRemembersItsOwnActivation() async {
+        let report = Mutex<(@Sendable (FrontmostApplication) -> Void)?>(nil)
+        let engine = makeEngine(
+            frontmost: { uttrflow },
+            observeActivations: { callback in
+                report.withLock { $0 = callback }
+                return ()
+            }
+        )
+
+        report.withLock { $0 }?(uttrflow)
+        let context = await engine.currentContext()
+
+        #expect(context == .unknown, "Uttrflow activating itself must not become the application behind it")
     }
 
     // MARK: - Empty means nothing

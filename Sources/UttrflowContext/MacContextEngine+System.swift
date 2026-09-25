@@ -11,8 +11,32 @@ extension MacContextEngine {
             readFrontmostApplication: { await MainActor.run { MacContextEngine.frontmostApplication() } },
             readFocusedWindow: { await MacContextEngine.focusedWindow(of: $0) },
             ownBundleIdentifier: Bundle.main.bundleIdentifier,
-            ownProcessIdentifier: ProcessInfo.processInfo.processIdentifier
+            ownProcessIdentifier: ProcessInfo.processInfo.processIdentifier,
+            observeActivations: MacContextEngine.observeActivations
         )
+    }
+
+    /// Notes every other application's activation, so the one behind Uttrflow is never a stale read's guess.
+    static func observeActivations(
+        _ report: @escaping @Sendable (FrontmostApplication) -> Void
+    ) -> any Sendable {
+        let token = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: nil
+        ) { notification in
+            guard
+                let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            else { return }
+            report(
+                FrontmostApplication(
+                    name: app.localizedName, bundleIdentifier: app.bundleIdentifier,
+                    processIdentifier: app.processIdentifier))
+        }
+        return ActivationObserverToken(token: token)
+    }
+
+    /// `NSObjectProtocol` predates strict concurrency; this box is reviewed and never mutated after it is made.
+    private struct ActivationObserverToken: @unchecked Sendable {
+        let token: any NSObjectProtocol
     }
 
     /// Identity, from NSWorkspace, on the main thread the one place it is safe to read.
