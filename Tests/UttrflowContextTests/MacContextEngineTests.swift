@@ -1,3 +1,5 @@
+import Dispatch
+import Foundation
 import Synchronization
 import Testing
 
@@ -310,6 +312,43 @@ struct MacContextEngineTests {
         await release.open()
         let next = await engine.currentContext()
         #expect(next.applicationName == "Slack")
+    }
+
+    @Test("an abandoned slow window read does not consume the next read's budget")
+    func abandonedReadDoesNotStarveTheNextOne() async {
+        // Mirrors MacContextEngine+System's own arrangement: every window read dispatched onto one queue.
+        let queue = DispatchQueue(label: "test.context.read", attributes: .concurrent)
+        let callNumber = Mutex(0)
+        let application = FrontmostApplication(
+            name: "Stalled", bundleIdentifier: "com.example.stalled", processIdentifier: 88_120)
+        let engine = makeEngine(
+            frontmost: { application },
+            window: { _ in
+                let mine = callNumber.withLock { count -> Int in
+                    count += 1
+                    return count
+                }
+                return await withCheckedContinuation { continuation in
+                    queue.async {
+                        if mine == 1 {
+                            Thread.sleep(forTimeInterval: 0.3)
+                            continuation.resume(returning: FocusedWindow(title: "read 1"))
+                        } else {
+                            continuation.resume(returning: FocusedWindow(title: "read 2"))
+                        }
+                    }
+                }
+            },
+            clock: ContinuousClock()
+        )
+
+        async let first = engine.currentContext()
+        try? await Task.sleep(for: .milliseconds(20))
+        let second = await engine.currentContext()
+        let firstContext = await first
+
+        #expect(firstContext.documentName == nil, "the first read may degrade rather than block the second")
+        #expect(second.documentName == "read 2")
     }
 
     @Test(
