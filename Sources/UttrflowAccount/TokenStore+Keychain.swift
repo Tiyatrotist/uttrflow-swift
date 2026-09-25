@@ -48,7 +48,7 @@ public struct KeychainTokenStore: TokenStore {
         return query
     }
 
-    /// Reads both keychains in order, so an update from an ad-hoc build to a notarised one keeps the session.
+    /// Reads the keychains this build can access in order; file-based items remain scoped to this build's code identity.
     public func refreshToken() -> String? {
         for keychain in Keychain.allCases {
             guard var lookup = query(keychain) else { continue }
