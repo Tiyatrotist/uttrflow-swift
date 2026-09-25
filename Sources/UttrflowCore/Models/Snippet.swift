@@ -30,11 +30,12 @@ public struct Snippet: Sendable, Equatable, Identifiable, Codable {
         self.lastUsed = lastUsed
     }
 
-    /// The same snippet one use later, as a new value so the store never holds a mutable copy.
+    /// The same snippet one use later, saturating at `Int.max` so a maxed-out counter cannot trap.
     public func used(at when: Date) -> Snippet {
-        Snippet(
+        let (nextCount, overflowed) = timesUsed.addingReportingOverflow(1)
+        return Snippet(
             id: id, trigger: trigger, expansion: expansion, created: created,
-            timesUsed: timesUsed + 1, lastUsed: when)
+            timesUsed: overflowed ? Int.max : nextCount, lastUsed: when)
     }
 
     /// The trigger as the matcher sees it: lower-cased runs of letters and digits, all that survives speech.
