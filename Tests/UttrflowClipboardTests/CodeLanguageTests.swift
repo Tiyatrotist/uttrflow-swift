@@ -166,6 +166,26 @@ struct CodeLanguageTests {
         #expect(CodeLanguage.detect(text) == .javascript)
     }
 
+    /// An untyped ES module ties JavaScript and TypeScript on shared syntax; the doc says JavaScript wins.
+    @Test("calls an untyped ES module JavaScript, not a tie")
+    func untypedESModuleIsJavaScript() {
+        let text = """
+            const double = values => values.map(value => value * 2);
+            export default double;
+            """
+        #expect(CodeLanguage.detect(text) == .javascript)
+    }
+
+    /// The typed control for the case above: the same shape, with a type annotation added.
+    @Test("still calls the typed control TypeScript")
+    func typedControlIsStillTypeScript() {
+        let text = """
+            const double = (values: number[]) => values.map(value => value * 2);
+            export default double;
+            """
+        #expect(CodeLanguage.detect(text) == .typescript)
+    }
+
     // MARK: - SQL
 
     /// Case is not evidence: the same query three ways must come out the same.

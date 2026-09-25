@@ -108,7 +108,13 @@ extension CodeLanguage {
         var best: (language: CodeLanguage, score: Int)?
         var runnerUp = 0
         for language in allCases {
-            let points = score(language, in: sample)
+            var points = score(language, in: sample)
+            // Untyped ECMAScript ties JavaScript and TypeScript on shared syntax; the types are TypeScript's tell.
+            if language == .typescript, points > 0, points == score(.javascript, in: sample),
+                Signals.table(for: .typescript).strong.allSatisfy({ !sample.contains($0) })
+            {
+                points = 0
+            }
             if points > (best?.score ?? 0) {
                 runnerUp = best?.score ?? 0
                 best = (language, points)

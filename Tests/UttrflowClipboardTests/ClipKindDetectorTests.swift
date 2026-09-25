@@ -262,4 +262,25 @@ struct ClipKindDetectorTests {
     func notCode(_ text: String) {
         #expect(ClipKindDetector.kind(of: text) != .code)
     }
+
+    // MARK: - Language, end to end
+
+    /// An untyped ES module reaches `classification(of:)` as code with the `javascript` language, not a tie.
+    @Test("classifies an untyped ES module as code with the javascript language")
+    func untypedESModuleClassification() {
+        let text = "const double = values => values.map(value => value * 2);\nexport default double;"
+        let classification = ClipKindDetector.classification(of: text)
+        #expect(classification.kind == .code)
+        #expect(classification.language == .javascript)
+    }
+
+    /// The typed control for the case above still classifies as TypeScript through the same entry point.
+    @Test("classifies the typed control as code with the typescript language")
+    func typedControlClassification() {
+        let text =
+            "const double = (values: number[]) => values.map(value => value * 2);\nexport default double;"
+        let classification = ClipKindDetector.classification(of: text)
+        #expect(classification.kind == .code)
+        #expect(classification.language == .typescript)
+    }
 }
