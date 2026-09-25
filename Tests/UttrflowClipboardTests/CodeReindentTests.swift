@@ -149,6 +149,13 @@ struct CodeReindentTests {
         #expect(CodeReindent.reindented("var s = @\"first\n  second\";\n\tthird") == nil)
     }
 
+    /// A single-quoted shell string left open carries the next line's whitespace as data, not indentation.
+    @Test("refuses a clip with an unbalanced single quote")
+    func unbalancedSingleQuote() {
+        let input = "emit() {\n\tprintf '%s\\n' 'first\n    second'\n\tprintf '%s\\n' done\n}"
+        #expect(CodeReindent.reindented(input) == nil)
+    }
+
     /// Escapes are discounted, or every clip containing `\"` would be refused.
     @Test("still works when a quote is escaped")
     func escapedQuotesDoNotCount() {
@@ -223,6 +230,7 @@ private let everyFixture: [String] = [
     "f() {\n  print(\"a \\\" b\");\n\tg();\n}",
     "a\n  b \\\n\tc",
     "var s = @\"first\n  second\";\n\tthird",
+    "emit() {\n\tprintf '%s\\n' 'first\n    second'\n\tprintf '%s\\n' done\n}",
     "func f() {\n\tlet usage = \"\"\"\n        uttrflow run\n\t\"\"\"\n}",
     "def f():\n\tprint('''\n        indented output\n    ''')\n  return",
     "function f() {\n\tconst q = `\n        SELECT 1\n    `;\n  return q;\n}",
