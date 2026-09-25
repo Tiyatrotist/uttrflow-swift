@@ -573,8 +573,22 @@ struct DictationEmptyTests {
             "one two three four", spokenWords: 4,
             changes: [HistoryFixture.change("one", "One", over: 0..<1)], daysAgo: 1)
         let empty = HistoryFixture.dictation(entries: [before]).emptyState
-        #expect(empty?.chips.map(\.caption).contains("accuracy yesterday") == true)
+        #expect(
+            empty?.chips.map(\.caption).contains("left as dictated yesterday") == true)
         #expect(empty?.chips.last?.value == "75.0%")
+    }
+
+    /// The chip says what is measured, so the retired accuracy label cannot come back.
+    @Test("no chip caption returns to the retired accuracy label")
+    func neverAccuracyLabel() {
+        let before = HistoryFixture.measured(
+            "one two three four", spokenWords: 4,
+            changes: [HistoryFixture.change("one", "One", over: 0..<1)], daysAgo: 1)
+        let empty = HistoryFixture.dictation(entries: [before]).emptyState
+        #expect(
+            empty?.chips.allSatisfy {
+                $0.caption.range(of: "accuracy", options: .caseInsensitive) == nil
+            } == true)
     }
 
     /// A total from further back under today's heading is read as today's and never corrected.

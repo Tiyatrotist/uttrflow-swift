@@ -454,7 +454,7 @@ public enum DictationPresenter {
             chips.append(
                 MainStatistic(
                     value: MainFormatting.percentage(accuracy, locale: locale),
-                    caption: "accuracy yesterday"))
+                    caption: "\(Self.accuracyTitle.lowercased()) yesterday"))
         }
         return chips
     }
