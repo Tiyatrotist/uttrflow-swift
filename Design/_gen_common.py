@@ -1,19 +1,28 @@
 """Shared building blocks for the Uttrflow design artboards.
 
-Every colour and type size here was read off macOS 26.5 at design time via
-NSColor / NSFont.preferredFont, not estimated.
+Type sizes were read off macOS 26.5 at design time via NSFont.preferredFont. The page,
+card, rail, control, separator and text roles are pinned to BrandPalette.swift instead —
+see `--label`, `--separator` and `--window-bg` below — because the shipped UI stopped
+drawing system label/window colours; only `--label-4` keeps its original system-grey
+reading, for the one decorative dot that uses it.
 """
 
 TOKENS = """
     :root {
-      /* Read from NSColor on macOS 26.5, sRGB. */
-      --label: rgba(0,0,0,0.847);
-      --label-2: rgba(0,0,0,0.498);
-      --label-3: rgba(0,0,0,0.259);
+      /* Matches BrandPalette.Text.primary.light. */
+      --label: #171320;
+      /* Matches BrandPalette.Text.muted.light. */
+      --label-2: #645B76;
+      /* Matches BrandPalette.Text.dim.light. */
+      --label-3: #6D6481;
+      /* Read from NSColor on macOS 26.5, sRGB; a decorative dot only, not text. */
       --label-4: rgba(0,0,0,0.098);
-      --separator: rgba(0,0,0,0.098);
-      --window-bg: #FFFFFF;
-      --sidebar-bg: rgba(246,246,248,0.94);
+      /* Matches BrandPalette.Line.separator.light. */
+      --separator: #E2E0EA;
+      /* Matches BrandPalette.Surface.ground.light. */
+      --window-bg: #F3F2F7;
+      /* Matches BrandPalette.Surface.rail.light. */
+      --sidebar-bg: #EAE9F0;
       --fill: rgba(0,0,0,0.05);
       --fill-2: rgba(0,0,0,0.08);
       /* Teal ramp, hue 175 — derived from the mark's signal teal (#17A398).
