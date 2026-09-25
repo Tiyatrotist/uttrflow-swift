@@ -59,8 +59,18 @@ extension CleaningPipeline {
             FirstWordPass(
                 policy: formatter.firstWord, state: situation.insertion.sentenceState,
                 onScreen: situation.app.textOnScreen, heard: heard),
-            TerminalStopPass(policy: formatter.terminalStop, layout: formatter.layout),
+            TerminalStopPass(policy: terminalStop(formatter, in: situation), layout: formatter.layout),
         ])
+    }
+
+    /// The formatter's stop policy, except a code editor takes `.always` when the caret sits in a comment.
+    private static func terminalStop(
+        _ formatter: DestinationFormatter, in situation: Situation
+    ) -> TerminalStopPolicy {
+        guard formatter.destination == .codeEditor else { return formatter.terminalStop }
+        let inComment = CodeCommentContext.isComment(
+            precedingText: situation.insertion.precedingText, documentName: situation.app.documentName)
+        return inComment ? .always : formatter.terminalStop
     }
 }
 
