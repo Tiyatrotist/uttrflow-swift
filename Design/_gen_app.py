@@ -169,7 +169,7 @@ dictation_empty = f"""<div class="empty">
           <div class="chips">
             <div class="chip"><div class="cv">1,240</div><div class="ck">words yesterday</div></div>
             <div class="chip"><div class="cv">131</div><div class="ck">wpm yesterday</div></div>
-            <div class="chip"><div class="cv">97.2%</div><div class="ck">accuracy yesterday</div></div>
+            <div class="chip"><div class="cv">97.2%</div><div class="ck">left as dictated yesterday</div></div>
           </div>
         </div>
         <div class="foot" style="text-align: center">Yesterday&rsquo;s figures, so the pane is
