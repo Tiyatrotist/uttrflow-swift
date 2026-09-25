@@ -238,7 +238,7 @@ let package = Package(
         // Measuring how well a transformer did. Pure scoring, no model anywhere near it.
         .target(
             name: "UttrflowEval",
-            dependencies: ["UttrflowCore"],
+            dependencies: ["UttrflowCore", "UttrflowAudio"],
             swiftSettings: sharedSwiftSettings
         ),
 
@@ -411,7 +411,7 @@ let package = Package(
         ),
         .testTarget(
             name: "UttrflowEvalTests",
-            dependencies: ["UttrflowAI", "UttrflowEval", "UttrflowTestSupport"],
+            dependencies: ["UttrflowAI", "UttrflowAudio", "UttrflowEval", "UttrflowTestSupport"],
             swiftSettings: sharedSwiftSettings
         ),
         .testTarget(
