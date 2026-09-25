@@ -29,14 +29,15 @@ It shows the whole gesture, ending with the words arriving in the document. A ve
 stopped when the panel closed demonstrated a mechanism and left out the payoff.
 
 - Loop: 8 seconds. Long enough to read the pasted line before it resets.
-- Document width: 400 points. The finished sentence is 373 points at the footnote size plus
-  ten points of padding a side; a line that wrapped would read as a paragraph appearing.
+- Document width: 410 points. The finished sentence measures 383.6 points at the footnote
+  size, regular and medium runs together, plus ten points of padding a side; a line that
+  wrapped would read as a paragraph appearing.
 - Layout: side by side while the document can hold its line, stacked otherwise. The card is
   offered a width, `onGeometryChange` records it, and
   `ClipboardDemonstrationMetrics.arrangement(forOfferedWidth:)` answers from it: side by side
-  once 17 points of padding a side, 22 of gap, the document's 400 and 360 for the words all
-  fit — 816 points — with the words widening to 460 and no further. At the 760-point minimum
-  window, reserving 400 for the document leaves 56 for the words beside it, which is why the
+  once 17 points of padding a side, 22 of gap, the document's 410 and 360 for the words all
+  fit — 826 points — with the words widening to 460 and no further. At the 760-point minimum
+  window, reserving 410 for the document leaves 294 for the words beside it, which is why the
   stacked form exists.
 - `ViewThatFits` used to make that choice and does not any more. It asks every candidate how
   big it would like to be, and it was inside the clock's closure, so both arrangements were

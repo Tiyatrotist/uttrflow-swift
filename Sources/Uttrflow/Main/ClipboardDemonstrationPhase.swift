@@ -156,8 +156,8 @@ enum ClipboardDemonstrationMetrics {
     /// Between the words and the document, in the side-by-side arrangement.
     static let columnSpacing: CGFloat = 22
 
-    /// Wide enough for the pasted line to arrive unwrapped: 373 points of text and ten of padding a side.
-    static let documentWidth: CGFloat = 400
+    /// Wide enough for the pasted line to arrive unwrapped: 384 points of text and ten of padding a side.
+    static let documentWidth: CGFloat = 410
 
     /// Tall enough for the panel to sit over the document without either being clipped.
     static let stageHeight: CGFloat = 172
