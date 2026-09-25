@@ -291,9 +291,9 @@ struct HTTPAuthenticationServiceTests {
         #expect(transport.requests.isEmpty)
     }
 
-    /// A real service and a real ``AccountRefresh`` over an empty Keychain; the cached profile survives.
-    @Test("a Keychain that lost the token does not cost the user their cached profile")
-    func anEmptyKeychainKeepsTheProfile() async throws {
+    /// A real service and a real ``AccountRefresh`` over an empty `TokenStore`; the cached profile survives.
+    @Test("an empty token store does not cost the user their cached profile")
+    func anEmptyTokenStoreKeepsTheProfile() async throws {
         let cache = Fixture.cacheHolding(profile: signedIn)
         let transport = happyPath()
 
