@@ -245,7 +245,7 @@ struct TranscribeCorpus: AsyncParsableCommand {
             with: measured, tolerance: RegressionTolerance(percentagePoints: tolerance))
         printComparison(comparison, against: stored)
 
-        if failOnRegression, comparison.isRegression { throw ExitCode.failure }
+        if failOnRegression, comparison.failsGate { throw ExitCode.failure }
     }
 
     private func printComparison(_ comparison: BaselineComparison, against baseline: AccuracyBaseline) {
