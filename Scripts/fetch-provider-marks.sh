@@ -47,14 +47,7 @@ fi
 
 unzip -q -o "$TMP/google.zip" -d "$TMP/google"
 
-# The pack's internal layout is Google's to change, and it has changed before, so search
-# for the mark rather than assume a path. What is wanted is the standalone square G — not
-# a full button image with wording baked in, which cannot be scaled to a 16pt square.
-MARK="$(find "$TMP/google" -type f -iname '*.png' \
-    ! -iname '*disabled*' ! -iname '*pressed*' ! -iname '*focus*' \
-    | grep -iE 'g[-_]?logo|logo[-_]?g|google[-_]?g\b|/g\.png$' \
-    | sort \
-    | head -1 || true)"
+MARK="$("$ROOT/Scripts/select-google-mark.sh" "$TMP/google")"
 
 if [[ -z "$MARK" ]]; then
     printf '\nthe asset pack downloaded, but no standalone G was recognisable in it.\n'
