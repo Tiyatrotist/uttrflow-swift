@@ -187,13 +187,14 @@ public actor PersonalDictionaryStore {
     /// Counts one dictation against each distinct entry in a single write, answering with those counted.
     @discardableResult
     public func recordUse(of ids: [UUID]) throws(DictionaryStoreError) -> [DictionaryEntry] {
-        try update(Set(ids)) { $0.timesUsed += 1 }
+        // Saturates rather than trapping, so a counter already at its ceiling stays there.
+        try update(Set(ids)) { $0.timesUsed = DictionaryEntry.clamped($0.timesUsed + 1) }
     }
 
     /// Notes that the user undid a dictation this entry was applied to, which is what retires a word.
     @discardableResult
     public func recordRevert(of id: UUID) throws(DictionaryStoreError) -> DictionaryEntry? {
-        try update(id) { $0.timesReverted += 1 }
+        try update(id) { $0.timesReverted = DictionaryEntry.clamped($0.timesReverted + 1) }
     }
 
     /// Clears a retired entry's undo count, keeping its uses. See `Docs/app-dictionary-store.md`.

@@ -23,6 +23,38 @@ func word(
         timesUsed: used, timesReverted: reverted)
 }
 
+/// The JSON a hand-edited entry would carry: the same shape `DictionaryEntry` decodes, counters unclamped.
+struct RawDictionaryEntry: Encodable {
+    let id: UUID
+    let word: String
+    let pronunciation: String?
+    let origin: WordOrigin
+    let firstSeen: Date
+    let timesUsed: Int
+    let timesReverted: Int
+}
+
+/// One entry, as `RawDictionaryEntry`, with only the fields a given test cares about spelt out.
+func rawWord(
+    _ spelling: String, from origin: WordOrigin = .added, timesUsed: Int, timesReverted: Int,
+    id: UUID = UUID()
+) -> RawDictionaryEntry {
+    RawDictionaryEntry(
+        id: id, word: spelling, pronunciation: nil, origin: origin, firstSeen: epoch,
+        timesUsed: timesUsed, timesReverted: timesReverted)
+}
+
+/// One entry's bytes exactly as a hand edit could leave them, bypassing `DictionaryEntry`'s own clamp.
+func rawDictionaryEntryJSON(
+    id: UUID = UUID(), word: String, pronunciation: String? = nil, origin: WordOrigin = .added,
+    firstSeen: Date = epoch, timesUsed: Int, timesReverted: Int
+) throws -> Data {
+    try JSONEncoder().encode(
+        RawDictionaryEntry(
+            id: id, word: word, pronunciation: pronunciation, origin: origin, firstSeen: firstSeen,
+            timesUsed: timesUsed, timesReverted: timesReverted))
+}
+
 /// A directory of its own per test, with real files, because a substitute would test the substitute.
 struct Sandbox: ~Copyable {
     let root: URL

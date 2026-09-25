@@ -51,7 +51,7 @@ public enum WorkingSet {
 
     /// What one prompt slot spent on this entry is worth.
     static func value(of entry: DictionaryEntry, now: Date, wanted: Set<String>) -> Double {
-        let kept = Double(max(0, entry.timesUsed - entry.timesReverted))
+        let kept = Double(max(0, entry.netUses))
         let frequency = kept / (1 + kept)
         // Clamped at zero, so a future-stamped entry scores as brand new, not impossibly valuable.
         let ageInDays = max(0, now.timeIntervalSince(entry.firstSeen)) / 86_400

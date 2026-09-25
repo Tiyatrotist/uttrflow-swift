@@ -38,6 +38,12 @@ which is that the app should still open: a dictionary that has forgotten everyth
 slightly worse, and one that refuses to load makes it impossible. The unreadable file is renamed
 aside first, as the history store describes, so the next word added cannot write over the only copy.
 
+A structurally valid entry can still carry a counter outside the domain the rest of the type
+assumes: negative, or absurdly large from a hand edit. `DictionaryEntry`'s decoder clamps
+`timesUsed` and `timesReverted` into zero through `DictionaryEntry.maximumCount` on the way in, so
+ranking, the phonetic index and both counters' own arithmetic can never overflow; everything else
+about the entry decodes untouched.
+
 ## Sightings are never written down
 
 Terms noticed on screen and said aloud, but not yet seen often enough to keep, live in memory and
