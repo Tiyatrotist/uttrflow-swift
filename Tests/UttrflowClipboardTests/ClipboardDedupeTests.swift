@@ -167,6 +167,24 @@ struct ClipboardRepeatTests {
         #expect(await folder.store.clips(keeping: folder.retention).count == 2)
     }
 
+    /// A hand-edited or corrupted-yet-decodable clipboard file must not crash the next matching copy.
+    @Test("a readable maximum copy count does not crash when copied again")
+    func maximumCopyCountDoesNotCrash() async throws {
+        let folder = try TemporaryFolder()
+        let file = folder.url.appending(path: "clipboard.json", directoryHint: .notDirectory)
+        let saturated = Clip(text: "again", kind: .text, copiedAt: Date(), timesCopied: .max)
+        try JSONEncoder().encode([saturated]).write(to: file)
+
+        // Reopening proves the persisted shape decodes before the repeat is ever recorded.
+        #expect(await folder.store.clips(keeping: folder.retention).first?.timesCopied == .max)
+
+        let clips = try await folder.store.record(
+            Clip(text: "again", kind: .text, copiedAt: Date()), keeping: folder.retention)
+
+        #expect(clips.first?.text == "again")
+        #expect(clips.first?.timesCopied == .max, "saturates instead of trapping")
+    }
+
     /// A store written before pictures carried a digest goes on never merging them.
     @Test("pictures with no digest never merge")
     func oldPicturesWithoutADigest() {

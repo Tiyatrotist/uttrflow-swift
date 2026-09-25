@@ -431,8 +431,8 @@ public actor ClipboardStore {
             image: previous.image ?? arrival.image,
             // Everything the user decided stays with the clip they decided it about.
             alias: previous.alias, category: previous.category, isPinned: previous.isPinned,
-            // The point of recognising a repeat: this clip happening once more, not a new one.
-            timesCopied: previous.timesCopied + 1)
+            // One more time, not a new clip; saturates at Int.max instead of trapping.
+            timesCopied: previous.timesCopied == .max ? .max : previous.timesCopied + 1)
     }
 
     /// Applies one edit to one clip, then the retention rules, then writes.
