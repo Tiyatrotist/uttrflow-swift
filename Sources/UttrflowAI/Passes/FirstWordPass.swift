@@ -92,13 +92,20 @@ public struct FirstWordPass: CleaningPass {
         return shape.replacingCore(with: "I" + shape.core.dropFirst())
     }
 
-    /// Whether a word keeps its capital mid-sentence: "I" and its contractions, or an acronym.
+    /// Whether a word keeps its capital mid-sentence: "I", an English calendar name, or an acronym.
     static func keepsCapital(_ word: String) -> Bool {
         let core = WordShape(word).core
         if core == "I" || core.hasPrefix("I'") || core.hasPrefix("I\u{2019}") { return true }
+        if calendarWords.contains(core.lowercased()) { return true }
         let letters = core.filter(\.isLetter)
         return letters.count >= 2 && letters.allSatisfy(\.isUppercase)
     }
+
+    private static let calendarWords: Set<String> = [
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+        "january", "february", "march", "april", "may", "june",
+        "july", "august", "september", "october", "november", "december",
+    ]
 
     /// Copies the case the word was heard in from where it stands, skipping fillers; a changed word is left alone.
     static func matchingHeardCase(_ word: String, heard: [String]) -> String {
