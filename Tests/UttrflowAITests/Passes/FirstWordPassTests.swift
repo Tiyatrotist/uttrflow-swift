@@ -112,7 +112,7 @@ struct FirstWordPassTests {
         "keeps the capital of I, its contractions and an acronym mid-sentence",
         arguments: [
             "I think so.", "I'll be there.", "I\u{2019}m late.", "API returns JSON.", "NASA said so.",
-            "USB-C only.",
+            "USB-C only.", "Friday works.", "March works.",
         ]
     )
     func exemptions(text: String) {
@@ -201,6 +201,9 @@ struct FirstWordPassTests {
         #expect(FirstWordPass.keepsCapital("I'd"))
         #expect(FirstWordPass.keepsCapital("\"I'd\""))
         #expect(FirstWordPass.keepsCapital("USB-C"))
+        #expect(FirstWordPass.keepsCapital("Friday"))
+        #expect(FirstWordPass.keepsCapital("March"))
+        #expect(FirstWordPass.keepsCapital("friday"))
         #expect(!FirstWordPass.keepsCapital("A"))
         #expect(!FirstWordPass.keepsCapital("It"))
         #expect(!FirstWordPass.keepsCapital("Ice"))
