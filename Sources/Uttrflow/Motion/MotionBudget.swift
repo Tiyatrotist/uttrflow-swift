@@ -30,9 +30,14 @@ struct MotionBudget: Equatable {
         !reducesMotion && energy.allowsDiscretionaryWork
     }
 
+    /// Whether decorative dock effects may animate; Reduce Motion shows their end state immediately.
+    var dockEffectsMove: Bool {
+        !reducesMotion
+    }
+
     /// Whether the working bars rise and settle; Reduce Motion holds them still.
     var workingBarsMove: Bool {
-        !reducesMotion
+        dockEffectsMove
     }
 
     /// The dock timelines' shortest gap between frames, longer in Low Power Mode or under thermal pressure.
