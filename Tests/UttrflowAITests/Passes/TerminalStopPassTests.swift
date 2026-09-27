@@ -68,6 +68,28 @@ struct TerminalStopPassTests {
         #expect(cleaned(input, by: short) == input)
     }
 
+    @Test(
+        "does not add a stop when following insertion text already punctuates or continues the sentence",
+        arguments: [
+            (".", "Friday"),
+            (", and then Monday", "Friday"),
+            (" and then Monday", "Friday"),
+            (" next week", "Friday"),
+        ]
+    )
+    func respectsFollowingInsertionText(following: String, expected: String) {
+        let pass = TerminalStopPass(policy: .always, followingText: following)
+        #expect(cleaned("Friday", by: pass) == expected)
+    }
+
+    @Test("still adds a stop before an empty or new-sentence following context")
+    func stopsBeforeNewSentence() {
+        #expect(cleaned("Friday", by: TerminalStopPass(policy: .always, followingText: "")) == "Friday.")
+        #expect(
+            cleaned("Friday", by: TerminalStopPass(policy: .always, followingText: " Monday starts fresh"))
+                == "Friday.")
+    }
+
     @Test("adds nothing when the text holds a line break and the layout keeps newlines")
     func leavesLayout() {
         let code = TerminalStopPass(policy: .always, layout: .preserveNewlines)
