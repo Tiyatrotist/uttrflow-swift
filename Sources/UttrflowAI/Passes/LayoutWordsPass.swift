@@ -30,6 +30,14 @@ public struct LayoutWordsPass: CleaningPass {
                 position += 1
                 continue
             }
+            if position > 0, found.mark.contains(where: \.isNewline) {
+                let previous = live[position - 1]
+                let text = draft.words[previous].text
+                let cleaned = Self.withoutTrailingLayoutClauseMark(text)
+                if cleaned != text {
+                    draft.replace(at: previous, with: cleaned, by: Self.id)
+                }
+            }
             draft.replace(at: live[position], with: found.mark, by: Self.id)
             for index in live[position + 1..<position + found.length] {
                 draft.remove(at: index, by: Self.id)
@@ -38,6 +46,15 @@ public struct LayoutWordsPass: CleaningPass {
             position += 1
         }
         return draft
+    }
+
+    /// Drops the pause mark the recogniser left immediately before a dictated line break.
+    private static func withoutTrailingLayoutClauseMark(_ text: String) -> String {
+        let shape = WordShape(text)
+        var suffix = Array(shape.suffix)
+        guard let index = suffix.lastIndex(where: { $0 == "," || $0 == ";" }) else { return text }
+        suffix.remove(at: index)
+        return shape.prefix + shape.core + String(suffix)
     }
 
     /// The mark with nothing to break from at the head of the text, where a break is no layout and only an item's number is.
