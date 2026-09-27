@@ -6,10 +6,15 @@ public struct TerminalStopPass: CleaningPass {
 
     public let policy: TerminalStopPolicy
     public let layout: LayoutPolicy
+    public let followingText: String?
 
-    public init(policy: TerminalStopPolicy = .always, layout: LayoutPolicy = .paragraphs) {
+    public init(
+        policy: TerminalStopPolicy = .always, layout: LayoutPolicy = .paragraphs,
+        followingText: String? = nil
+    ) {
         self.policy = policy
         self.layout = layout
+        self.followingText = followingText
     }
 
     public func apply(_ draft: Draft) -> Draft {
@@ -21,17 +26,28 @@ public struct TerminalStopPass: CleaningPass {
         let finished: String
         switch policy {
         case .always:
-            finished = finishedLast(word, in: draft)
+            finished = followingContinuesSentence ? word : finishedLast(word, in: draft)
         case .never:
             finished = WordShape.withoutTrailingStop(word)
         case .offForShortMessages(let sentences):
-            let stopped = finishedLast(word, in: draft)
+            let stopped = followingContinuesSentence ? word : finishedLast(word, in: draft)
             finished =
                 Self.sentenceCount(draft.text) <= sentences ? WordShape.withoutTrailingStop(stopped) : stopped
         }
         draft.replace(at: last, with: finished, by: Self.id)
         return draft
     }
+
+    /// Whether text already present after the insertion point supplies punctuation or continues this sentence.
+    private var followingContinuesSentence: Bool {
+        guard let followingText else { return false }
+        let following = followingText.drop(while: \.isWhitespace)
+        guard let first = following.first else { return false }
+        if Self.followingPunctuation.contains(first) { return true }
+        return first.isLetter && first.isLowercase
+    }
+
+    private static let followingPunctuation: Set<Character> = [".", ",", "?", "!", ":", ";"]
 
     /// The last word with a stop unless it ends a list item, or the layout keeps newlines and the text holds one.
     private func finishedLast(_ word: String, in draft: Draft) -> String {
