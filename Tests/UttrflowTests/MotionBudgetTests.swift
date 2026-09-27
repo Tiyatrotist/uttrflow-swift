@@ -37,6 +37,13 @@ struct MotionBudgetTests {
         #expect(MotionBudget.demonstrationFrameInterval == 1.0 / 30)
     }
 
+    @Test("holds decorative dock effects still under Reduce Motion")
+    func dockEffects() {
+        #expect(MotionBudget().dockEffectsMove)
+        #expect(!MotionBudget(reducesMotion: true).dockEffectsMove)
+        #expect(MotionBudget(energy: EnergyConditions(isLowPowerMode: true)).dockEffectsMove)
+    }
+
     @Test("moves the working bars unless Reduce Motion is on")
     func workingBars() {
         #expect(MotionBudget().workingBarsMove)
