@@ -75,11 +75,12 @@ struct DockView: View {
     var onDesiredSize: (CGSize) -> Void = { _ in }
 
     var body: some View {
+        let motion = MotionBudgetObserver.shared.budget
         form
             .fixedSize()
             .foregroundStyle(Color.dockInk)
-            .scaleEffect(model.isPressed ? 0.96 : 1)
-            .animation(.spring(duration: 0.22), value: model.isPressed)
+            .scaleEffect(model.isPressed && motion.dockEffectsMove ? 0.96 : 1)
+            .animation(motion.dockEffectsMove ? .spring(duration: 0.22) : nil, value: model.isPressed)
             .contentShape(.rect)
             // At the root: the form is replaced when recording starts and would miss the mouse-up.
             .gesture(pressGesture, including: model.presentation.action == nil ? .all : .subviews)
@@ -445,14 +446,18 @@ private struct LevelMeterView: View {
     let towardsLeading: Bool
 
     var body: some View {
+        let motion = MotionBudgetObserver.shared.budget
         TimelineView(
-            .animation(minimumInterval: MotionBudgetObserver.shared.budget.dockFrameInterval)
+            .animation(minimumInterval: motion.dockFrameInterval, paused: !motion.dockEffectsMove)
         ) { timeline in
             Canvas { context, size in
-                let phase = min(
-                    max(
-                        timeline.date.timeIntervalSince(model.lastArrival)
-                            / DockMetrics.meterArrivalInterval, 0), 1)
+                let phase =
+                    motion.dockEffectsMove
+                    ? min(
+                        max(
+                            timeline.date.timeIntervalSince(model.lastArrival)
+                                / DockMetrics.meterArrivalInterval, 0), 1)
+                    : 1
                 DockMetrics.drawBars(
                     model.bars.levels, in: context, size: size,
                     phase: phase, towardsLeading: towardsLeading)
@@ -538,8 +543,9 @@ private struct MarkTick: View {
     @State private var drawn = false
 
     var body: some View {
+        let motion = MotionBudgetObserver.shared.budget
         Tick()
-            .trim(from: 0, to: drawn ? 1 : 0)
+            .trim(from: 0, to: motion.dockEffectsMove ? (drawn ? 1 : 0) : 1)
             .stroke(
                 Color.dockSuccessInk,
                 style: StrokeStyle(
@@ -551,7 +557,11 @@ private struct MarkTick: View {
                 height: DockMetrics.markTickHeight
             )
             .task {
-                withAnimation(.easeOut(duration: 0.26)) { drawn = true }
+                if motion.dockEffectsMove {
+                    withAnimation(.easeOut(duration: 0.26)) { drawn = true }
+                } else {
+                    drawn = true
+                }
             }
     }
 }
