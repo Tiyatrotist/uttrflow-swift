@@ -22,6 +22,27 @@ struct LayoutWordsPassTests {
     }
 
     @Test(
+        "removes recognizer clause marks before dictated list and line breaks",
+        arguments: [
+            (
+                "Shopping list, bullet point milk, bullet point eggs, bullet point bread.",
+                "Shopping list\n- milk\n- eggs\n- bread."
+            ),
+            ("first item; new line second item", "first item\nsecond item"),
+            ("heading, number one milk number two eggs", "heading\n1. milk\n2. eggs"),
+        ]
+    )
+    func removesClauseMarksBeforeLayout(input: String, expected: String) {
+        #expect(cleaned(input, by: sut) == expected)
+    }
+
+    @Test("keeps real sentence punctuation before a dictated break")
+    func keepsSentenceMarksBeforeLayout() {
+        #expect(cleaned("Ready? new line yes", by: sut) == "Ready?\nyes")
+        #expect(cleaned("Done. new paragraph next", by: sut) == "Done.\n\nnext")
+    }
+
+    @Test(
         "numbers the items a spoken number opens",
         arguments: [
             ("we need number one milk number two eggs", "we need\n1. milk\n2. eggs"),
