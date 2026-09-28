@@ -17,15 +17,24 @@ enum SignOff {
             closings.contains(line[..<comma].trimmingCharacters(in: .whitespaces).lowercased())
         else { return line }
         let signature = words(of: String(line[line.index(after: comma)...]))
-        // A signature is a name: a capitalised word or three, never a sentence.
-        guard (1...longestSignature).contains(signature.count),
-            signature.allSatisfy({ $0.first?.isUppercase == true })
-        else { return line }
+        // A signature is one to three capitalised words; lowercase words after it cannot make it safe.
+        guard let first = signature.first, first.first?.isUppercase == true else { return line }
+        let capitalised = Array(signature.prefix(while: { $0.first?.isUppercase == true }))
+        let afterClosing = String(line[line.index(after: comma)...])
+        // A long capitalised phrase is ordinary prose only when it has no title or comma continuation.
+        if capitalised.count > longestSignature, first != "Dr",
+            capitalised.count == signature.count, !afterClosing.contains(",")
+        {
+            return line
+        }
+        let name = Array(capitalised.prefix(longestSignature))
         let own = Set((ownLines + [typed]).flatMap(words(of:)).map { $0.lowercased() })
         // Only a name the person has written is theirs to sign with; any other was read on screen or made up.
-        guard !signature.allSatisfy({ own.contains($0.lowercased()) }) else { return line }
-        let closing = String(line[...comma])
-        return closing.count > typed.count ? closing : nil
+        guard name.allSatisfy({ own.contains($0.lowercased()) }) else {
+            let closing = String(line[...comma])
+            return closing.count > typed.count ? closing : nil
+        }
+        return line
     }
 
     /// The most words a signature after a closing runs to.
