@@ -380,6 +380,7 @@ public struct MeaningPreservationGuard: Sendable {
         // A draft the checks cannot read romanises into words with no counterpart here, so the base checks keep it.
         guard kept.allSatisfy(\.isPlain) else { return .accepted }
         let origins = (kept + echo).filter(\.isPlain)
+        let originIndex = WordOccurrenceIndex(origins)
         // A reading offered for a doubtful word is by definition not what was said, and `candidateVerdict` judges it.
         let readings = Set(
             doubtful
@@ -388,8 +389,8 @@ public struct MeaningPreservationGuard: Sendable {
                 .map { DoubtfulSpan.closedUp(String($0)) })
         for token in rewritten
         where token.isPlain && isContent(token) && !readings.contains(DoubtfulSpan.closedUp(token.text)) {
-            if !origins.contains(where: { survives(token.matching, as: $0) })
-                && !isSpelled(token.text, from: origins)
+            if !originIndex.contains(token.matching)
+                && !originIndex.spells(token.text)
             {
                 return .rejected(reason: "the rewrite invented '\(token.text)'", kind: .inventedWord)
             }
@@ -576,19 +577,105 @@ public struct MeaningPreservationGuard: Sendable {
 
     /// Walks the kept content words along the rewrite, so a word may change its form but never its place.
     static func survivalVerdict(_ kept: [GrammarToken], in written: [GrammarToken]) -> GuardVerdict {
+        let writtenIndex = WordOccurrenceIndex(written)
         var reached = 0
         for token in kept {
-            let places = written.indices.filter { survives(token.matching, as: written[$0]) }
+            let places = writtenIndex.occurrences(of: token.matching)
             guard !places.isEmpty else {
                 return .rejected(reason: "the rewrite lost or replaced '\(token.text)'", kind: .lostWord)
             }
             // The earliest place still open is taken, which is the most room the words after it can be left.
-            guard let place = places.first(where: { $0 >= reached }) else {
+            guard let place = writtenIndex.firstOccurrence(of: token.matching, atOrAfter: reached) else {
                 return .rejected(reason: "the rewrite moved '\(token.text)'", kind: .movedWord)
             }
             reached = place
         }
         return .accepted
+    }
+
+    /// Maps every spelling accepted by `survives` to its token positions, preserving their original order.
+    private struct WordOccurrenceIndex {
+        private let places: [String: [Int]]
+
+        init(_ tokens: [GrammarToken]) {
+            var indexed: [String: [Int]] = [:]
+            for (index, token) in tokens.enumerated() {
+                var spellings: Set<String> = [token.matching]
+                if let spoken = MeaningPreservationGuard.numberWordsByNumeral[token.matching] {
+                    spellings.formUnion(spoken)
+                }
+                if let numeral = MeaningPreservationGuard.numberWords[token.matching] {
+                    spellings.insert(numeral)
+                }
+                if let homophones = Homophones.group(containing: token.matching) {
+                    spellings.formUnion(homophones)
+                }
+                if MeaningPreservationGuard.auxContractionRoots.contains(token.matching) {
+                    spellings.insert("\(token.matching)nt")
+                }
+                if MeaningPreservationGuard.auxContractionRoots.contains(where: {
+                    "\($0)nt" == token.matching
+                }) {
+                    spellings.insert(String(token.matching.dropLast(2)))
+                }
+                spellings.formUnion(Self.identifierSpellings(token.text))
+                for spelling in spellings {
+                    indexed[spelling, default: []].append(index)
+                }
+            }
+            places = indexed
+        }
+
+        private static func identifierSpellings(_ identifier: String) -> Set<String> {
+            let characters = Array(identifier)
+            let lowered = Array(identifier.lowercased())
+            guard lowered.count == characters.count else { return [] }
+            var spellings: Set<String> = []
+            for start in characters.indices {
+                let opens = start == 0 || characters[start].isUppercase || !characters[start - 1].isLetter
+                guard opens else { continue }
+                for end in (start + 1)...characters.count {
+                    let closes =
+                        end == characters.count || characters[end].isUppercase || !characters[end].isLetter
+                    if closes, end - start >= 3 {
+                        spellings.insert(String(lowered[start..<end]))
+                    }
+                }
+            }
+            return spellings
+        }
+
+        func occurrences(of word: String) -> [Int] { places[word] ?? [] }
+
+        func firstOccurrence(of word: String, atOrAfter lowerBound: Int) -> Int? {
+            guard let candidates = places[word] else { return nil }
+            var low = 0
+            var high = candidates.count
+            while low < high {
+                let middle = (low + high) / 2
+                if candidates[middle] < lowerBound { low = middle + 1 } else { high = middle }
+            }
+            return low < candidates.count ? candidates[low] : nil
+        }
+
+        func contains(_ word: String) -> Bool { places[word] != nil }
+
+        func spells(_ identifier: String) -> Bool {
+            let parts = MeaningPreservationGuard.identifierParts(identifier)
+            guard parts.count > 1 else { return false }
+            var next = 0
+            for part in parts {
+                guard let place = firstOccurrence(of: part, atOrAfter: next) else { return false }
+                next = place + 1
+            }
+            return true
+        }
+    }
+
+    /// Number spellings grouped by their numeral so occurrence indexes can add reverse matches in one lookup.
+    private static let numberWordsByNumeral: [String: Set<String>] = numberWords.reduce(into: [:]) {
+        index, entry in
+        index[entry.value, default: []].insert(entry.key)
     }
 
     /// Whether one rewritten word is the kept word: exact, as its numeral or its word, a homophone, an identifier spelling, or the aux the rewrite contracted.
