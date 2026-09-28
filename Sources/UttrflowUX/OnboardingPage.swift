@@ -28,12 +28,19 @@ public struct OnboardingPage: Sendable, Equatable {
     public let stepCount: Int
     /// Read aloud by VoiceOver. Never abbreviated, never an icon name.
     public let accessibilityLabel: String
+    /// The line under the heading, on the pages whose heading comes first.
+    public var subtitle: String? = nil
+    /// Who is signed in, drawn as a chip under the heading.
+    public var account: OnboardingAccountChip? = nil
+    /// The one full-width button, on the pages that have one instead of round buttons.
+    public var action: OnboardingAction? = nil
 }
 
 extension OnboardingPage {
     /// Whether there is anything on this page the user can press, counting the providers and the link.
     public var hasSomethingToPress: Bool {
         buttons.contains(where: \.isEnabled) || providers.contains(where: \.isEnabled) || link != nil
+            || action != nil
     }
 }
 
@@ -67,6 +74,57 @@ public enum OnboardingPicture: Sendable, Equatable {
     case keys([String], isHeld: Bool, field: OnboardingField)
     /// A sign-in code to read off this screen and type into the browser.
     case code(String)
+    /// The new account's circle over one burst of confetti.
+    case welcome(initials: String, provider: SignInProvider)
+    /// The bottom-left keys of a keyboard with the shortcut's keys lit, above the field the first try fills.
+    case keyboard(OnboardingKeyboard)
+}
+
+/// The try-it picture: which keys to hold, whether they are held, and the field the words land in.
+public struct OnboardingKeyboard: Sendable, Equatable {
+    /// The shortcut's keys lit on the drawn corner, or `nil` when the corner cannot show the shortcut.
+    public let lit: Set<OnboardingCornerKey>?
+    /// The shortcut as keycaps, drawn instead of the corner when `lit` is `nil`.
+    public let keys: [String]
+    /// The words on the bracket over the lit keys, or `nil` for no bracket.
+    public let bracket: String?
+    /// Whether the keys are down right now.
+    public let isHeld: Bool
+    /// Whether the lit keys press themselves now and then, to show what holding means.
+    public let demonstrates: Bool
+    /// The field the words land in.
+    public let field: OnboardingField
+    /// Whether the field is listening: ringed, with a meter and a clock.
+    public let isListening: Bool
+    /// Whether confetti bursts over the field once.
+    public let celebrates: Bool
+}
+
+/// The keys at the bottom-left of a Mac keyboard, left to right.
+public enum OnboardingCornerKey: Sendable, Equatable, CaseIterable {
+    case function, control, option, command
+}
+
+/// The account chip: the provider's mark and the address it signed in with.
+public struct OnboardingAccountChip: Sendable, Equatable {
+    /// Which provider's mark to draw.
+    public let provider: SignInProvider
+    /// The address, or the provider's name when there is none.
+    public let text: String
+}
+
+/// A full-width button, with an optional countdown bar and a caption under it.
+public struct OnboardingAction: Sendable, Equatable {
+    /// The words on the button.
+    public let title: String
+    /// What pressing it means.
+    public let intent: OnboardingIntent
+    /// Teal when it is the page's answer, glass when it is a way past the page.
+    public let isProminent: Bool
+    /// How long until the page moves on by itself, drawn as a shrinking bar; `nil` for none.
+    public let countdown: Duration?
+    /// The quiet line under it.
+    public let caption: String?
 }
 
 /// How lively the waveform is.

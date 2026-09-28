@@ -65,6 +65,16 @@ Offline, the sign-in page offers only Try again.
 `OnboardingFlow.onSignIn` fires as soon as the profile is kept, so the rest of the app is
 switched on before the remaining setup pages, whose last one asks for a first dictation.
 
+## The welcome
+
+A finished sign-in does not jump straight to the next page. The flow shows
+`OnboardingSignInState.welcomed`: the account's circle over one burst of confetti, "You’re in,
+<first name>!", the address it signed in with, and a Continue button that names the page it
+leads to. `OnboardingWindowController` brings the window forward at that moment, since the
+browser has the screen. The welcome moves on by itself after
+`OnboardingPresenter.welcomeLinger` (3 s, drawn as a shrinking bar), or at once on Continue.
+A countdown that ends after the user has left the page, or after a sign-out, changes nothing.
+
 A sign-out while the window is still open, from the menu bar or the Account page, sends the
 flow back to this page through `OnboardingFlow.signedOut()`, whichever page it was on. A
 download in flight keeps going, but stops drawing; signing in again joins it on the
@@ -72,12 +82,17 @@ download page.
 
 ## The first try
 
-The last page asks the user to hold their shortcut and talk. `OnboardingWindowController`
+The last page asks the user to hold their shortcut and talk. It draws the bottom-left keys
+of a Mac keyboard with the shortcut's keys lit teal under a "HOLD BOTH" bracket. The lit keys
+press themselves every 1.4 s to show what holding means. A shortcut with a key the corner
+does not have, such as Space or Shift, is drawn as plain keycaps instead
+(`OnboardingKeys.corner`). `OnboardingWindowController`
 maps each `DictationState` to an `OnboardingTrial`: recording is listening, and the words
 of an insertion — or of a failed one, since Uttrflow does not type into its own window —
-fill the page's field. `OnboardingFlow.tried(_:)` shows them for a moment and then closes
-onboarding, which opens the dashboard. Empty words go back to waiting. "Skip to dashboard"
-closes onboarding at any time.
+fill the page's field. `OnboardingFlow.tried(_:)` shows them with a small burst of confetti
+for `OnboardingPresenter.heardLinger` (3 s) and then closes onboarding, which opens the
+dashboard; "Open dashboard" does it at once. Empty words go back to waiting. "Skip to
+dashboard" is a full-width button and closes onboarding at any time.
 
 ## Finishing writes no preference
 
