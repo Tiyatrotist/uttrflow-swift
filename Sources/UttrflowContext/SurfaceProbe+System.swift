@@ -18,6 +18,7 @@ public enum SurfaceProbe {
         // Never set on the system-wide element: that is process-wide and would cut dictation's own writes short (#887).
         let system = AXUIElementCreateSystemWide()
         let systemWide = element(system, kAXFocusedUIElementAttribute, timeoutInSeconds: messagingTimeout)
+            .flatMap { field in owns(owner(of: field), processIdentifier) ? field : nil }
         return FocusedElementPreference.choose(
             systemWide: systemWide, systemWideRole: { string($0, kAXRoleAttribute) },
             application: {
