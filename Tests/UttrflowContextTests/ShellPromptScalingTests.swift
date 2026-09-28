@@ -105,7 +105,9 @@ private enum RescanningShellPrompt {
         case "#":
             prefix.allSatisfy(\.isWhitespace) || prefix.last == "="
                 || (unquotedAt && !(prefix.last?.isWhitespace ?? true))
-        case ">": prefix.allSatisfy { $0 == ">" || $0.isWhitespace } || prefix.last == "="
+        case ">":
+            prefix.allSatisfy { $0 == ">" || $0.isWhitespace } || prefix.last == "="
+                || (prefix.last.map { !$0.isWhitespace } ?? false)
         default: true
         }
     }
