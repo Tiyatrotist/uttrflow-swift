@@ -576,11 +576,17 @@ public actor ClipboardStore {
     /// Drops the least recently used pictures until the folder fits its disk budget.
     private func withinDisk(_ clips: [Clip]) -> [Clip] {
         guard budget.disk > 0 else { return clips }
-        let pictures = clips.filter { ClipClass(of: $0) == .images }
+        // Pinned pictures count toward the budget so pinning many of them cannot push the unpinned pool past the bound.
+        let pictures = clips.filter { $0.kind == .image || $0.image != nil }
         var weight = pictures.reduce(0) { $0 + ($1.image?.bytes ?? 0) }
         guard weight > budget.disk else { return clips }
         var dropped: Set<UUID> = []
-        for clip in pictures.sorted(by: { $0.lastUsedAt < $1.lastUsedAt }) where weight > budget.disk {
+        // Only the un-kept pictures may be evicted; kept ones are exempt by the kept pool's rule.
+        let evictable =
+            pictures
+            .filter { !$0.isKept }
+            .sorted { $0.lastUsedAt < $1.lastUsedAt }
+        for clip in evictable where weight > budget.disk {
             dropped.insert(clip.id)
             weight -= clip.image?.bytes ?? 0
         }

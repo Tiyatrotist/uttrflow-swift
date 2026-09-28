@@ -94,8 +94,14 @@ waiting for it; these bounds are what stop the work itself.
 
 ## Kept
 
-A clip the user named, filed or pinned has no quota, no window and no replacement policy.
-The honest consequence is that the ceiling is a promise about history, not about what somebody
-deliberately saved: someone who pins two gigabytes of screenshots has asked for two gigabytes.
-Kept is asked first when classifying, so a pinned screenshot is not a picture and the
-seven-day window cannot delete it.
+A clip the user named, filed or pinned has no quota, no window and no replacement policy. Kept is
+asked first when classifying, so a pinned screenshot is not a picture and the seven-day window
+cannot delete it.
+
+Pinned pictures are the one exception: their bytes still count toward the disk budget, even
+though eviction cannot touch them. The 1 GB ceiling is therefore a bound on the total picture
+bytes on disk, pinned or not; pinning enough large screenshots to overflow it is what the user
+asked for, and `withinDisk` will keep evicting unpinned pictures to make room for the next
+copy. A pinned picture set that has already overflowed the cap stays in place until the user
+unpins; eviction is still exempt, by the kept pool's rule.
+
