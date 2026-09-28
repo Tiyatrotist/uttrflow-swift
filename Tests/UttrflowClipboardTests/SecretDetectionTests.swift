@@ -376,12 +376,21 @@ struct SecretDetectionTests {
         #expect(ClipKindDetector.kind(of: text) == .secret)
     }
 
+    @Test("masks standalone generated passwords with symbols from twelve characters")
+    func standaloneGeneratedPasswords() {
+        for password in ["q7#Vx!2mR$9kLp@4Wz&n", "Tr0ub4dor&3xK!9z", "q7hVxd2mRt9kLpe4Wzbn"] {
+            #expect(ClipKindDetector.kind(of: password) == .secret)
+        }
+    }
+
     /// The statistical rule is the loosest one, so its gates matter.
     @Test(
         "does not reach for the entropy rule where it has no business",
         arguments: [
             "shortenough123",
             "abcdefghijklmnopqrstuvwxyz",
+            "123456789012",
+            "123e4567-e89b-12d3-a456-426614174000",
             "com.uttrflow.clipboard.watcher.queue1",
             "/Users/naveen/Library/Application1",
             "~/Developer/uttrflow/Sources/Clipboard2",
@@ -390,6 +399,11 @@ struct SecretDetectionTests {
         ])
     func entropyGates(_ text: String) {
         #expect(ClipKindDetector.kind(of: text) != .secret)
+    }
+
+    @Test("does not mistake an unbroken short digest for a generated password")
+    func shortDigest() {
+        #expect(ClipKindDetector.kind(of: "5f4dcc3b5aa765d61d8327deb882cf99") != .secret)
     }
 
     /// A multi-line clip is a document, and documents legitimately carry digests.

@@ -115,8 +115,8 @@ public enum SecretShapes {
     /// Hex long enough to be a digest or a key rather than a number.
     private static let hexTokenLength = 32
 
-    /// The shortest token the statistical rule looks at; below it randomness reads like an identifier.
-    private static let entropicTokenLength = 24
+    /// The shortest single-token password the statistical rule looks at; below it randomness reads like an identifier.
+    private static let entropicTokenLength = 12
 
     /// Bits per character above which a token counts as generated; measured. See Docs/clipboard-secrets.md.
     private static let entropyFloor = 3.8
@@ -164,7 +164,9 @@ public enum SecretShapes {
             return true
         }
         guard token.count >= entropicTokenLength,
-            token.allSatisfy({ isDigit($0) || isLetter($0) || "+/=_-".utf8.contains($0) }),
+            token.allSatisfy({
+                isDigit($0) || isLetter($0) || "+/=_-!@#$%^&*()[]{}:;,.?~`\\|<>\"'".utf8.contains($0)
+            }),
             token.contains(where: isDigit),
             token.contains(where: isLetter)
         else { return false }
@@ -214,11 +216,11 @@ public enum SecretShapes {
         return tail.allSatisfy(\.isLowercase) || letters.allSatisfy(\.isUppercase)
     }
 
-    /// The alphabet every generated token is drawn from; a full stop or comma anywhere disqualifies.
+    /// Printable ASCII punctuation can occur in generated passwords alongside letters and digits.
     private static func isTokenCharacter(_ character: Character) -> Bool {
         character.isLetter && character.isASCII
             || character.isNumber && character.isASCII
-            || "+/=_-".contains(character)
+            || character.isASCII && character.isPunctuation
     }
 
     /// A path shares base64's alphabet, so anything that opens like one is left to the general rules.
