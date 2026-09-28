@@ -13,10 +13,10 @@ Three places make it true, from the most specific to the last resort.
 |---|---|
 | `RuleBasedTransformer` | romanises the transcript with `Romaniser` before the passes run, so the floor beneath every model writes Latin letters |
 | `MeaningPreservationGuard.scriptVerdict` | refuses a model's rewrite that is in another script, translates a Devanagari draft, or repeats a worked example, so the router falls back to the rules |
-| `DictationPipeline` | runs `LatinScript.enforced` over the finished message before snippets and insertion, so an untidied or unexpected answer is romanised too |
+| `DictationPipeline` | runs `LatinScript.enforced` over the finished message and again after snippets, immediately before insertion, so untidied text and user-authored expansions are romanised too |
 
-Snippet expansions are the user's own text and run after that last step, so a snippet the
-user wrote in Devanagari is inserted as written.
+Snippet expansions stay stored exactly as the user wrote them. The final script check runs
+after expansion, so a snippet written in Devanagari is inserted romanised in Latin letters.
 
 Recognition still answers in Devanagari, and what that costs in decoder steps — with the options
 for decoding straight to Latin, and why none of them is taken — is measured in
