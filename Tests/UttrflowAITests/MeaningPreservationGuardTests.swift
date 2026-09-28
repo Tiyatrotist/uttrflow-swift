@@ -984,6 +984,25 @@ struct GuardMatchStrengthTests {
         #expect(!survives("aarav", as: "Aaron"))
     }
 
+    /// Hindi ending shapes apply only to known verb stems, in either direction.
+    @Test("refuses arbitrary Hindi-looking suffixes and keeps known verb forms")
+    func boundsHindiVerbForms() {
+        for (spoken, rewritten) in [
+            ("kal milte hain", "kala milte hain"),
+            ("mat karo", "mata karo"),
+            ("kam hai", "kami hai"),
+            ("din aaya", "dina aaya"),
+            ("pat karo", "patna karo"),
+        ] {
+            #expect(!verdict(spoken, rewritten).isAccepted, "\\(spoken) → \\(rewritten)")
+            #expect(!verdict(rewritten, spoken).isAccepted, "\\(rewritten) → \\(spoken)")
+        }
+        #expect(MeaningPreservationGuard.sameRomanisedForm("aa", "aata"))
+        #expect(MeaningPreservationGuard.sameRomanisedForm("aata", "aa"))
+        #expect(MeaningPreservationGuard.sameRomanisedForm("kha", "khila"))
+        #expect(MeaningPreservationGuard.sameRomanisedForm("khila", "kha"))
+    }
+
     /// Every word of the rewrite is a place a kept word may land, function words included.
     @Test("refuses a content word that matched only a small word beside it")
     func refusesMatchOnFunctionWord() {
