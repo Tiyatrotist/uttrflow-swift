@@ -119,9 +119,10 @@ public enum ShellPrompt {
         // A root prompt names a host or a database and touches its hash, which is what tells it from a trailing comment.
         case "#":
             prefix.isBlank || prefix.last == "=" || (prefix.hasAt && !(prefix.last?.isWhitespace ?? true))
-        // A `>` is a redirection unless it is a run of them, the tail of a `=>` prompt, or glued to a path token as fish does.
+        // A `>` is a redirection unless it is a run of them, the tail of a `=>` prompt, or fish glues it to a path token in a `user@host` prompt.
         case ">":
-            prefix.isChevrons || prefix.last == "=" || (prefix.last.map { !$0.isWhitespace } ?? false)
+            prefix.isChevrons || prefix.last == "="
+                || (prefix.hasAt && !(prefix.last?.isWhitespace ?? true))
         // A tick, a cross and a chevron are drawn by prompt themes and typed by nobody.
         default: true
         }

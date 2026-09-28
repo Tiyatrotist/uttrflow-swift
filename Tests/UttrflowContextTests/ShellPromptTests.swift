@@ -118,6 +118,9 @@ struct ShellPromptTests {
     func aRedirectionIsNotAPrompt() {
         #expect(ShellPrompt.input(in: "echo hi > file") == "echo hi > file")
         #expect(ShellPrompt.input(in: "user@host:~/dir$ echo hi > file") == "echo hi > file")
+        #expect(ShellPrompt.input(in: "grep foo file.txt> results.txt") == "grep foo file.txt> results.txt")
+        #expect(ShellPrompt.input(in: "cmd 2> error.log") == "cmd 2> error.log")
+        #expect(ShellPrompt.input(in: "cmd &> both.log") == "cmd &> both.log")
     }
 
     @Test("A fish shell default prompt ends after the home marker, not before it.")
