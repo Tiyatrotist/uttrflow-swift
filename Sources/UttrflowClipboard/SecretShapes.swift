@@ -196,9 +196,9 @@ public enum SecretShapes {
         return entropy(of: token) >= entropyFloor && !isJoinedWords(token)
     }
 
-    /// Whether a token is words joined by `-`, `_` or `/`, like a branch or slug; see Docs/clipboard-secrets.md.
+    /// Whether a token is words joined by `-`, `_`, `/` or `.`, like a branch, slug, or bundle id.
     static func isJoinedWords(_ token: String) -> Bool {
-        let segments = token.split(separator: /[-_\/]/, omittingEmptySubsequences: false)
+        let segments = token.split(separator: /[-_\/.]/, omittingEmptySubsequences: false)
         return segments.count >= 3 && segments.allSatisfy(isWordLike)
     }
 
