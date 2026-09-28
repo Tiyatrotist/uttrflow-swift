@@ -16,7 +16,11 @@ Believing the return value meant the coordinator stopped there, so the words nev
 reached the paste below and never reached the clipboard either — the user saw the
 dictation happen and had nothing to paste. The write is therefore **read back and
 verified**; a field that does not answer the read is trusted, since that is a
-verification rather than a precondition.
+verification rather than a precondition. If the field still reports its old value after
+the bounded rereads, the result is uncertain: the write may still arrive later. That
+answer stops the fallback chain and asks the user to check the field before retrying,
+because a paste started while the Accessibility write is pending would insert the words
+twice.
 
 ## Which application the record names
 

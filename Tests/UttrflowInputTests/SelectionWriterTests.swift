@@ -106,14 +106,13 @@ struct SelectionWriterTests {
         #expect(field.textWrites == ["same"], "no fallback should have written a second time")
     }
 
-    @Test("refuses a field that accepts the text and does not change")
+    @Test("does not claim a write landed when the field still reports its old value")
     func acceptedButUnchangedIsAFailure() {
         let field = FakeSelectionField("Hello") { $0.ignoresText = true }
         let error = #expect(throws: TextInsertionError.self) {
             try SelectionWriter(field: field).replaceSelection(with: " world")
         }
-        #expect(
-            error == .insertionRejected(description: "the field accepted the text and did not change"))
+        #expect(error == .insertionUnconfirmed)
     }
 
     @Test("does not report a late-applied write as unchanged, since the value catches up on a later read")
@@ -127,7 +126,7 @@ struct SelectionWriterTests {
         #expect(field.textWrites == [" world"], "no fallback should have written a second time")
     }
 
-    @Test("still refuses a write that never changes the value, once the re-reads are exhausted")
+    @Test("does not confirm a success that leaves the field unchanged after all re-reads")
     func lateReadBudgetStillCatchesAGenuineRefusal() {
         let field = FakeSelectionField("Hello") {
             $0.ignoresText = true
@@ -136,8 +135,7 @@ struct SelectionWriterTests {
         let error = #expect(throws: TextInsertionError.self) {
             try SelectionWriter(field: field, sleep: { _ in }).replaceSelection(with: " world")
         }
-        #expect(
-            error == .insertionRejected(description: "the field accepted the text and did not change"))
+        #expect(error == .insertionUnconfirmed)
     }
 
     @Test("does not delete the replaced characters when the write applies a moment late")

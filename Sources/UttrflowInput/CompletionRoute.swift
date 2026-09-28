@@ -41,7 +41,9 @@ public struct CompletionRoute: Sendable {
     public func write(
         _ text: String, replacing replaced: String
     ) async throws(TextInsertionError) -> TextInsertionMethod {
-        let outcome = await FallbackRunner.firstSuccess(among: strategies) { strategy in
+        let outcome = await FallbackRunner.firstSuccess(
+            among: strategies, stopAfterFailure: { ($0 as? TextInsertionError)?.stopsFallback == true }
+        ) { strategy in
             guard await strategy.canWrite() else { throw TextInsertionError.noFocusedTextField }
             try await strategy.write(text, replacing: replaced)
             return strategy.method

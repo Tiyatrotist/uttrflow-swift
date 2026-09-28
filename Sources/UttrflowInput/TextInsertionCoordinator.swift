@@ -30,7 +30,9 @@ public struct TextInsertionCoordinator: TextInserting {
         // Asked before the write, since the field that takes the words is the one to judge.
         let focus = focus
         let secure = await AccessibilityThread.run(orElse: true) { focus?.focusedFieldIsSecure() ?? false }
-        let outcome = await FallbackRunner.firstSuccess(among: usable) { strategy in
+        let outcome = await FallbackRunner.firstSuccess(
+            among: usable, stopAfterFailure: { ($0 as? TextInsertionError)?.stopsFallback == true }
+        ) { strategy in
             guard await strategy.canInsert() else { throw TextInsertionError.noFocusedTextField }
             // Passed through rather than dropped, so what the strategy found out survives the fallback.
             let arrival = try await strategy.insert(text, richText: richText)
