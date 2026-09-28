@@ -236,9 +236,8 @@ hand-written case. The sample is a prefix of the sweep, so anything it finds the
 
 Applies to single words on one-line clips only (a multi-line clip is a document and
 legitimately carries digests; the shapes above already catch `.env` lines and PEM blocks).
-The word must be at least 24 characters (below that a token and
-`applicationDidFinishLaunching` score alike), drawn entirely from the base64/base64url/hex
-alphabet, and contain both a letter and a digit. Hex of 32 or more characters is a digest
+The word must be at least 12 characters (shorter values are too common in identifiers), contain
+only ASCII letters, digits or punctuation, and contain both a letter and a digit. Hex of 32 or more characters is a digest
 outright, because a sixteen-symbol alphabet can never reach the general floor. Anything that
 opens like a path is left to the general rules.
 
