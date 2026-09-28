@@ -107,6 +107,33 @@ struct FieldReadingTests {
         #expect(reading.scope == "/Users/someone/api")
     }
 
+    @Test(
+        "A pane in tmux or screen does not inherit the outer terminal document's directory.",
+        arguments: ["api — tmux — 80×24", "api — screen — 80×24", "tmux: api"])
+    func multiplexerPaneDoesNotInheritOuterDirectory(windowTitle: String) {
+        func pane(_ directory: String) -> FieldReading {
+            FieldReading(
+                bundleIdentifier: "com.apple.Terminal", role: "AXTextArea",
+                document: directory, windowTitle: windowTitle)
+        }
+        let first = pane("/Users/someone/project-x")
+        let second = pane("/Users/someone/project-y")
+        #expect(first.scope == RemoteSession.scope)
+        #expect(second.scope == RemoteSession.scope)
+        #expect(first.surface?.scope == second.surface?.scope)
+        #expect(first.scope?.hasPrefix("/") != true)
+    }
+
+    @Test(
+        "A title that mentions tmux only in a directory does not discard the local scope.",
+        arguments: ["tmux-notes — zsh", "project/tmux — zsh"])
+    func ordinaryTitleMentionDoesNotLookMultiplexed(windowTitle: String) {
+        let reading = FieldReading(
+            bundleIdentifier: "com.apple.Terminal", role: "AXTextArea",
+            document: "/Users/someone/project-x", windowTitle: windowTitle)
+        #expect(reading.scope == "/Users/someone/project-x")
+    }
+
     @Test("A window title naming a remote program scopes nothing differently outside a terminal.")
     func remoteProgramInAnotherApplicationIsNotASession() {
         let reading = FieldReading(

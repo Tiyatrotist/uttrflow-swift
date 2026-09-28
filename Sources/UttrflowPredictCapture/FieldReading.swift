@@ -75,6 +75,12 @@ extension FieldReading {
         {
             return RemoteSession.scope
         }
+        // AX exposes the outer terminal document for a multiplexer, not the visible pane's directory.
+        if TerminalApplications.contains(bundleIdentifier),
+            RemoteSession.isMultiplexed(inWindowTitle: windowTitle)
+        {
+            return RemoteSession.scope
+        }
         guard let document = Self.trimmed(document) else {
             return Self.conversation(windowTitle, of: applicationName)
         }
