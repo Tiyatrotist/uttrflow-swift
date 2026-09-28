@@ -120,8 +120,8 @@ public struct Clip: Sendable, Equatable, Identifiable, Codable {
     public func recopied(at moment: Date) -> Clip {
         Clip(
             id: id, text: text, kind: kind, copiedAt: moment, source: source, origin: origin,
-            dictations: dictations, dictatedText: dictatedText, lastUsedAt: lastUsedAt,
-            language: language, richText: richText, image: image,
+            dictations: dictations, dictatedText: dictatedText, language: language,
+            richText: richText, image: image,
             alias: alias, category: category, isPinned: isPinned, timesCopied: timesCopied)
     }
 

@@ -147,6 +147,22 @@ struct ClipboardBudgetTests {
         #expect(clips.count == 1)
     }
 
+    /// An un-kept clip is treated as freshly copied for the byte quota too, so it is not the first to drop.
+    @Test("an un-kept clip survives the byte quota as the most recently used")
+    func unKeepingSurvivesByteQuota() async throws {
+        let file = TemporaryFile()
+        // Room for one of three 20-byte clips; the second overflows.
+        let store = ClipboardStore(file: file.url, budget: .standard.limiting(bytes: 30))
+        let old = clip(String(repeating: "a", count: 20), usedAt: -300, pinned: true)
+        try await store.record(old, keeping: week())
+        try await store.record(clip(String(repeating: "b", count: 20), usedAt: -200), keeping: week())
+        try await store.record(clip(String(repeating: "c", count: 20), usedAt: -100), keeping: week())
+
+        let after = try await store.setPinned(false, of: old.id, keeping: week())
+
+        #expect(after.contains { $0.id == old.id }, "the unpin does not also evict the clip")
+    }
+
     // MARK: - Each pool on its own terms
 
     @Test("pictures age out on their own window, not the one set for words")

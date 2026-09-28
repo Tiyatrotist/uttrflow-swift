@@ -481,9 +481,11 @@ public actor ClipboardStore {
         if let index = clips.firstIndex(where: { $0.id == id }) {
             let wasKept = clips[index].isKept
             edit(&clips[index])
-            // A clip the user just un-kept is treated as freshly copied, so the same action cannot also age it out.
+            // An un-kept clip is freshly copied and moved to the front, so the same write cannot also evict it under the item cap or byte quotas.
             if wasKept && !clips[index].isKept {
-                clips[index] = clips[index].recopied(at: retention.now)
+                let fresh = clips[index].recopied(at: retention.now)
+                clips.remove(at: index)
+                clips.insert(fresh, at: 0)
             }
         }
         return try settled(clips, keeping: retention)
