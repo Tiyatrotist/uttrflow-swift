@@ -133,14 +133,21 @@ enum CompletionText {
         let context = contextNeverCopied(in: situation)
         var seen: Set<String> = []
         return lines.compactMap { line in
-            guard
-                var kept = SignOff.unsigned(line, typed: typed, ownLines: situation.recentLines)
-            else { return nil }
+            var kept = line
             // A command or a query reuses the paths and names on screen, so only prose is held to its own words.
             if register.endsAtSentence {
                 kept = firstSentence(of: kept, typed: typed)
+                guard
+                    let unsigned = SignOff.unsigned(
+                        kept, typed: typed, ownLines: situation.recentLines)
+                else { return nil }
+                kept = unsigned
                 guard !copiesContext(kept, typed: typed, context: context, ownLines: situation.recentLines)
                 else { return nil }
+            } else {
+                guard let unsigned = SignOff.unsigned(kept, typed: typed, ownLines: situation.recentLines)
+                else { return nil }
+                kept = unsigned
             }
             // A number, an amount or an address the model added is kept only where someone already wrote it; code keeps its conventional literals.
             let writesCode = !register.endsAtSentence && !register.answersFromHistoryAlone

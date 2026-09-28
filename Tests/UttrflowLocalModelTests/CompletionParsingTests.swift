@@ -399,6 +399,26 @@ struct ContinuationLengthTests {
 
 @Suite("A sign-off is signed only with a name the person wrote")
 struct SignOffTests {
+    @Test("A name followed by a farewell, a title or more names is cut from a prose suggestion")
+    func trailingWordsDoNotHideAnInventedName() {
+        let mail = GenerationSituation(application: "Mail", isMultiline: true)
+        for (typed, line) in [
+            ("Thanks,", "Thanks, Sam. Talk soon"),
+            ("Best,", "Best, Sam from support"),
+            ("Kind regards,", "Kind regards, Dr. Alex J. Morgan"),
+            ("Best regards,", "Best regards, Alex Morgan, Head of Sales"),
+        ] {
+            #expect(CompletionText.finished([line], typed: typed, in: mail).isEmpty, "\(line)")
+        }
+    }
+
+    @Test("A name followed by lowercased trailing prose passes when the person wrote the name")
+    func writtenNameWithTrailingWordsPasses() {
+        #expect(
+            SignOff.unsigned("Thanks, Sam from support", typed: "Thanks,", ownLines: ["Cheers, Sam"])
+                == "Thanks, Sam from support")
+    }
+
     @Test("A closing the person typed is not signed with the sender's name")
     func theSendersNameIsNotSigned() {
         let own = ["Please find the document attached.", "Kind regards,"]
