@@ -640,7 +640,7 @@ public actor DictationPipeline {
             from: appContext ?? AppContext(), overrides: runningOverrides)
         let joined = PieceJoiner.join(pieces, under: .standard(for: joining.destination))
         let whole = await finishMessage(joined, going: joining, seeing: appContext ?? AppContext())
-        // Dictation writes Latin letters only, whichever engine tidied the words or none did. See `Docs/latin-output.md`.
+        // Dictation writes Latin letters only, including snippet expansions. See `Docs/latin-output.md`.
         let written = LatinScript.enforced(whole.cleaned.text)
 
         // Inserting a blank would delete the user's selection, so it is refused like silence.
@@ -653,10 +653,15 @@ public actor DictationPipeline {
         let expanded = await expand(
             written, laidOut: DestinationFormatter.standard(for: joining.destination).layout)
         guard !wasCancelled(mine) else { return }
+        let output = LatinScript.enforced(expanded.text)
+        guard !output.isBlank else {
+            await fail(DictationFailure(SpeechEngineError.nothingHeard))
+            return
+        }
 
         // Pads the words with a space where the field's surrounding text would otherwise join them.
         let insertionPoint = appContext?.insertionPoint ?? .unknown
-        let toWrite = insertionPoint.paddedBoundary(for: expanded.text)
+        let toWrite = insertionPoint.paddedBoundary(for: output)
 
         let changes = AppliedChanges(
             corrections: DictationCorrection.locating(

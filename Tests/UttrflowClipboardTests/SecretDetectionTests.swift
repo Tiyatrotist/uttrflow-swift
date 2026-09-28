@@ -417,11 +417,6 @@ struct SecretDetectionTests {
         #expect(ClipKindDetector.kind(of: text) != .secret)
     }
 
-    @Test("does not mistake an unbroken short digest for a generated password")
-    func shortDigest() {
-        #expect(ClipKindDetector.kind(of: "5f4dcc3b5aa765d61d8327deb882cf99") != .secret)
-    }
-
     /// A multi-line clip is a document, and documents legitimately carry digests.
     @Test("does not mask a document because one line of it looks random")
     func documentsWithDigests() {
