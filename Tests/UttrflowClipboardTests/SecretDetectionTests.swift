@@ -59,6 +59,22 @@ struct SecretDetectionTests {
         #expect(ClipKindDetector.kind(of: text) == .secret)
     }
 
+    @Test("masks generated passwords with every symbol the byte scanner accepts")
+    func generatedPasswordsWithPunctuation() {
+        let token = "K9x" + "$+<=>^|~`\\" + "Qz7Tr2Bn8LmVa"
+        #expect(SecretShapes.hasHighEntropyTokenByCharacter(token))
+        #expect(ClipKindDetector.kind(of: token) == .secret)
+        #expect(ClipKindDetector.kind(of: "K9x$Qz7^Tr2=Bn8<") == .secret)
+        #expect(ClipKindDetector.kind(of: "K9x$Qz7Tr2Bn8LmVa") == .secret)
+
+        for symbol in Array("$+<=>^|~`\\") {
+            let userinfo = "K9x" + String(symbol) + "Qz7Tr2Bn8LmVa"
+            #expect(
+                SecretShapes.hasTokenUserinfoURL("https://\(userinfo)@host.example/repo"),
+                "URL userinfo containing \(symbol) must use the same generated-token alphabet")
+        }
+    }
+
     /// The prefix on its own is prose about keys, not a key.
     @Test(
         "does not mask talk about keys",

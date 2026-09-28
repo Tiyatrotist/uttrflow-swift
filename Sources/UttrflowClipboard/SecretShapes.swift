@@ -216,11 +216,11 @@ public enum SecretShapes {
         return tail.allSatisfy(\.isLowercase) || letters.allSatisfy(\.isUppercase)
     }
 
-    /// Printable ASCII punctuation can occur in generated passwords alongside letters and digits.
+    /// Uses the byte scanner's exact alphabet; Swift classifies some of its symbols outside punctuation.
     private static func isTokenCharacter(_ character: Character) -> Bool {
         character.isLetter && character.isASCII
             || character.isNumber && character.isASCII
-            || character.isASCII && character.isPunctuation
+            || "+/=_-!@#$%^&*()[]{}:;,.?~`\\|<>\"'".contains(character)
     }
 
     /// A path shares base64's alphabet, so anything that opens like one is left to the general rules.
