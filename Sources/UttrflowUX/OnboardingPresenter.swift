@@ -14,7 +14,7 @@ public enum OnboardingPresenter {
         case .microphone: permission(.microphone, state)
         case .accessibility: permission(.accessibility, state)
         case .setup: setup(state)
-        case .ready: ready(state, keys: OnboardingKeys.of(hotkey), activation: activation)
+        case .ready: ready(state, hotkey: hotkey, activation: activation)
         }
     }
 
@@ -30,7 +30,7 @@ public enum OnboardingPresenter {
     /// Said under the providers in a development build, whose sign-in asks nobody.
     static let standInHint = "Development build: signs in as a stand-in, no browser"
 
-    /// The sign-in page in its five forms: offering, unreachable, in the browser, entering a code, refused.
+    /// The sign-in page in its six forms: offering, unreachable, in the browser, entering a code, refused, welcomed.
     private static func signIn(_ state: OnboardingState, standIn: Bool = false) -> OnboardingPage {
         let signIn = state.detail.signIn
         let providers = SignInProvider.offered.map {
@@ -67,6 +67,8 @@ public enum OnboardingPresenter {
                 title: "Check your browser.", buttons: waiting,
                 explanation:
                     "Finish signing in with \(AccountPagePresenter.title(for: provider)) in your browser.")
+        case .welcomed(let welcome):
+            return welcomed(state, welcome)
         case .enterCode(let provider, let code):
             return page(
                 state, mood: .waiting, picture: .code(code), title: "Type this code.", buttons: waiting,
@@ -75,6 +77,35 @@ public enum OnboardingPresenter {
                     Your browser is open. Type this code there to finish signing in with \
                     \(AccountPagePresenter.title(for: provider)).
                     """)
+        }
+    }
+
+    /// How long the welcome shows before onboarding moves on by itself.
+    public static let welcomeLinger = Duration.seconds(3)
+
+    /// The moment after signing in: the circle, a greeting, the account, and Continue.
+    private static func welcomed(_ state: OnboardingState, _ welcome: OnboardingWelcome) -> OnboardingPage {
+        let greeting = welcome.firstName.map { "You’re in, \($0)!" } ?? "You’re in!"
+        var page = page(
+            state, mood: .done, picture: .welcome(initials: welcome.initials, provider: welcome.provider),
+            title: greeting, explanation: "Signed in. Welcome to Uttrflow.")
+        page.subtitle = "Welcome to Uttrflow. Let’s get you talking."
+        page.account = OnboardingAccountChip(
+            provider: welcome.provider,
+            text: welcome.emailAddress ?? AccountPagePresenter.title(for: welcome.provider))
+        page.action = OnboardingAction(
+            title: "Continue", intent: .advance, isProminent: true, countdown: welcomeLinger,
+            caption: "Next: \(nextStep(welcome.next))")
+        return page
+    }
+
+    /// What the page after the welcome asks for, finishing "Next: …".
+    static func nextStep(_ step: OnboardingStep) -> String {
+        switch step {
+        case .signIn, .microphone: "allow the microphone"
+        case .accessibility: "let Uttrflow type for you"
+        case .setup: "download the speech model"
+        case .ready: "try your first dictation"
         }
     }
 
@@ -151,11 +182,11 @@ public enum OnboardingPresenter {
 
     /// The last page: a first try when dictation can work, else what still stands in the way.
     private static func ready(
-        _ state: OnboardingState, keys: [String], activation: HotkeyActivation
+        _ state: OnboardingState, hotkey: HotkeyBinding, activation: HotkeyActivation
     ) -> OnboardingPage {
         switch state.detail.readiness ?? .ready {
         case .ready, .pastesManually:
-            trying(state, keys: keys, activation: activation)
+            trying(state, hotkey: hotkey, activation: activation)
         case .needsSpeechModel:
             page(
                 state, mood: .warning, picture: .download(0, .stopped),
@@ -179,31 +210,65 @@ public enum OnboardingPresenter {
         }
     }
 
-    /// The first try: the keys to press, the field the words land in, and a way straight to the app.
+    /// How long the words from the first try show before onboarding closes.
+    public static let heardLinger = Duration.seconds(3)
+
+    /// The first try: the keyboard's corner with the shortcut lit, the field the words land in, and Skip.
     private static func trying(
-        _ state: OnboardingState, keys: [String], activation: HotkeyActivation
+        _ state: OnboardingState, hotkey: HotkeyBinding, activation: HotkeyActivation
     ) -> OnboardingPage {
-        let skip = OnboardingLink(title: "Skip to dashboard", intent: .finish)
+        let keys = OnboardingKeys.of(hotkey)
+        let lit = OnboardingKeys.corner(of: hotkey)
+        let holds = activation == .holdToTalk
+        let named = OnboardingKeys.spoken(keys)
+        let skip = OnboardingAction(
+            title: "Skip to dashboard", intent: .finish, isProminent: false, countdown: nil, caption: nil)
         let copies = state.detail.readiness == .pastesManually
-        let empty = OnboardingField.placeholder("Your words appear here")
-        let verb = activation == .holdToTalk ? "Hold" : "Press"
+        let bracket = keys.count > 1 ? (holds ? "HOLD BOTH" : "PRESS BOTH") : (holds ? "HOLD" : "PRESS")
+        var page: OnboardingPage
         switch state.detail.trial {
         case .waiting:
-            return page(
-                state, mood: .brand, picture: .keys(keys, isHeld: false, field: empty),
-                title: "\(verb) \(keys.joined(separator: " ")) and talk.", link: skip,
+            page = self.page(
+                state, mood: .brand,
+                picture: .keyboard(
+                    OnboardingKeyboard(
+                        lit: lit, keys: keys, bracket: bracket, isHeld: false, demonstrates: true,
+                        field: .placeholder("Your words appear here"), isListening: false, celebrates: false)),
+                title: "Try it now.",
                 hint: copies ? "Without Accessibility, words are copied for you to paste" : nil,
                 explanation: "Try it now. Uttrflow lives in your menu bar whenever you need it.")
+            page.subtitle =
+                holds
+                ? "Hold \(named), say anything, then let go."
+                : "Press \(named), say anything, then press again."
+            page.action = skip
         case .listening:
-            return page(
-                state, mood: .live, picture: .keys(keys, isHeld: true, field: empty),
-                title: "Listening…", link: skip,
-                hint: activation == .holdToTalk ? "Let go when you’re done" : "Press again when you’re done")
+            page = self.page(
+                state, mood: .live,
+                picture: .keyboard(
+                    OnboardingKeyboard(
+                        lit: lit, keys: keys, bracket: holds ? "HOLDING" : "LISTENING", isHeld: holds,
+                        demonstrates: false, field: .placeholder("Say anything…"), isListening: true,
+                        celebrates: false)),
+                title: "Listening…")
+            page.subtitle =
+                holds
+                ? "Keep holding while you talk. Let go when you’re done." : "Press again when you’re done."
+            page.action = skip
         case .heard(let words):
-            return page(
-                state, mood: .done, picture: .keys(keys, isHeld: false, field: .filled(words)),
-                title: "That’s it.", hint: "Opening your dashboard…")
+            page = self.page(
+                state, mood: .done,
+                picture: .keyboard(
+                    OnboardingKeyboard(
+                        lit: [], keys: keys, bracket: nil, isHeld: false, demonstrates: false,
+                        field: .filled(words), isListening: false, celebrates: true)),
+                title: "It works!")
+            page.subtitle = "That’s all there is to it. Opening your dashboard…"
+            page.action = OnboardingAction(
+                title: "Open dashboard", intent: .finish, isProminent: true, countdown: heardLinger,
+                caption: nil)
         }
+        return page
     }
 
     // MARK: Assembly
@@ -347,6 +412,34 @@ enum OnboardingKeys {
     /// The keys a shortcut is realistically bound to; a key code becomes a letter only through the layout.
     private static let names: [UInt16: String] = [
         36: "Return", 48: "Tab", 49: "Space", 51: "Delete", 53: "Escape",
+    ]
+
+    /// The shortcut lit on the keyboard's bottom-left corner, or `nil` when it uses a key the corner lacks.
+    static func corner(of binding: HotkeyBinding) -> Set<OnboardingCornerKey>? {
+        if binding.keyCode == HotkeyBinding.functionKeyCode, binding.modifiers.isEmpty { return [.function] }
+        guard let named = HotkeyBinding.modifier(ofKeyCode: binding.keyCode) else { return nil }
+        var lit = Set<OnboardingCornerKey>()
+        for modifier in binding.modifiers.union([named]) {
+            switch modifier {
+            case .control: lit.insert(.control)
+            case .option: lit.insert(.option)
+            case .command: lit.insert(.command)
+            case .shift: return nil
+            }
+        }
+        return lit
+    }
+
+    /// The keys as words for a sentence: "control and option".
+    static func spoken(_ keys: [String]) -> String {
+        let words = keys.map { spokenNames[$0] ?? $0 }
+        guard words.count > 1, let last = words.last else { return words.first ?? "the shortcut" }
+        return words.dropLast().joined(separator: ", ") + " and " + last
+    }
+
+    /// Each modifier's glyph as the word printed on the key.
+    private static let spokenNames = [
+        "⌃": "control", "⌥": "option", "⇧": "shift", "⌘": "command", "fn": "fn",
     ]
 
     /// The key's name, or its code when the name is unknown.

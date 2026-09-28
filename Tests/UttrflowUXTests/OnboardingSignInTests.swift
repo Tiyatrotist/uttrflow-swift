@@ -469,4 +469,64 @@ extension OnboardingSignInTests {
         await real.flow.start()
         #expect(real.page.hint == nil)
     }
+
+    // MARK: The welcome
+
+    /// Signs in with Google and stops on the welcome, whose countdown waits on `countdown`.
+    @MainActor
+    private func welcomed(countdown: Gate) async throws -> Harness {
+        let harness = Harness(
+            microphone: .granted, accessibility: .granted, signedIn: false,
+            pause: { _ in await countdown.wait() })
+        await harness.flow.start()
+        #expect(await harness.choose(.google))
+        let complete = try #require(harness.authentication.completeGate)
+        await settle(until: { complete.arrivals >= 1 })
+        complete.open()
+        await settle(until: { countdown.arrivals >= 1 })
+        return harness
+    }
+
+    @Test("a finished sign-in shows the welcome, then moves on by itself when its moment has passed")
+    func theWelcomeMovesOnByItself() async throws {
+        let countdown = Gate()
+        let harness = try await welcomed(countdown: countdown)
+        guard case .signIn(.welcomed(let welcome)) = harness.detail else {
+            Issue.record("a sign-in landed on \(harness.detail)")
+            return
+        }
+        #expect(welcome.next == .ready, "microphone and Accessibility are granted, so the try comes next")
+        #expect(welcome.provider == .google)
+        #expect(harness.profiles.load() != nil, "the session is kept before the welcome shows")
+
+        countdown.open()
+        await settle(until: { harness.step != .signIn })
+        #expect(harness.step == .ready)
+    }
+
+    @Test("Continue on the welcome moves on at once, and the countdown ending later changes nothing")
+    func continuingFromTheWelcome() async throws {
+        let countdown = Gate()
+        let harness = try await welcomed(countdown: countdown)
+        await harness.flow.perform(.advance)
+        #expect(harness.step == .ready)
+        let shown = harness.published.count
+
+        countdown.open()
+        for _ in 0..<100 { await Task.yield() }
+        #expect(harness.step == .ready)
+        #expect(harness.published.count == shown, "the countdown redrew a page the user had already left")
+    }
+
+    @Test("a sign-out during the welcome keeps its countdown from moving on")
+    func signingOutDuringTheWelcome() async throws {
+        let countdown = Gate()
+        let harness = try await welcomed(countdown: countdown)
+        await harness.flow.signedOut()
+        #expect(harness.detail == .signIn(.offering))
+
+        countdown.open()
+        for _ in 0..<100 { await Task.yield() }
+        #expect(harness.detail == .signIn(.offering))
+    }
 }

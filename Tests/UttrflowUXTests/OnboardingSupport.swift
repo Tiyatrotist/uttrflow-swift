@@ -436,7 +436,8 @@ final class Harness {
     /// Whether an attempt is still in flight; a sign-in showing a code counts as much as one on a redirect.
     var isSigningIn: Bool {
         switch flow.state.detail {
-        case .signIn(.signingIn), .signIn(.enterCode): true
+        // The welcome counts too: it moves on by itself once its moment has passed.
+        case .signIn(.signingIn), .signIn(.enterCode), .signIn(.welcomed): true
         default: false
         }
     }

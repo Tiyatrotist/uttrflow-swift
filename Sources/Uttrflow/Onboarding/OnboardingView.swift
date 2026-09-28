@@ -87,6 +87,112 @@ struct OnboardingCard: View {
     let press: (OnboardingIntent) -> Void
 
     var body: some View {
+        content
+            .frame(width: OnboardingMetrics.cardWidth)
+            .frame(maxHeight: .infinity)
+            .background(OnboardingCardGlass(mood: page.mood))
+            .clipShape(.rect(cornerRadius: OnboardingMetrics.cardRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: OnboardingMetrics.cardRadius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [.white.opacity(0.22), .white.opacity(0.1)], startPoint: .top,
+                            endPoint: .bottom),
+                        lineWidth: 1)
+            }
+            // Cast by a still shape behind the opaque card, so the moving aurora inside never re-renders the shadow.
+            .background {
+                RoundedRectangle(cornerRadius: OnboardingMetrics.cardRadius, style: .continuous)
+                    .fill(.black)
+                    .shadow(color: .black.opacity(0.65), radius: 30, y: 30)
+            }
+            .animation(.smooth(duration: 0.26), value: page.title)
+            .help(page.explanation ?? "")
+    }
+
+    /// The welcome and the first try put their heading first; every other page leads with its picture.
+    @ViewBuilder private var content: some View {
+        switch page.picture {
+        case .welcome(let initials, let provider): welcome(initials: initials, provider: provider)
+        case .keyboard(let keyboard): trying(keyboard)
+        default: pictureFirst
+        }
+    }
+
+    /// The circle over confetti, the greeting, the account, and Continue counting down.
+    private func welcome(initials: String, provider: SignInProvider) -> some View {
+        VStack(spacing: 0) {
+            OnboardingWelcomeHeader(initials: initials, provider: provider)
+                .frame(maxWidth: .infinity)
+                .frame(height: OnboardingMetrics.welcomeHeight)
+                .clipped()
+                .overlay(alignment: .bottom) { Rectangle().fill(.white.opacity(0.08)).frame(height: 1) }
+            VStack(spacing: 14) {
+                heading(size: 32, glow: Color(rgb: BrandPalette.Onboarding.welcomeGlow))
+                if let account = page.account { OnboardingAccountChipView(chip: account) }
+                Spacer(minLength: 0)
+                if let action = page.action { OnboardingActionButton(action: action, press: press) }
+                OnboardingDots(position: page.position, count: page.stepCount)
+            }
+            .padding(.top, 22)
+            .padding(.horizontal, 28)
+            .padding(.bottom, 22)
+        }
+    }
+
+    /// The heading and what to do, the keyboard's corner, the field, and the way on.
+    private func trying(_ keyboard: OnboardingKeyboard) -> some View {
+        VStack(spacing: 18) {
+            heading(size: 30, glow: OnboardingInk.glow)
+            OnboardingKeyboardCorner(keyboard: keyboard)
+            OnboardingTryField(field: keyboard.field, isListening: keyboard.isListening)
+            Spacer(minLength: 0)
+            VStack(spacing: 14) {
+                if let hint = page.hint {
+                    Text(hint).font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
+                        .multilineTextAlignment(.center)
+                }
+                if let action = page.action { OnboardingActionButton(action: action, press: press) }
+                OnboardingDots(position: page.position, count: page.stepCount)
+            }
+        }
+        .padding(.top, 26)
+        .padding(.horizontal, 28)
+        .padding(.bottom, 20)
+        .overlay {
+            if keyboard.celebrates {
+                OnboardingConfetti(origin: UnitPoint(x: 0.5, y: 0.56), count: 70, reach: 0.6)
+            }
+        }
+    }
+
+    /// The title in the display face with the subtitle under it.
+    private func heading(size: CGFloat, glow: Color) -> some View {
+        VStack(spacing: 6) {
+            Text(page.title)
+                .font(BrandFont.display(size: size, weight: .semibold))
+                .tracking(-0.9)
+                .foregroundStyle(
+                    LinearGradient(
+                        stops: [.init(color: .white, location: 0.3), .init(color: glow, location: 1)],
+                        startPoint: .top, endPoint: .bottom)
+                )
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityLabel(page.accessibilityLabel)
+            if let subtitle = page.subtitle {
+                Text(subtitle)
+                    .font(BrandFont.display(size: 14, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.72))
+            }
+        }
+        .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
+        .id(page.title)
+        .transition(.opacity)
+    }
+
+    /// Every other page: the picture above, the heading, the round buttons and the dots.
+    private var pictureFirst: some View {
         VStack(spacing: 0) {
             picture
                 .frame(maxWidth: .infinity)
@@ -109,26 +215,6 @@ struct OnboardingCard: View {
             .id(page.title)
             .transition(.opacity)
         }
-        .frame(width: OnboardingMetrics.cardWidth)
-        .frame(maxHeight: .infinity)
-        .background(OnboardingCardGlass(mood: page.mood))
-        .clipShape(.rect(cornerRadius: OnboardingMetrics.cardRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: OnboardingMetrics.cardRadius, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [.white.opacity(0.22), .white.opacity(0.1)], startPoint: .top,
-                        endPoint: .bottom),
-                    lineWidth: 1)
-        }
-        // Cast by a still shape behind the opaque card, so the moving aurora inside never re-renders the shadow.
-        .background {
-            RoundedRectangle(cornerRadius: OnboardingMetrics.cardRadius, style: .continuous)
-                .fill(.black)
-                .shadow(color: .black.opacity(0.65), radius: 30, y: 30)
-        }
-        .animation(.smooth(duration: 0.26), value: page.title)
-        .help(page.explanation ?? "")
     }
 
     /// The teal light rising from the foot of the picture.
@@ -165,6 +251,9 @@ struct OnboardingCard: View {
             }
         case .code(let code):
             OnboardingCode(code: code)
+        // Drawn by their own layouts, never inside the picture slot.
+        case .welcome, .keyboard:
+            EmptyView()
         }
     }
 
@@ -256,6 +345,8 @@ enum OnboardingMetrics {
     static let glassTint: Double = 0.46
     /// The picture at the top of the card.
     static let pictureHeight: CGFloat = 170
+    /// The welcome's taller picture, with room for the confetti to rise.
+    static let welcomeHeight: CGFloat = 190
     static let roundSize: CGFloat = 64
     /// The aurora's shortest gap between frames: it turns a degree in a fifth of a second.
     static let auroraFrameInterval: TimeInterval = 1.0 / 15

@@ -53,7 +53,11 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         )
         model = OnboardingModel(flow: flow)
         super.init()
-        flow.onSignIn = { [weak self] in self?.onSignIn?() }
+        flow.onSignIn = { [weak self] in
+            self?.onSignIn?()
+            // The browser has the screen, so the welcome is brought forward rather than left behind it.
+            self?.bringForward()
+        }
         flow.onFinish = { [weak self] readiness in
             guard let self else { return }
             self.finish(readiness) { self.close() }
@@ -86,6 +90,12 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         self.window = window
         window.center()
         window.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate()
+    }
+
+    /// Brings the open window and the app to the front without moving the window.
+    func bringForward() {
+        window?.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate()
     }
 

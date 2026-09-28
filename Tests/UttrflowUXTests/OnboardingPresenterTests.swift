@@ -6,6 +6,12 @@ import Testing
 @testable import UttrflowSettings
 @testable import UttrflowUX
 
+/// Somebody who has just signed in with Google, with microphone access still to ask for.
+private let welcome = OnboardingWelcome(
+    account: Account(
+        identifier: "user-1", displayName: "Alex Doe", emailAddress: "alex@example.com", provider: .google),
+    next: .microphone)
+
 /// Every page the flow can ask for, unreachable combinations included, so a new page meets the rules.
 private let everyState: [OnboardingState] = [
     OnboardingState(step: .signIn, detail: .signIn(.offering)),
@@ -15,6 +21,7 @@ private let everyState: [OnboardingState] = [
     OnboardingState(step: .signIn, detail: .signIn(.signingIn(.apple))),
     OnboardingState(step: .signIn, detail: .signIn(.enterCode(.google, code: "WDJB-MJHT"))),
     OnboardingState(step: .signIn, detail: .signIn(.refused("Nobody answered."))),
+    OnboardingState(step: .signIn, detail: .signIn(.welcomed(welcome))),
     OnboardingState(step: .signIn, detail: .reading),
     OnboardingState(step: .microphone, detail: .permission(.notDetermined)),
     OnboardingState(step: .microphone, detail: .permission(.denied)),
@@ -52,10 +59,11 @@ private func page(
     OnboardingPresenter.page(for: state, hotkey: hotkey, activation: activation)
 }
 
-/// Every intent a page offers, buttons, providers and link together.
+/// Every intent a page offers, buttons, providers, link and the wide button together.
 private func intents(_ page: OnboardingPage) -> [OnboardingIntent] {
     page.providers.filter(\.isEnabled).map { .signIn($0.provider) }
-        + page.buttons.filter(\.isEnabled).map(\.intent) + [page.link?.intent].compactMap(\.self)
+        + page.buttons.filter(\.isEnabled).map(\.intent)
+        + [page.link?.intent, page.action?.intent].compactMap(\.self)
 }
 
 @Suite("Onboarding pages")
@@ -74,15 +82,19 @@ struct OnboardingPresenterTests {
         }
     }
 
-    /// The last page offers only the dashboard once words have arrived, since it is closing by itself.
-    @Test("never leaves the user on a page with nothing they can press, but the one closing itself")
+    /// Once words have arrived the page counts down to the dashboard, and offers it straight away.
+    @Test("never leaves the user on a page with nothing they can press")
     func noPageIsADeadEnd() {
-        for state in everyState where state.detail.trial == .waiting || state.detail.trial == .listening {
+        for state in everyState {
             #expect(page(state).hasSomethingToPress, "\(state) is a dead end")
         }
         let closing = page(OnboardingState(step: .ready, detail: .finishing(.ready, trial: .heard("Hi"))))
-        #expect(!closing.hasSomethingToPress)
-        #expect(closing.hint == "Opening your dashboard…")
+        #expect(
+            closing.action
+                == OnboardingAction(
+                    title: "Open dashboard", intent: .finish, isProminent: true,
+                    countdown: OnboardingPresenter.heardLinger, caption: nil))
+        #expect(closing.subtitle == "That’s all there is to it. Opening your dashboard…")
     }
 
     @Test("puts the providers on the sign-in page, and only where one can be chosen or chosen again")
@@ -216,7 +228,8 @@ struct OnboardingPresenterTests {
 
     @Test("offers no way past sign-in without an account")
     func signInIsMandatory() {
-        for state in everyState where state.step == .signIn {
+        // The welcome is the one sign-in page shown with an account, and Continue is its way on.
+        for state in everyState where state.step == .signIn && state.detail != .signIn(.welcomed(welcome)) {
             #expect(!intents(page(state)).contains(.advance), "\(state)")
         }
     }
@@ -323,24 +336,104 @@ struct OnboardingPresenterTests {
         }
     }
 
+    // MARK: The welcome
+
+    @Test("greets whoever signed in by first name, shows the account, and counts down to the next page")
+    func theWelcome() {
+        let greeting = page(OnboardingState(step: .signIn, detail: .signIn(.welcomed(welcome))))
+        #expect(greeting.title == "You’re in, Alex!")
+        #expect(greeting.subtitle == "Welcome to Uttrflow. Let’s get you talking.")
+        #expect(greeting.mood == .done)
+        #expect(greeting.picture == .welcome(initials: "A", provider: .google))
+        #expect(greeting.account == OnboardingAccountChip(provider: .google, text: "alex@example.com"))
+        #expect(greeting.providers.isEmpty && greeting.buttons.isEmpty)
+        #expect(
+            greeting.action
+                == OnboardingAction(
+                    title: "Continue", intent: .advance, isProminent: true,
+                    countdown: OnboardingPresenter.welcomeLinger, caption: "Next: allow the microphone"))
+    }
+
+    @Test("still greets an account with no name or address, by the provider")
+    func aWelcomeWithoutAName() {
+        let bare = OnboardingWelcome(
+            account: Account(identifier: "user-2", displayName: "  ", emailAddress: nil, provider: .gitHub),
+            next: .ready)
+        #expect(bare.firstName == nil && bare.emailAddress == nil && bare.initials == "?")
+        let greeting = page(OnboardingState(step: .signIn, detail: .signIn(.welcomed(bare))))
+        #expect(greeting.title == "You’re in!")
+        #expect(greeting.account == OnboardingAccountChip(provider: .gitHub, text: "GitHub"))
+        #expect(greeting.action?.caption == "Next: try your first dictation")
+
+        let byAddress = OnboardingWelcome(
+            account: Account(
+                identifier: "user-3", displayName: nil, emailAddress: "sam@example.com", provider: .apple),
+            next: .setup)
+        #expect(byAddress.initials == "S" && byAddress.firstName == nil)
+    }
+
+    @Test("names every page the welcome can lead to")
+    func whatComesNext() {
+        #expect(OnboardingPresenter.nextStep(.microphone) == "allow the microphone")
+        #expect(OnboardingPresenter.nextStep(.accessibility) == "let Uttrflow type for you")
+        #expect(OnboardingPresenter.nextStep(.setup) == "download the speech model")
+        #expect(OnboardingPresenter.nextStep(.ready) == "try your first dictation")
+        #expect(OnboardingPresenter.nextStep(.signIn) == "allow the microphone")
+    }
+
     // MARK: The last page
 
-    @Test("asks a new install for a first try with ⌃⌥ held, and a way straight to the app")
+    @Test("asks a new install for a first try with ⌃⌥ lit on the keyboard, and a way straight to the app")
     func theFirstTry() {
         let trying = page(OnboardingState(step: .ready, detail: .finishing(.ready)))
-        #expect(trying.title == "Hold ⌃ ⌥ and talk.")
+        #expect(trying.title == "Try it now.")
+        #expect(trying.subtitle == "Hold control and option, say anything, then let go.")
         #expect(
-            trying.picture == .keys(["⌃", "⌥"], isHeld: false, field: .placeholder("Your words appear here")))
-        #expect(trying.link == OnboardingLink(title: "Skip to dashboard", intent: .finish))
+            trying.picture
+                == .keyboard(
+                    OnboardingKeyboard(
+                        lit: [.control, .option], keys: ["⌃", "⌥"], bracket: "HOLD BOTH", isHeld: false,
+                        demonstrates: true, field: .placeholder("Your words appear here"), isListening: false,
+                        celebrates: false)))
+        #expect(
+            trying.action
+                == OnboardingAction(
+                    title: "Skip to dashboard", intent: .finish, isProminent: false, countdown: nil,
+                    caption: nil))
+        #expect(trying.link == nil)
         #expect(trying.hint == nil)
 
         let pressed = page(
             OnboardingState(step: .ready, detail: .finishing(.ready)), activation: .pressToToggle)
-        #expect(pressed.title == "Press ⌃ ⌥ and talk.")
+        #expect(pressed.subtitle == "Press control and option, say anything, then press again.")
+        guard case .keyboard(let pressedKeys) = pressed.picture else {
+            Issue.record("the try draws \(pressed.picture)")
+            return
+        }
+        #expect(pressedKeys.bracket == "PRESS BOTH")
 
         let earlier = page(
             OnboardingState(step: .ready, detail: .finishing(.ready)), hotkey: Settings.earlierInstall.hotkey)
-        #expect(earlier.title == "Hold ⌥ Space and talk.")
+        #expect(earlier.subtitle == "Hold option and Space, say anything, then let go.")
+        guard case .keyboard(let earlierKeys) = earlier.picture else {
+            Issue.record("the try draws \(earlier.picture)")
+            return
+        }
+        #expect(
+            earlierKeys.lit == nil, "a shortcut with a letter or Space is drawn as keycaps, not on the corner"
+        )
+    }
+
+    @Test("lights only the corner keys a shortcut uses, and gives up on keys the corner lacks")
+    func theCornerKeys() {
+        #expect(OnboardingKeys.corner(of: .controlOptionHold) == [.control, .option])
+        #expect(OnboardingKeys.corner(of: .functionHold) == [.function])
+        #expect(OnboardingKeys.corner(of: HotkeyBinding(keyCode: 55, modifiers: [])) == [.command])
+        #expect(OnboardingKeys.corner(of: HotkeyBinding(keyCode: 56, modifiers: [.command])) == nil)
+        #expect(OnboardingKeys.corner(of: .optionSpace) == nil)
+        #expect(OnboardingKeys.spoken(["⌃"]) == "control")
+        #expect(OnboardingKeys.spoken(["⌃", "⌥", "⌘"]) == "control, option and command")
+        #expect(OnboardingKeys.spoken([]) == "the shortcut")
     }
 
     @Test("holds the keys down while listening, and shows the words that came back")
@@ -348,20 +441,33 @@ struct OnboardingPresenterTests {
         let listening = page(OnboardingState(step: .ready, detail: .finishing(.ready, trial: .listening)))
         #expect(listening.title == "Listening…")
         #expect(listening.mood == .live)
-        #expect(listening.hint == "Let go when you’re done")
-        guard case .keys(_, isHeld: true, _) = listening.picture else {
+        #expect(listening.subtitle == "Keep holding while you talk. Let go when you’re done.")
+        guard case .keyboard(let held) = listening.picture, held.isHeld, held.isListening else {
             Issue.record("listening draws \(listening.picture)")
             return
         }
+        #expect(held.bracket == "HOLDING")
         let toggled = page(
             OnboardingState(step: .ready, detail: .finishing(.ready, trial: .listening)),
             activation: .pressToToggle)
-        #expect(toggled.hint == "Press again when you’re done")
+        #expect(toggled.subtitle == "Press again when you’re done.")
+        guard case .keyboard(let toggledKeys) = toggled.picture else {
+            Issue.record("listening draws \(toggled.picture)")
+            return
+        }
+        #expect(!toggledKeys.isHeld, "a pressed shortcut is not held down while listening")
 
         let heard = page(
             OnboardingState(step: .ready, detail: .finishing(.ready, trial: .heard("Hi there."))))
-        #expect(heard.title == "That’s it.")
-        #expect(heard.picture == .keys(["⌃", "⌥"], isHeld: false, field: .filled("Hi there.")))
+        #expect(heard.title == "It works!")
+        #expect(heard.mood == .done)
+        guard case .keyboard(let landed) = heard.picture else {
+            Issue.record("the words draw \(heard.picture)")
+            return
+        }
+        #expect(landed.field == .filled("Hi there."))
+        #expect(landed.celebrates)
+        #expect(landed.lit == [] && landed.bracket == nil)
     }
 
     @Test("says that words will be copied when Accessibility is missing")

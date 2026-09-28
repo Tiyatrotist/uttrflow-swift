@@ -105,6 +105,8 @@ EXCLUDED_FILES = {
     "Uttrflow/Onboarding/OnboardingView.swift": "SwiftUI, drawn from a tested presentation",
     "Uttrflow/Onboarding/OnboardingBackdrop.swift": "SwiftUI; the aurora, logo and waveform drawn behind a tested presentation",
     "Uttrflow/Onboarding/OnboardingPieces.swift": "SwiftUI; the card's parts, drawn from a tested presentation",
+    "Uttrflow/Onboarding/OnboardingCelebration.swift": "SwiftUI; the welcome's circle, confetti and wide button, drawn from a tested presentation",
+    "Uttrflow/Onboarding/OnboardingKeyboardCorner.swift": "SwiftUI; the first try's keyboard corner and field, drawn from a tested presentation",
     "Uttrflow/Onboarding/OnboardingRail.swift": "SwiftUI; the Settings rail's ground, appearance only",
     "Uttrflow/Onboarding/OnboardingWindowController.swift": "owns an on-screen window and the real permission gates",
     "Uttrflow/Settings/SettingsPageController.swift": "hands the Settings model to the main window; probe ordering is tested in SettingsCapabilityProbeTests",

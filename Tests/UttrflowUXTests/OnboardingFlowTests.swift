@@ -10,8 +10,8 @@ private let downloadFailure = SpeechEngineError.modelDownloadFailed(description:
 
 /// The keys the last page draws, or none on a page that draws no keys.
 private func keys(of page: OnboardingPage) -> [String] {
-    guard case .keys(let keys, _, _) = page.picture else { return [] }
-    return keys
+    guard case .keyboard(let keyboard) = page.picture else { return [] }
+    return keyboard.keys
 }
 
 @MainActor
@@ -476,7 +476,8 @@ struct OnboardingFlowTests {
     func skippingToTheDashboard() async throws {
         let harness = Harness(microphone: .granted, accessibility: .granted)
         await harness.flow.start()
-        let skip = try #require(harness.page.link)
+        let skip = try #require(harness.page.action)
+        #expect(skip.title == "Skip to dashboard")
         await harness.flow.perform(skip.intent)
         #expect(harness.finishedWith == .ready)
     }
@@ -543,7 +544,7 @@ struct OnboardingFlowTests {
         await harness.flow.refresh()
 
         #expect(keys(of: harness.page) == ["⇧", "⌘", "Return"])
-        #expect(harness.page.title.hasPrefix("Press"))
+        #expect(harness.page.subtitle?.hasPrefix("Press") == true)
     }
 
     @Test("a user who has finished is never onboarded again")

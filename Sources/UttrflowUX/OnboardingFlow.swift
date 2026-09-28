@@ -191,13 +191,10 @@ public final class OnboardingFlow {
         }
         set(detail: .finishing(readiness, trial: trial))
         guard case .heard = trial else { return }
-        await pause(Self.linger)
+        await pause(OnboardingPresenter.heardLinger)
         guard !isFinished, state.detail == .finishing(readiness, trial: trial) else { return }
         finish(with: readiness)
     }
-
-    /// How long the words that arrived stay on screen before onboarding closes.
-    static let linger = Duration.milliseconds(1600)
 
     /// Whether the page showing has had its question answered, which is what lets the user leave it.
     private var isAnswered: Bool {
@@ -392,13 +389,31 @@ public final class OnboardingFlow {
                 try profiles.save(profile)
                 onSignIn?()
                 // Not guarded on the generation: a cancelled exchange that finished is still a sign-in.
-                await moveOn(after: .signIn)
+                await welcome(profile.account)
             } catch {
                 // A failure is guarded so it cannot redraw a page the user has walked away from.
                 guard generation == signInGeneration else { return }
                 report(error)
             }
         }
+    }
+
+    /// Greets whoever signed in, then moves on by itself unless Continue already did.
+    private func welcome(_ account: Account) async {
+        let next = await nextOutstanding(after: .signIn)
+        let welcome = OnboardingWelcome(account: account, next: next)
+        set(step: .signIn, detail: .signIn(.welcomed(welcome)))
+        await pause(OnboardingPresenter.welcomeLinger)
+        guard !isFinished, state.detail == .signIn(.welcomed(welcome)) else { return }
+        await moveOn(after: .signIn)
+    }
+
+    /// The first page after `step` that still has something to ask; the last page always does.
+    private func nextOutstanding(after step: OnboardingStep) async -> OnboardingStep {
+        for next in OnboardingStep.inOrder where next.position > step.position {
+            if await isOutstanding(next) { return next }
+        }
+        return .ready
     }
 
     /// Stops waiting for a sign-in in a browser tab; the backend forgets the attempt within ten minutes.

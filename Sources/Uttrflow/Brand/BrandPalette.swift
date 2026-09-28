@@ -320,6 +320,11 @@ enum BrandPalette {
         static let failureDeep: UInt32 = 0xE0_262B
         /// The failure badge's shadow.
         static let failureShadow: UInt32 = 0xFF_383C
+        /// The warm end of the welcome's heading, and a confetti colour.
+        static let welcomeGlow: UInt32 = 0xFF_E3A8
+        /// An unlit keycap on the first try's keyboard, top to bottom.
+        static let keyTop: UInt32 = 0x30_343F
+        static let keyBottom: UInt32 = 0x1C_1F27
     }
 }
 
