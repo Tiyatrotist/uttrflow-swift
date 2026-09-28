@@ -202,4 +202,35 @@ struct ClipboardBudgetTests {
         #expect(clips.filter { ClipClass(of: $0) == .copied }.count == 2)
         #expect(clips.filter { ClipClass(of: $0) == .dictation }.count == 2)
     }
+
+    // MARK: - The disk budget and pinned pictures
+
+    /// Pinned pictures consume the disk budget so pinning many of them cannot push the unpinned pool past the bound.
+    @Test("pinned pictures count toward the disk budget")
+    func pinnedPicturesConsumeDiskBudget() async throws {
+        let file = TemporaryFile()
+        // Every picture on disk, pinned or not, must fit in 200 bytes.
+        let store = ClipboardStore(
+            file: file.url, budget: .standard.limiting(items: 100, disk: 200))
+
+        for index in 0..<4 {
+            let picture = Clip(
+                text: "", kind: .image, copiedAt: noon.addingTimeInterval(Double(index)),
+                source: "Screenshot", origin: .copied,
+                image: ClipImage(
+                    file: "p-\(index).png", width: 1, height: 1, bytes: 50, sha: "p-\(index)"))
+            try await store.record(picture, keeping: week())
+            try await store.setPinned(true, of: picture.id, keeping: week())
+        }
+
+        let unpinned = Clip(
+            text: "", kind: .image, copiedAt: noon.addingTimeInterval(100),
+            source: "Screenshot", origin: .copied,
+            image: ClipImage(file: "u.png", width: 1, height: 1, bytes: 50, sha: "u"))
+        _ = try await store.record(unpinned, keeping: week())
+        let clips = await store.clips(keeping: week())
+
+        let totalBytes = clips.compactMap(\.image?.bytes).reduce(0, +)
+        #expect(totalBytes <= 200, "pinned pictures must consume the disk budget")
+    }
 }
