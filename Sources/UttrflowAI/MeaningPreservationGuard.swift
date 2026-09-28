@@ -626,12 +626,27 @@ public struct MeaningPreservationGuard: Sendable {
     static func sameRomanisedForm(_ word: String, _ other: String) -> Bool {
         if sameForm(word, other) { return true }
         let (first, second) = (Romaniser.soundKey(word), Romaniser.soundKey(other))
-        if hindiForms(of: first).contains(second) || hindiForms(of: second).contains(first) { return true }
+        if hindiIrregularVerbForms[first] == second || hindiIrregularVerbForms[second] == first {
+            return true
+        }
+        if hindiVerbStems.contains(first), hindiForms(of: first).contains(second) { return true }
+        if hindiVerbStems.contains(second), hindiForms(of: second).contains(first) { return true }
         guard let pronoun = hindiPronouns[first] else { return false }
         return hindiPronouns[second] == pronoun
     }
 
-    /// The forms Hindi inflects a verb stem or a noun into, as sound keys: tense, aspect, person, gender and plural.
+    /// Verb stems whose listed endings have inflected forms in common romanisation.
+    static let hindiVerbStems: Set<String> = Set(
+        [
+            "aa", "a", "ja", "kar", "kh", "de", "le", "ho", "bol", "chal", "mil",
+            "dekh", "sun", "likh", "padh", "bhej", "bata", "samajh", "rakh", "uth", "baith",
+            "so", "pi", "ban", "mang", "khel", "khil", "la", "pa", "nikal", "dikh",
+        ].map(Romaniser.soundKey))
+
+    /// Common verb forms that do not follow the regular stem endings.
+    static let hindiIrregularVerbForms: [String: String] = ["kha": "khila"]
+
+    /// The forms Hindi inflects a known verb stem into, as sound keys.
     static func hindiForms(of stem: String) -> Set<String> {
         guard !stem.isEmpty else { return [] }
         let endings = [
