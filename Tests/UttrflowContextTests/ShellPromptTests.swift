@@ -120,6 +120,17 @@ struct ShellPromptTests {
         #expect(ShellPrompt.input(in: "user@host:~/dir$ echo hi > file") == "echo hi > file")
     }
 
+    @Test("A fish shell default prompt ends after the home marker, not before it.")
+    func fishDefaultPrompt() {
+        #expect(ShellPrompt.input(in: "user@host ~> git status") == "git status")
+        #expect(ShellPrompt.input(in: "user@host ~/projects> git status") == "git status")
+    }
+
+    @Test("A fish shell vi-mode prompt is also taken off, including the mode indicator.")
+    func fishViModePrompt() {
+        #expect(ShellPrompt.input(in: "[I] user@host ~> git status") == "git status")
+    }
+
     @Test("A trailing comment is not a root prompt.")
     func aCommentIsNotAPrompt() {
         #expect(ShellPrompt.input(in: "echo hi # note") == "echo hi # note")
