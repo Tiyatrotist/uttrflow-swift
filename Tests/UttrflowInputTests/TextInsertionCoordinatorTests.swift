@@ -411,13 +411,12 @@ struct IdenticalSelectionInsertionTests {
         #expect(keystrokes.pasteCount == 0, "a successful same-text replacement must not also be pasted")
     }
 
-    @Test("stops fallback when an accepted Accessibility write has not appeared within the read budget")
-    func doesNotDuplicateAnUnconfirmedLateWrite() async throws {
+    @Test("stops fallback when an accepted Accessibility write has no resulting selection")
+    func doesNotDuplicateAnUnconfirmedWrite() async throws {
         let field = SelectionWriter(
             field: FakeSelectionField("hello") {
                 $0.reportsSelection = false
-                $0.staleReadsAfterWrite = 4
-            }, sleep: { _ in })
+            })
         let keystrokes = FakeKeystrokeSender()
         let coordinator = TextInsertion.coordinator(
             focus: FakeFocus(field: field, somethingFocused: true),

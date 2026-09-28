@@ -19,16 +19,8 @@ protocol SelectionAttributes: Sendable {
 struct SelectionWriter<Field: SelectionAttributes>: FocusedTextField {
     /// The field this writes into.
     let field: Field
-    /// Extra times the value is re-read before "did not change" is believed, catching a value republished a moment late (#601).
-    var lateWriteRereads = 2
-    /// How long to wait before each re-read.
-    var lateWriteInterval = Duration.milliseconds(20)
-    /// Pauses between re-reads; a test overrides this to skip the wait.
-    var sleep: @Sendable (Duration) -> Void = SelectionWriter.threadSleep
 
     func replaceSelection(with text: String) throws(TextInsertionError) {
-        // Read first so the write can be checked; a field that will not answer is trusted.
-        let before = field.value()
         let selectionBefore = field.selectedRange()
 
         let result = field.setSelectedText(text)
@@ -36,33 +28,10 @@ struct SelectionWriter<Field: SelectionAttributes>: FocusedTextField {
             throw .insertionRejected(description: "the field refused the text (\(result.rawValue))")
         }
 
-        // The selection collapsing to where this text ends is a write, even where the text it replaced reads the same.
-        if let selectionBefore, let after = field.selectedRange(), after.length == 0,
+        guard !text.isEmpty else { return }
+        guard let selectionBefore, let after = field.selectedRange(), after.length == 0,
             after.location == selectionBefore.location + text.utf16.count
-        {
-            return
-        }
-
-        // A success that changed nothing is the failure this catches, once a moment late still shows nothing. See `Docs/insertion.md`.
-        guard let before, !text.isEmpty, stillUnchanged(from: before) else { return }
-        throw .insertionUnconfirmed
-    }
-
-    /// Re-reads the value a few times, since a write forwarded to another process can republish it late rather than never.
-    private func stillUnchanged(from before: String) -> Bool {
-        var rereadsLeft = lateWriteRereads
-        while true {
-            guard let after = field.value(), after == before else { return false }
-            guard rereadsLeft > 0 else { return true }
-            sleep(lateWriteInterval)
-            rereadsLeft -= 1
-        }
-    }
-
-    /// Blocks this thread, safe here because the caller is already the synchronous Accessibility write path.
-    private static func threadSleep(_ duration: Duration) {
-        let parts = duration.components
-        Thread.sleep(forTimeInterval: Double(parts.seconds) + Double(parts.attoseconds) / 1e18)
+        else { throw .insertionUnconfirmed }
     }
 
     /// Grows the selection back over what is replaced first, so one write replaces it and undo sees one edit.
@@ -74,6 +43,7 @@ struct SelectionWriter<Field: SelectionAttributes>: FocusedTextField {
         do {
             try replaceSelection(with: text)
         } catch {
+            if error == .insertionUnconfirmed { throw error }
             // A field that takes the selection and refuses the text keeps its caret, not a selection.
             _ = try? select(caret)
             throw error

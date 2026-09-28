@@ -14,13 +14,11 @@ field, accept a write to its selected text, answer `.success`, and do nothing at
 
 Believing the return value meant the coordinator stopped there, so the words never
 reached the paste below and never reached the clipboard either — the user saw the
-dictation happen and had nothing to paste. The write is therefore **read back and
-verified**; a field that does not answer the read is trusted, since that is a
-verification rather than a precondition. If the field still reports its old value after
-the bounded rereads, the result is uncertain: the write may still arrive later. That
-answer stops the fallback chain and asks the user to check the field before retrying,
-because a paste started while the Accessibility write is pending would insert the words
-twice.
+dictation happen and had nothing to paste. A successful write is therefore checked by
+the collapsed caret at the expected UTF-16 endpoint. A missing or unexpected selection
+leaves its placement uncertain, so the result stops the fallback chain and asks the user
+to check the field before retrying; another strategy could duplicate a write that already
+landed.
 
 ## Which application the record names
 
