@@ -1227,3 +1227,90 @@ extension MeaningPreservationGuardTests {
             hint)
     }
 }
+
+/// Guards the indexed occurrence lookups against the former ordered scans.
+@Suite("Indexed meaning guard equivalence")
+struct MeaningGuardIndexEquivalenceTests {
+    @Test("survival retains exact matches across forms, homophones, identifiers and contractions")
+    func survivalMatchesOrderedScan() {
+        let cases: [(String, String)] = [
+            ("hear hear", "here hear"),
+            ("main", "man"),
+            ("twenty one", "21 twenty-one"),
+            ("do not", "don't do not"),
+            ("fetch invoices", "fetchInvoices fetch invoices"),
+            ("developers", "developer"),
+            ("alpha beta", "beta alpha"),
+            ("ravi", "gravity"),
+            ("invoice invoice", "invoice"),
+            ("foo", "foo2024"),
+        ]
+        for (keptText, writtenText) in cases {
+            let kept = MeaningPreservationGuard.grammarTokens(keptText)
+            let written = MeaningPreservationGuard.grammarTokens(writtenText)
+            #expect(
+                MeaningPreservationGuard.survivalVerdict(kept, in: written)
+                    == referenceSurvival(kept, written),
+                "\(keptText) → \(writtenText)")
+        }
+    }
+
+    @Test("invention retains membership and identifier reading behavior")
+    func inventionMatchesOrderedScan() {
+        let cases: [(String, String, String)] = [
+            ("send invoice", "send invoice", ""),
+            ("hear the user", "here the user", ""),
+            ("main", "man", ""),
+            ("developers", "developer", ""),
+            ("call fetch invoices", "call fetchInvoices", ""),
+            ("hello", "hello greeting", ""),
+            ("do not", "don't", ""),
+            ("", "foo2024", ""),
+        ]
+        for (keptText, rewrittenText, echoText) in cases {
+            let kept = MeaningPreservationGuard.grammarTokens(keptText)
+            let rewritten = MeaningPreservationGuard.grammarTokens(rewrittenText)
+            let echo = MeaningPreservationGuard.grammarTokens(echoText)
+            let optimized = MeaningPreservationGuard.inventionVerdict(
+                kept: kept, rewritten: rewritten, echo: echo, allowing: [])
+            #expect(
+                optimized == referenceInvention(kept: kept, rewritten: rewritten, echo: echo),
+                "\(keptText) → \(rewrittenText)")
+        }
+    }
+
+    private func referenceSurvival(
+        _ kept: [MeaningPreservationGuard.GrammarToken], _ written: [MeaningPreservationGuard.GrammarToken]
+    ) -> GuardVerdict {
+        var reached = 0
+        for token in kept {
+            let places = written.indices.filter {
+                MeaningPreservationGuard.survives(token.matching, as: written[$0])
+            }
+            guard !places.isEmpty else {
+                return .rejected(reason: "the rewrite lost or replaced '\(token.text)'", kind: .lostWord)
+            }
+            guard let place = places.first(where: { $0 >= reached }) else {
+                return .rejected(reason: "the rewrite moved '\(token.text)'", kind: .movedWord)
+            }
+            reached = place
+        }
+        return .accepted
+    }
+
+    private func referenceInvention(
+        kept: [MeaningPreservationGuard.GrammarToken], rewritten: [MeaningPreservationGuard.GrammarToken],
+        echo: [MeaningPreservationGuard.GrammarToken]
+    ) -> GuardVerdict {
+        guard kept.allSatisfy(\.isPlain) else { return .accepted }
+        let origins = (kept + echo).filter(\.isPlain)
+        for token in rewritten where token.isPlain && MeaningPreservationGuard.isContent(token) {
+            if !origins.contains(where: { MeaningPreservationGuard.survives(token.matching, as: $0) })
+                && !MeaningPreservationGuard.isSpelled(token.text, from: origins)
+            {
+                return .rejected(reason: "the rewrite invented '\(token.text)'", kind: .inventedWord)
+            }
+        }
+        return .accepted
+    }
+}
