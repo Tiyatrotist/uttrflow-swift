@@ -143,8 +143,15 @@ final class SuggestionCoordinator {
 
     /// Takes what the user has just chosen, so a change on the Suggestions screen holds from the next keystroke.
     func follow(_ preferences: SuggestionPreferences) {
+        let moment = Date()
         let before = self.preferences
         self.preferences = preferences
+        if Self.disablesSuggestions(
+            in: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            before: before, after: preferences, at: moment)
+        {
+            withdraw()
+        }
         // One switch, two stores: what may be suggested in is what may be learned from. See `Docs/predict.md`.
         Task { [capture] in
             for application in preferences.turnedOff.subtracting(before.turnedOff) {
@@ -154,6 +161,16 @@ final class SuggestionCoordinator {
                 try? await capture.record(.allowed, for: application)
             }
         }
+    }
+
+    /// Whether one update turns off suggestions for the application currently holding the field.
+    nonisolated static func disablesSuggestions(
+        in bundleIdentifier: String?, before: SuggestionPreferences, after: SuggestionPreferences,
+        at moment: Date
+    ) -> Bool {
+        guard let bundleIdentifier else { return before.isEnabled && !after.isEnabled }
+        return before.isEnabled(in: bundleIdentifier, at: moment)
+            && !after.isEnabled(in: bundleIdentifier, at: moment)
     }
 
     /// Forgets every answer about which applications may be learned from, which a reset asks for.
