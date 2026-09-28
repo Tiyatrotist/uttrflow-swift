@@ -697,8 +697,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Finishes the dictation in flight before letting the process die, but not for ever.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        completions?.stop()
         Task { [weak self, pipeline, clipboard, telemetry] in
             let controller = self?.controller
+            let finishingCompletions = self?.completions
             let quittingPipeline = pipeline.map { pipeline in
                 AppQuitCoordinator.Pipeline(
                     currentState: { await pipeline.currentState },
@@ -710,6 +712,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 clock: ContinuousClock(),
                 pipeline: quittingPipeline,
                 flushClipboard: { await clipboard.flushUse() },
+                finishCompletions: { await finishingCompletions?.finishWrites() },
                 stopController: { await controller?.stop() },
                 reply: {
                     // After the dictation has landed, so a quit's last report never holds one up.

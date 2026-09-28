@@ -36,6 +36,8 @@ public struct AccessibilityTextInsertionEngine: TextInsertionEngine {
 }
 
 extension AccessibilityTextInsertionEngine: CompletionWriting {
+    public func finishWrites() async {}
+
     public func canWrite() async -> Bool { await canInsert() }
 
     /// One write, so the field's own undo sees one edit rather than a delete and a typing run.

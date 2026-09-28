@@ -25,6 +25,9 @@ public struct SuggestionAcceptor: Sendable {
     /// The strategies this will try, so a caller can prove the clipboard is not among them.
     public var route: [TextInsertionMethod] { completion.route }
 
+    /// Waits for an insertion already in progress before the application terminates.
+    public func finishWrites() async { await completion.finishWrites() }
+
     /// Does to the field exactly what the drawn suggestion promised, or nothing when it promised nothing.
     @discardableResult
     public func accept(

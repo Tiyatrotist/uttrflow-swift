@@ -230,6 +230,9 @@ final class SuggestionCoordinator {
         FocusedFieldReader.releaseFullTrees()
     }
 
+    /// Waits for a replacement already posted by the typed fallback to finish.
+    func finishWrites() async { await acceptor.finishWrites() }
+
     // MARK: What wakes the loop
 
     /// Keystrokes elsewhere, the application in front changing, and a clock for the pauses.
