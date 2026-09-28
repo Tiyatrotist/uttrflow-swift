@@ -45,7 +45,7 @@ struct SelectionWriter<Field: SelectionAttributes>: FocusedTextField {
 
         // A success that changed nothing is the failure this catches, once a moment late still shows nothing. See `Docs/insertion.md`.
         guard let before, !text.isEmpty, stillUnchanged(from: before) else { return }
-        throw .insertionRejected(description: "the field accepted the text and did not change")
+        throw .insertionUnconfirmed
     }
 
     /// Re-reads the value a few times, since a write forwarded to another process can republish it late rather than never.

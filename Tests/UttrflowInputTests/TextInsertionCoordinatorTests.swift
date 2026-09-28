@@ -410,6 +410,26 @@ struct IdenticalSelectionInsertionTests {
         #expect(attempt.method == .accessibility, "the Accessibility write succeeded and must not be doubted")
         #expect(keystrokes.pasteCount == 0, "a successful same-text replacement must not also be pasted")
     }
+
+    @Test("stops fallback when an accepted Accessibility write has not appeared within the read budget")
+    func doesNotDuplicateAnUnconfirmedLateWrite() async throws {
+        let field = SelectionWriter(
+            field: FakeSelectionField("hello") {
+                $0.reportsSelection = false
+                $0.staleReadsAfterWrite = 4
+            }, sleep: { _ in })
+        let keystrokes = FakeKeystrokeSender()
+        let coordinator = TextInsertion.coordinator(
+            focus: FakeFocus(field: field, somethingFocused: true),
+            pasteboard: FakePasteboard(), keystrokes: keystrokes)
+
+        await #expect(throws: TextInsertionError.insertionUnconfirmed) {
+            try await coordinator.insert(" world")
+        }
+
+        #expect(field.field.text == "hello world")
+        #expect(keystrokes.pasteCount == 0)
+    }
 }
 
 @Suite("The assembled strategies")
