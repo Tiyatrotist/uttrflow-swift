@@ -454,6 +454,22 @@ struct ClipboardStoreTests {
         #expect(after.isEmpty, "the reset window still applies after the un-keep")
     }
 
+    /// An un-kept clip survives the same write under the item cap, instead of being evicted at its old position.
+    @Test("an un-kept clip survives a full pool by moving to the front")
+    func unKeepingSurvivesAFullPool() async throws {
+        let file = TemporaryFile()
+        let store = ClipboardStore(file: file.url, budget: .standard.limiting(items: 2))
+        let old = clip("old", pinned: true)
+        try await store.record(old, keeping: week())
+        try await store.record(clip("a", at: 60), keeping: week())
+        try await store.record(clip("b", at: 120), keeping: week())
+
+        let after = try await store.setPinned(false, of: old.id, keeping: week())
+
+        #expect(after.contains { $0.id == old.id }, "the unpin does not also evict the clip")
+        #expect(after.first?.id == old.id, "the un-kept clip moves to the front of its pool")
+    }
+
     /// An identifier that is not there is not an error; afterwards it is neither present nor changed.
     @Test("shrugs at an identifier it has never seen")
     func unknownIdentifier() async throws {
