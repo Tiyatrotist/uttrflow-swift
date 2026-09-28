@@ -49,15 +49,12 @@ something other, than it looks like it measures.
 **"Reports success, changes nothing" no longer looks like success.** The column's value
 is named after the defect as it was first seen, and the wording invites you to look for
 `Inserted via accessibility` over an unchanged screen. You will not see that any more.
-`SelectionWriter.replaceSelection(with:)` reads the field's value before the write and
-again after it, and throws `insertionRejected` — "the field accepted the text and did not
-change" — when they match, so `--via accessibility` into such a field **fails** and says
-why. Record the column from that message, not from the screen.
-
-One limit worth knowing while you do: the guard fires only when the field answers
-`value()` both times. A field that will not say what it holds is trusted, deliberately —
-a verification, not a precondition — so `reports success, changes nothing` and a genuine
-silent success are indistinguishable there. That is the case #601 is about.
+`SelectionWriter.replaceSelection(with:)` checks that the selection collapses to the
+expected caret after the write. When the field accepts the write but leaves the selection
+unchanged, it reports an unconfirmed insertion and stops before trying paste or typing.
+An unreadable or unexpected resulting selection takes the same path, since another
+strategy could duplicate text that already landed. Record the column from that message,
+not from the screen.
 
 **`--via paste` does not print the confirmation timing.** `Insert` installs its
 `report(_:)` printout — "words reached the caret after 0.42s" — only on the default route,
