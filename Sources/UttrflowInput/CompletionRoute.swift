@@ -10,6 +10,14 @@ public protocol CompletionWriting: Sendable {
 
     /// Writes `text` at the caret, having first taken back the `replaced` characters already there.
     func write(_ text: String, replacing replaced: String) async throws(TextInsertionError)
+
+    /// Waits for an in-flight write to finish before application teardown.
+    func finishWrites() async
+}
+
+extension CompletionWriting {
+    /// Routes without a multi-step external write have nothing to drain.
+    public func finishWrites() async {}
 }
 
 /// Tries each completion strategy in order and ends in nothing, never in the clipboard. See `Docs/predict-accept.md`.
@@ -22,6 +30,11 @@ public struct CompletionRoute: Sendable {
 
     /// The strategies that will be tried, in order.
     public var route: [TextInsertionMethod] { strategies.map(\.method) }
+
+    /// Waits for all strategies to finish any write already in flight.
+    public func finishWrites() async {
+        for strategy in strategies { await strategy.finishWrites() }
+    }
 
     /// Writes the completion, returning how it got there.
     @discardableResult

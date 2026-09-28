@@ -1,5 +1,6 @@
 import Synchronization
 import Testing
+import Foundation
 
 @testable import UttrflowCore
 @testable import UttrflowInput
@@ -62,6 +63,27 @@ private final class RecordingTypist: KeystrokeTyping, @unchecked Sendable {
         deleted.withLock { $0.append(count) }
         if let error { throw error }
     }
+}
+
+/// Pauses after Delete has landed, so quit can be interleaved before the replacement is typed.
+private final class PausingTypist: KeystrokeTyping, @unchecked Sendable {
+    private let deleted = Mutex(false)
+    private let typedValues = Mutex<[String]>([])
+    private let resumeTyping = DispatchSemaphore(value: 0)
+
+    var didDelete: Bool { deleted.withLock { $0 } }
+    var typed: [String] { typedValues.withLock { $0 } }
+
+    func type(_ text: String) throws(TextInsertionError) {
+        resumeTyping.wait()
+        typedValues.withLock { $0.append(text) }
+    }
+
+    func deleteBackwards(_ count: Int) throws(TextInsertionError) {
+        deleted.withLock { $0 = true }
+    }
+
+    func allowTyping() { resumeTyping.signal() }
 }
 
 @Suite("Typing a completion in")
@@ -176,6 +198,30 @@ struct TypedTextInsertionEngineTests {
 
         #expect(typist.deletions == [4])
         #expect(typist.text == ["it commit"])
+    }
+
+    @Test("quit waits through the gap between deleting and typing a replacement")
+    func quitWaitsForReplacement() async throws {
+        let typist = PausingTypist()
+        let engine = TypedTextInsertionEngine(focus: FakeFocus(preceding: "git "), typist: typist)
+        let writing = Task { try await engine.write("it commit", replacing: "git ") }
+        while !typist.didDelete { try await Task.sleep(for: .milliseconds(1)) }
+
+        let draining = Task { await engine.finishWrites() }
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(!draining.isCancelled)
+        #expect(typist.typed.isEmpty)
+
+        typist.allowTyping()
+        try await writing.value
+        await draining.value
+        #expect(typist.typed == ["it commit"])
+
+        await #expect(
+            throws: TextInsertionError.insertionRejected(description: "the application is terminating")
+        ) {
+            try await engine.write("late", replacing: "")
+        }
     }
 
     @Test(
