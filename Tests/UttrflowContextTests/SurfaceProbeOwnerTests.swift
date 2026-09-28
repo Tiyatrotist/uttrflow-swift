@@ -13,6 +13,12 @@ import Testing
         #expect(!SurfaceProbe.owns(99, 42, current: 7))
     }
 
+    @Test func acceptsOnlyTheRequestedApplicationOwner() {
+        #expect(SurfaceProbe.owns(42, 42, current: 7))
+        #expect(!SurfaceProbe.owns(99, 42, current: 7))
+        #expect(!SurfaceProbe.owns(7, 42, current: 7))
+    }
+
     @Test func refusesAFieldWhoseOwnerIsUnknown() {
         #expect(!SurfaceProbe.owns(nil, 42, current: 7))
     }

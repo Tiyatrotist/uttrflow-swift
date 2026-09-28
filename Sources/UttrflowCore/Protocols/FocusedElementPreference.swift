@@ -10,6 +10,14 @@ public enum FocusedElementPreference {
         role.map(textEntryRoles.contains) ?? false
     }
 
+    /// Whether an element belongs to the requested application and not this process.
+    public static func belongsToRequestedApplication(
+        owner: Int32?, requested: Int32?, current: Int32
+    ) -> Bool {
+        guard let owner, let requested else { return false }
+        return owner == requested && owner != current
+    }
+
     /// The system-wide answer if it is a text-entry role, else the application's, else whichever answered. See `Docs/insertion.md`.
     public static func choose<Element>(
         systemWide: Element?, systemWideRole: (Element) -> String?,
