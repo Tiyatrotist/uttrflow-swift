@@ -43,6 +43,10 @@ public final class SystemKeyboard: KeyboardEventSource {
         }
     }
 
+    public func onGaveUp(_ handler: @escaping @Sendable () -> Void) {
+        delivery.setGaveUpHandler(handler)
+    }
+
     deinit { stop() }
 
     /// The domain reading of a CoreGraphics event, kept here so nothing else decodes flags.
@@ -91,6 +95,8 @@ final class Delivery: @unchecked Sendable {
     private let lastDisable = Atomic<UInt64>(0)
     /// The port, kept where the callback can revive the tap without taking a lock.
     private let tapPointer = Atomic<UnsafeMutableRawPointer?>(nil)
+    /// Told when the tap is left off for good, so the caller can notice and recover.
+    private let gaveUpHandler = Mutex<(@Sendable () -> Void)?>(nil)
 
     deinit {
         if let held = tapPointer.load(ordering: .relaxed) {
@@ -100,6 +106,7 @@ final class Delivery: @unchecked Sendable {
 
     func set(_ value: (@Sendable (KeyStroke) -> Void)?) { sink.withLock { $0 = value.map(Sink.init) } }
     func setConsumeKeyDown(_ value: Bool) { consumeKeyDown.store(value, ordering: .relaxed) }
+    func setGaveUpHandler(_ value: @escaping @Sendable () -> Void) { gaveUpHandler.withLock { $0 = value } }
     /// Hands the stroke to the sink and reports whether the callback should swallow the event.
     @discardableResult
     func send(_ stroke: KeyStroke) -> Bool {
@@ -135,6 +142,9 @@ final class Delivery: @unchecked Sendable {
         let (count, reEnable) = TapDisableWindow.decide(
             last: last, now: now, count: disables.load(ordering: .relaxed))
         disables.store(count, ordering: .relaxed)
+        if !reEnable {
+            gaveUpHandler.withLock { $0 }?()
+        }
         return reEnable
     }
 }
