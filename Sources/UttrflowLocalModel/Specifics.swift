@@ -119,7 +119,9 @@ enum Specifics {
             index -= 1
         }
         if !operates, let open = openingParenthesis(before: index, in: characters) {
+            let firstArgument = characters[(open + 1)..<index].allSatisfy { $0.isWhitespace }
             return namesKey(endingAt: open, in: characters, throughIn: true)
+                || (firstArgument && namesRecordLookup(endingAt: open, in: characters))
         }
         guard operates else { return false }
         return namesKey(endingAt: index, in: characters, throughIn: false)
@@ -147,10 +149,33 @@ enum Specifics {
         }
         let name = String(characters[nameStart..<index])
         if throughIn, name.lowercased() == "in" {
+            var columnEnd = nameStart
+            while columnEnd > 0, " \t".contains(characters[columnEnd - 1]) { columnEnd -= 1 }
+            var operatorStart = columnEnd
+            while operatorStart > 0, isAlphanumeric(characters[operatorStart - 1]) {
+                operatorStart -= 1
+            }
+            if String(characters[operatorStart..<columnEnd]).lowercased() == "not" {
+                return namesKey(endingAt: operatorStart, in: characters, throughIn: false)
+            }
             return namesKey(endingAt: nameStart, in: characters, throughIn: false)
         }
         guard let last = words(of: name).last else { return false }
         return keyWords.contains(last)
+    }
+
+    /// Whether the call name starts with a lookup verb and names an entity after it.
+    static func namesRecordLookup(endingAt end: Int, in characters: [Character]) -> Bool {
+        var index = end
+        while index > 0, " \t".contains(characters[index - 1]) { index -= 1 }
+        var nameStart = index
+        while nameStart > 0, isAlphanumeric(characters[nameStart - 1]) || characters[nameStart - 1] == "_" {
+            nameStart -= 1
+        }
+        let name = String(characters[nameStart..<index])
+        let parts = words(of: name)
+        guard let verb = parts.first, ["get", "fetch", "find", "load"].contains(verb) else { return false }
+        return parts.count > 1 && parts.dropFirst().contains { !$0.isEmpty }
     }
 
     /// Whether a character is a letter or a digit, which is what a name or a number is made of.

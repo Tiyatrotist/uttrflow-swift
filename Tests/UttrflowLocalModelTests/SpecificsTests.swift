@@ -92,6 +92,16 @@ struct SpecificsTests {
             ("0", "var co", "var count = 0"),
             ("0 with a semicolon", "let co", "let count = 0;"),
             ("1", "i ", "i += 1"),
+            ("1 in an unrelated call", "let result = sum(", "let result = sum(1)"),
+            (
+                "1 in a later call argument", "let result = getUser(options, ",
+                "let result = getUser(options, 1)"
+            ),
+            (
+                "1 in a name that only starts with a lookup verb", "let result = forget(",
+                "let result = forget(1)"
+            ),
+            ("1 in an ordinary call", "let result = process(", "let result = process(1)"),
             ("-1", "ret", "return -1"),
             ("0.0", "let off", "let offset = 0.0"),
             ("1.0", "view.al", "view.alpha = 1.0"),
@@ -137,11 +147,17 @@ struct SpecificsTests {
                 "an id passed to a finder", "let user = try await repo.findById(",
                 "let user = try await repo.findById(1)"
             ),
+            (
+                "a user passed to a getter", "let user = try await repo.get",
+                "let user = try await repo.getUser(1)"
+            ),
+            ("an order passed to a fetcher", "let order = repo.fetch", "let order = repo.fetchOrder(0)"),
             ("an id passed by name", "let order = orders.by", "let order = orders.byId(0)"),
             ("an id passed to a getter", "let name = get", "let name = getUserId(1)"),
             ("a quoted id passed to a finder", "find", "findById(\"1\")"),
             ("an id list", "WHERE ", "WHERE id IN (1)"),
             ("a key list", "WHERE user_id IN (0, ", "WHERE user_id IN (0, 1)"),
+            ("an excluded key list", "WHERE user_id NOT IN (0, ", "WHERE user_id NOT IN (0, 1)"),
             ("a threshold of 0", "HAVING count", "HAVING count(o.id) > 0"),
             ("a threshold of 0 or more", "guard ", "guard a >= 0 else { return }"),
             ("a bound below 1", "if n ", "if n < 1 {"),
