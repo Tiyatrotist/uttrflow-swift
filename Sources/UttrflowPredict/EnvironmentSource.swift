@@ -43,8 +43,15 @@ public enum EnvironmentKind: Sendable, Hashable {
 
 /// Reads one kind of fact off this machine, which only the system half can really do.
 public protocol EnvironmentReading: Sendable {
-    /// Every value of one kind for one directory: empty when there are none, absent when the read failed or was too slow.
-    func values(of kind: EnvironmentKind, in directory: String) async -> [String]?
+    /// Every value of one kind for one directory, narrowed to what has been typed so far where the kind lists names: empty when there are none, absent when the read failed or was too slow.
+    func values(of kind: EnvironmentKind, in directory: String, matching prefix: String) async -> [String]?
+}
+
+extension EnvironmentReading {
+    /// Every value of one kind for one directory, unnarrowed — what a caller with no typed word yet, or no use for one, asks for.
+    public func values(of kind: EnvironmentKind, in directory: String) async -> [String]? {
+        await values(of: kind, in: directory, matching: "")
+    }
 }
 
 /// What this machine last said, held briefly so a keystroke never waits on a read.
@@ -55,10 +62,11 @@ public actor EnvironmentIndex {
     /// How long an answer about programs and their verbs is believed, since those change when something is installed.
     public static let programLifetimeInSeconds = 60.0
 
-    /// One directory's answer about one kind of thing.
+    /// One directory's answer about one kind of thing, cached separately for each prefix it is asked with.
     struct Key: Hashable {
         let kind: EnvironmentKind
         let directory: String
+        let prefix: String
     }
 
     /// How long past its lifetime an answer is still served, which covers the read that replaces it and no more.
@@ -115,9 +123,11 @@ public actor EnvironmentIndex {
     }
 
     /// What is known right now, asking the machine in the background when that is nothing or stale; absent until it has answered or once long stale.
-    public func values(of kind: EnvironmentKind, in directory: String, now: Date) -> [String]? {
+    public func values(
+        of kind: EnvironmentKind, in directory: String, matching prefix: String = "", now: Date
+    ) -> [String]? {
         // A machine-wide answer is kept under one key, or every directory pays for its own PATH scan.
-        let key = Key(kind: kind, directory: kind.isMachineWide ? "" : directory)
+        let key = Key(kind: kind, directory: kind.isMachineWide ? "" : directory, prefix: prefix)
         let entry = cached[key]
         cached[key]?.asked = now
         if entry.map({ $0.retry <= now }) ?? true { refresh(key, now: now) }
@@ -138,7 +148,8 @@ public actor EnvironmentIndex {
         guard refreshing[key] == nil else { return }
         refreshing[key] = Task {
             let started = seconds()
-            let values = await reader.values(of: key.kind, in: key.directory)
+            let values = await reader.values(
+                of: key.kind, in: key.directory, matching: key.prefix)
             let landed = now.addingTimeInterval(max(0, seconds() - started))
             record(key, values: values, now: landed)
         }
@@ -219,7 +230,13 @@ public struct EnvironmentSource: Sendable {
         var seen: Set<String> = []
         for lookup in Verification.offerings(for: completing) {
             for kind in lookup.kinds {
-                let values = await index.values(of: kind, in: directory, now: now) ?? []
+                // Only a name listing is narrowed here: branches and verbs cost the same to read whole, so narrowing them would only fragment their cache.
+                let narrowing: String
+                switch kind {
+                case .entries, .directories: narrowing = lookup.word
+                case .branch, .executable, .alias, .subcommand, .gitAlias: narrowing = ""
+                }
+                let values = await index.values(of: kind, in: directory, matching: narrowing, now: now) ?? []
                 for value in Self.matches(values, completing: lookup.word).prefix(Self.maximumPerKind)
                 where seen.insert(lookup.prefix + value).inserted {
                     offered.append(lookup.prefix + value)
@@ -240,12 +257,20 @@ public struct EnvironmentSource: Sendable {
         return scope
     }
 
+    /// Whether a name could go on to finish what has been typed of it, case folded since the filesystem is not case sensitive here.
+    static func hasPrefix(_ name: String, _ token: String) -> Bool {
+        name.lowercased().hasPrefix(token.lowercased())
+    }
+
+    /// The names that could finish `prefix`, in whatever order they were given — the one filter a listing applies before anything is stat'ed.
+    static func matching(_ names: [String], prefix: String) -> [String] {
+        names.filter { Self.hasPrefix($0, prefix) }
+    }
+
     /// The values that finish the token, shortest first, since the nearest completion is the likeliest.
     static func matches(_ values: [String], completing token: String) -> [String] {
-        let folded = token.lowercased()
-        return
-            values
-            .filter { $0.count > token.count && $0.lowercased().hasPrefix(folded) }
+        values
+            .filter { $0.count > token.count && Self.hasPrefix($0, token) }
             .sorted { ($0.count, $0) < ($1.count, $1) }
     }
 }

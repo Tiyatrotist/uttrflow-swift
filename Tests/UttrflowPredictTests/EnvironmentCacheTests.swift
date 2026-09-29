@@ -143,7 +143,7 @@ private actor ScriptedEnvironment: EnvironmentReading {
 
     init(_ answers: [[String]?]) { self.answers = answers }
 
-    func values(of kind: EnvironmentKind, in directory: String) async -> [String]? {
+    func values(of kind: EnvironmentKind, in directory: String, matching prefix: String) async -> [String]? {
         reads += 1
         return answers.count > 1 ? answers.removeFirst() : answers.first ?? nil
     }
