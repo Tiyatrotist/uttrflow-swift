@@ -501,7 +501,7 @@ public enum HomePresenter {
         HomeRow(
             id: entry.id,
             when: MainFormatting.time(entry.when, locale: locale),
-            text: entry.text,
+            text: DictationTextPresentation(entry.text).displayText,
             application: HistoryPresenter.application(for: entry),
             // Copying is what people want from a glance; everything else is on the page this row leads to.
             open: MainAction(title: "Copy", symbolName: "doc.on.doc", intent: .copy(entry.text)))

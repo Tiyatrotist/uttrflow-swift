@@ -390,7 +390,7 @@ public enum HistoryPresenter {
             id: entry.id,
             application: application(for: entry),
             when: when(entry.when, relativeTo: now, locale: locale),
-            text: entry.text,
+            text: DictationTextPresentation(entry.text).displayText,
             time: HomeDashboard.time(entry.when, calendar: calendar, locale: locale),
             length: length(of: entry, words: words),
             // Only a change is worth a tag; "as dictated" is what every quiet row already says.

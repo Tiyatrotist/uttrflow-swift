@@ -1887,7 +1887,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             speechLoadElapsed: speechLoadStarted.map { $0.duration(to: .now) } ?? .zero,
             recordingAdvice: recordingAdvice,
             recents: recents.previews.map {
-                MenuBarRecent(title: $0.title, fullText: $0.dictation.text)
+                MenuBarRecent(
+                    title: $0.title,
+                    fullText: $0.isSecret ? $0.title : $0.dictation.text,
+                    isSecret: $0.isSecret)
             },
             clips: menuClips,
             updateProgress: updates.progress,
@@ -1913,11 +1916,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .insertRecent(let index):
             guard let recent = recents.entries[safe: index] else { return }
             // The app's own inserter: a fresh one would get the unannouncing pasteboard.
-            insert(recent.text, used: nil)
+            insert(
+                recent.text, concealed: DictationTextPresentation(recent.text).isSecret, used: nil)
         case .copyRecent(let index):
             guard let recent = recents.entries[safe: index] else { return }
             // And through the helper that announces the write, for the same reason.
-            putOnClipboard(recent.text, used: nil)
+            putOnClipboard(
+                recent.text, concealed: DictationTextPresentation(recent.text).isSecret, used: nil)
         case .insertClip(let index):
             guard let clip = menuClips[safe: index] else { return }
             if clip.image != nil {
@@ -2306,7 +2311,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .recover(let action): perform(action)
         case .go(let destination): show(destination)
         case .copy(let text):
-            putOnClipboard(text, used: nil)
+            putOnClipboard(text, concealed: DictationTextPresentation(text).isSecret, used: nil)
             sayCopiedForMainWindow()
         case .insert(let text): insert(text, used: nil)
         case .dictate:
