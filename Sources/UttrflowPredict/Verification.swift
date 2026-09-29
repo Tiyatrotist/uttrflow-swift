@@ -28,6 +28,7 @@ public protocol CandidateScoring: Sendable {
 public extension CandidateScoring {
     /// Scorers without retained state have nothing to forget.
     func forgetEverything() async {}
+
 }
 
 /// Marks a candidate wrong wherever it is remembered, so it stops accruing weight.
