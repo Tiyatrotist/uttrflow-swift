@@ -9,6 +9,8 @@ public actor PasteboardTextInsertionEngine: TextInsertionEngine {
     private let keystrokes: any KeystrokeSender
     private let confirmation: PasteConfirmation
     private let report: (@Sendable (PasteConfirmation.Outcome) -> Void)?
+    /// What was in front when the last paste was posted, which is where its words went.
+    private var landedIn: InsertionDestination?
 
     public init(
         focus: any AccessibilityFocus,
@@ -39,6 +41,7 @@ public actor PasteboardTextInsertionEngine: TextInsertionEngine {
         guard !Task.isCancelled else {
             throw .insertionRejected(description: TextInsertion.dictationEnded)
         }
+        landedIn = nil
         // Re-checked here rather than trusted from `canInsert()`, whose answer can go stale by now.
         try PasteboardPasteAction.requireExternal(focus: focus)
         // Concealed for a field that hides what is typed, so no clipboard history keeps the words.
@@ -56,6 +59,8 @@ public actor PasteboardTextInsertionEngine: TextInsertionEngine {
         }
         // Thrown onwards with the words left on the clipboard: the floor below would only put them back.
         try PasteboardPasteAction.postIfExternal(focus: focus, keystrokes: keystrokes)
+        // Read as the paste is posted, not after the wait below, so a switch during the wait is not credited.
+        landedIn = focus.frontmostApplication()
         // Posting a paste proves nothing, so this waits for the words the way the write above is read back.
         let outcome = await confirmation.waitFor(text, before: before)
         // Waited for before the reporter is consulted, so attaching a logger cannot be what switches this on.
@@ -63,6 +68,9 @@ public actor PasteboardTextInsertionEngine: TextInsertionEngine {
         // The borrowed clipboard is deliberately never restored. See `Docs/insertion.md`.
         return InsertionArrival(outcome)
     }
+
+    /// The application in front as the last paste was posted.
+    public func destinationAtLanding() async -> InsertionDestination? { landedIn }
 }
 
 /// Re-checks the frontmost application immediately before posting a paste keystroke.
