@@ -319,7 +319,7 @@ public enum HomeDashboard {
         return HomeActivityRow(
             id: entry.id,
             time: time(entry.when, calendar: calendar, locale: locale),
-            text: entry.text,
+            text: DictationTextPresentation(entry.text).displayText,
             application: HistoryPresenter.application(for: entry),
             words: MainFormatting.count(MainFormatting.words(in: entry.text), "word", "words"),
             tag: tag, tone: tone,

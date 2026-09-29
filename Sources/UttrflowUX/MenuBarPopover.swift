@@ -245,7 +245,8 @@ extension MenuBarPresenter {
     static func lastDictation(for state: MenuBarState) -> MenuBarRow? {
         guard let recent = state.recents.first else { return nil }
         return row(
-            title: recent.title, tooltip: recent.fullText, insert: .insertRecent(index: 0),
+            title: recent.title, tooltip: recent.isSecret ? nil : recent.fullText,
+            insert: .insertRecent(index: 0),
             copy: .copyRecent(index: 0), in: state)
     }
 

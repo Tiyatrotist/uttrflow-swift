@@ -65,10 +65,13 @@ public struct MenuBarRecent: Sendable, Equatable {
     public let title: String
     /// The whole of it, for the tooltip, since the row says less than it will insert.
     public let fullText: String
+    /// Whether the text is a secret and its tooltip must be omitted.
+    public let isSecret: Bool
 
-    public init(title: String, fullText: String) {
+    public init(title: String, fullText: String, isSecret: Bool = false) {
         self.title = title
         self.fullText = fullText
+        self.isSecret = isSecret
     }
 }
 
