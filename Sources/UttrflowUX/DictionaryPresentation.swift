@@ -132,7 +132,7 @@ public struct DictionaryEditor: Sendable, Equatable {
     public let cancel: MainAction
 
     /// Whether Save is enabled.
-    public var canSave: Bool { problem == nil }
+    public var canSave: Bool { problem == nil && (!word.isEmpty || !pronunciation.isEmpty) }
 
     /// Builds the editor from its parts.
     public init(

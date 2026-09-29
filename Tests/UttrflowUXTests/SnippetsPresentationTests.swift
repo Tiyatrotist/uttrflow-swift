@@ -108,6 +108,8 @@ struct SnippetsEditorTests {
     @Test("a new snippet opens an empty editor")
     func newSnippet() {
         let page = HistoryFixture.snippets([], draft: SnippetDraft())
+        #expect(page.editor?.problem == nil)
+        #expect(page.editor?.canSave == false)
         #expect(page.editor?.editing == nil)
         #expect(page.editor?.badge.text == "New")
         #expect(page.editor?.title == "New snippet")

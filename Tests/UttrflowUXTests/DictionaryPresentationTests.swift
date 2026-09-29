@@ -267,6 +267,8 @@ struct DictionaryEditorTests {
     func open() throws {
         let editor = try #require(
             HistoryFixture.dictionary(draft: DictionaryDraft()).editor)
+        #expect(editor.problem == nil)
+        #expect(!editor.canSave)
         #expect(editor.wordLabel == "Write it as")
         #expect(editor.pronunciationLabel == "Say it like")
         #expect(editor.pronunciationHint.contains("Leave this blank"))
