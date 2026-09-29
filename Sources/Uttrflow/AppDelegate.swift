@@ -1663,7 +1663,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // A read that started earlier never replaces a newer list, or a copy shown while opening would go.
         guard read == panelReads else { return }
         panel?.install(
-            clips, missingImages: facts.missing, formattableLanguages: facts.formattable)
+            clips, missingImages: facts.missing, formattableLanguages: facts.formattable,
+            now: Date())
         guard let snapshot = panel else { return }
         quickPanel.update(PanelPresenter.present(snapshot))
     }

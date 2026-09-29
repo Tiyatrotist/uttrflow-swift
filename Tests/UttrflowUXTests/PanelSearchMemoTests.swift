@@ -99,7 +99,7 @@ struct PanelSearchMemoTests {
         var panel = PanelFixture.panel(Self.clips).applying(.search("invoice")).state
         _ = panel.results
         let arrived = [PanelFixture.clip("a late invoice", minutesAgo: 0)] + Self.clips
-        panel.install(arrived, missingImages: [], formattableLanguages: [])
+        panel.install(arrived, missingImages: [], formattableLanguages: [], now: PanelFixture.now)
 
         #expect(
             Self.same(
