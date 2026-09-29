@@ -242,7 +242,7 @@ public struct AXAccessibilityFocus: AccessibilityFocus {
             bundleIdentifier: application.bundleIdentifier)
     }
 
-    /// Asks the focused element's role and names first, reading its value only when none of them says secure.
+    /// Asks the focused element's role and names first, reading the start of its value only when none of them says secure.
     public func focusedFieldIsSecure() -> Bool {
         guard let element = focusedElement() else { return false }
         return SecureField.isSecure(
@@ -251,7 +251,11 @@ public struct AXAccessibilityFocus: AccessibilityFocus {
             identifier: stringAttribute(kAXIdentifierAttribute, of: element),
             placeholder: stringAttribute(kAXPlaceholderValueAttribute, of: element),
             description: stringAttribute(kAXDescriptionAttribute, of: element),
-            value: { stringAttribute(kAXValueAttribute, of: element) })
+            value: {
+                CaretWindow.prefix(
+                    length: characterCount(of: element), ranged: { stringForRange($0, of: element) })
+                    ?? stringAttribute(kAXValueAttribute, of: element)
+            })
     }
 
     /// The focused element, asked system-wide then per-application, preferring whichever names a text-entry role. See `Docs/insertion.md`.
@@ -288,32 +292,45 @@ public struct AXAccessibilityFocus: AccessibilityFocus {
 
     /// The `count` characters before the caret, when the field will report both its value and its caret.
     public func precedingText(_ count: Int) -> String? {
-        guard
-            count > 0, let element = focusedElement(),
-            let value = readableValue(of: element),
-            let range = rangeAttribute(kAXSelectedTextRangeAttribute, of: element)
+        guard count > 0, let element = focusedElement(),
+            let (value, caret) = textBeforeCaret(count, of: element)
         else { return nil }
-        return BackwardSelection.text(in: value, endingAt: range.location, exactly: count)
+        return BackwardSelection.text(in: value, endingAt: caret, exactly: count)
     }
 
     /// As much as the field holds before the caret, so a field shorter than the request is still read.
     public func tail(upTo count: Int) -> FieldTail {
         guard
             count > 0, let element = focusedElement(),
-            let value = readableValue(of: element),
-            let range = rangeAttribute(kAXSelectedTextRangeAttribute, of: element),
-            let tail = BackwardSelection.tail(in: value, endingAt: range.location, upTo: count)
+            let (value, caret) = textBeforeCaret(count, of: element),
+            let tail = BackwardSelection.tail(in: value, endingAt: caret, upTo: count)
         else { return .unreadable }
         return .text(tail)
     }
+
+    /// Text ending at the caret, read by range where the field allows it, with the caret's offset into it.
+    private func textBeforeCaret(_ count: Int, of element: AXUIElement) -> (String, Int)? {
+        guard
+            count > 0, !isSecure(element),
+            let range = rangeAttribute(kAXSelectedTextRangeAttribute, of: element)
+        else { return nil }
+        if let window = CaretWindow.before(
+            range.location, characters: count, ranged: { stringForRange($0, of: element) })
+        {
+            return (window, window.utf16.count)
+        }
+        return stringAttribute(kAXValueAttribute, of: element).map { ($0, range.location) }
+    }
+
+    /// Reads a field's security metadata and only checks masked text when the metadata is inconclusive.
+    private func isSecure(_ element: AXUIElement) -> Bool { isSecureField(element) }
 
     /// Reads the window and its text from one AX element, so matching text in another window cannot authorize a write.
     public func windowNumberAndTail(upTo count: Int) -> (windowNumber: UInt32?, tail: FieldTail) {
         guard count > 0, let element = focusedElement() else { return (nil, .unreadable) }
         let number = Self.windowNumber(of: element)
-        guard let value = readableValue(of: element),
-            let range = rangeAttribute(kAXSelectedTextRangeAttribute, of: element),
-            let tail = BackwardSelection.tail(in: value, endingAt: range.location, upTo: count)
+        guard let (value, caret) = textBeforeCaret(count, of: element),
+            let tail = BackwardSelection.tail(in: value, endingAt: caret, upTo: count)
         else { return (number, .unreadable) }
         return (number, .text(tail))
     }
@@ -378,6 +395,15 @@ private struct AXSelectionAttributes: SelectionAttributes, @unchecked Sendable {
         rangeAttribute(kAXSelectedTextRangeAttribute, of: element)
     }
 
+    func length() -> Int? {
+        characterCount(of: element)
+    }
+
+    func text(in range: Range<Int>) -> String? {
+        guard !isSecureField(element) else { return nil }
+        return stringForRange(range, of: element)
+    }
+
     func setSelectedText(_ text: String) -> AXError {
         guard attributeIsSettable(kAXSelectedTextAttribute as CFString, on: element) else {
             return .attributeUnsupported
@@ -415,6 +441,21 @@ private func readableValue(of element: AXUIElement) -> String? {
         value: { stringAttribute(kAXValueAttribute, of: element) })
 }
 
+/// Checks security metadata first; only checks masked text when metadata is inconclusive.
+private func isSecureField(_ element: AXUIElement) -> Bool {
+    SecureField.isSecure(
+        role: stringAttribute(kAXRoleAttribute, of: element),
+        subrole: stringAttribute(kAXSubroleAttribute, of: element),
+        identifier: stringAttribute(kAXIdentifierAttribute, of: element),
+        placeholder: stringAttribute(kAXPlaceholderValueAttribute, of: element),
+        description: stringAttribute(kAXDescriptionAttribute, of: element),
+        value: {
+            CaretWindow.prefix(
+                length: characterCount(of: element), ranged: { stringForRange($0, of: element) })
+                ?? stringAttribute(kAXValueAttribute, of: element)
+        })
+}
+
 /// The string an Accessibility attribute holds, or `nil` when the element will not say.
 private func stringAttribute(_ name: String, of element: AXUIElement) -> String? {
     var current: AnyObject?
@@ -422,6 +463,29 @@ private func stringAttribute(_ name: String, of element: AXUIElement) -> String?
         AXUIElementCopyAttributeValue(element, name as CFString, &current) == .success
     else { return nil }
     return current as? String
+}
+
+/// The text a UTF-16 range of the element covers, or `nil` when it will not read by range.
+private func stringForRange(_ range: Range<Int>, of element: AXUIElement) -> String? {
+    var cfRange = CFRange(location: range.lowerBound, length: range.count)
+    guard let parameter = AXValueCreate(.cfRange, &cfRange) else { return nil }
+    var current: AnyObject?
+    guard
+        AXUIElementCopyParameterizedAttributeValue(
+            element, kAXStringForRangeParameterizedAttribute as CFString, parameter, &current)
+            == .success
+    else { return nil }
+    return current as? String
+}
+
+/// The element's length in UTF-16 units, or `nil` when it will not say.
+private func characterCount(of element: AXUIElement) -> Int? {
+    var current: AnyObject?
+    guard
+        AXUIElementCopyAttributeValue(
+            element, kAXNumberOfCharactersAttribute as CFString, &current) == .success
+    else { return nil }
+    return (current as? NSNumber)?.intValue
 }
 
 /// The range an Accessibility attribute holds, or `nil` when the element will not say.
