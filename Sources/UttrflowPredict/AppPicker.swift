@@ -11,7 +11,7 @@ public enum AppPicker {
         guard let last = typed.last, !last.isWhitespace else { return false }
         let word = typed.split(whereSeparator: \.isWhitespace).last ?? ""
         guard let first = word.first else { return false }
-        if first == ":" { return word.count > 1 && word.dropFirst().allSatisfy(isShortcodeCharacter) }
+        if first == ":" { return word.dropFirst().allSatisfy(isShortcodeCharacter) }
         if wordTriggers.contains(first) { return true }
         let line = typed.drop(while: \.isWhitespace)
         return line.first.map(lineTriggers.contains) == true && !line.contains(where: \.isWhitespace)

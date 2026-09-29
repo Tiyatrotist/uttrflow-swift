@@ -222,6 +222,13 @@ public enum FocusedFieldReader {
         guard goOn() else { return nil }
         let windowRect = window.flatMap { frame(of: $0) }
         guard goOn() else { return nil }
+        let appPickerOpen =
+            ownList
+            || window.map {
+                FocusedWindowPicker.isOpen(
+                    in: AXNode($0), near: fieldRect, using: AXElementTree(), while: goOn)
+            } ?? false
+        guard goOn() else { return nil }
         let title = window.flatMap { SurfaceProbe.string($0, kAXTitleAttribute) }
         guard goOn() else { return nil }
         // An editor that draws its own text keeps an empty input at the caret, so its line is read off the rendered text.
@@ -251,7 +258,7 @@ public enum FocusedFieldReader {
             isComposing: Composition.isComposing(
                 markedText: marked, inputSource: CompositionProbe.inputSourceKind()),
             markedText: marked,
-            showsOwnList: ownList,
+            showsOwnList: appPickerOpen,
             readMicroseconds: Int((DispatchTime.now().uptimeNanoseconds - started) / 1000),
             windowTitle: title
         )
@@ -369,7 +376,7 @@ public enum FocusedFieldReader {
         static let attributes = [
             kAXRoleAttribute, kAXPositionAttribute, kAXSizeAttribute, kAXTitleAttribute,
             kAXDescriptionAttribute, kAXChildrenAttribute, kAXParentAttribute, kAXSubroleAttribute,
-            kAXIdentifierAttribute, kAXPlaceholderValueAttribute,
+            kAXIdentifierAttribute, kAXPlaceholderValueAttribute, kAXHiddenAttribute,
         ]
 
         /// How many UTF-16 units of a long value are read from its end, twice the per-element cap so cleaning still leaves enough.
@@ -473,6 +480,8 @@ public enum FocusedFieldReader {
 
         var children: [AXUIElement] { self[kAXChildrenAttribute] as? [AXUIElement] ?? [] }
 
+        var isHidden: Bool { (self[kAXHiddenAttribute] as? NSNumber)?.boolValue ?? false }
+
         var parent: AXUIElement? {
             guard let value = self[kAXParentAttribute], CFGetTypeID(value) == AXUIElementGetTypeID() else {
                 return nil
@@ -485,6 +494,7 @@ public enum FocusedFieldReader {
     /// The other application's window as the surroundings collector walks it, one Accessibility message per element.
     struct AXElementTree: ElementTree {
         func role(of node: AXNode) -> String? { node.answers.role }
+        func isHidden(_ node: AXNode) -> Bool { node.answers.isHidden }
         func isSecure(_ node: AXNode) -> Bool { node.answers.isSecure }
         func text(of node: AXNode) -> String? { node.answers.text }
         func frame(of node: AXNode) -> CGRect? { node.answers.frame }

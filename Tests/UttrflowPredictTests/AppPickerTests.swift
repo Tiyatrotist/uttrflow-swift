@@ -11,7 +11,9 @@ private let composer = Surface(bundleIdentifier: "com.example.chat", role: "AXTe
 struct AppPickerTests {
     @Test(
         "a mention, a shortcode, a channel or a slash command still being typed is a picker",
-        arguments: ["@", "@jo", "hey @jo", ":smi", "nice :thumbs_up", "#gen", "see #", "/rem", "  /remind"])
+        arguments: [
+            "@", "@jo", "hey @jo", ":", ":smi", "nice :thumbs_up", "#gen", "see #", "/", "/rem", "  /remind",
+        ])
     func pickerOpen(line: String) {
         #expect(AppPicker.isOpen(after: line))
     }
@@ -19,14 +21,14 @@ struct AppPickerTests {
     @Test(
         "a finished word, an address, a time, an emoticon or a slash inside a line is not",
         arguments: [
-            "@jo ", "me@example.com", "at 12:30", "ok :)", ":", "/remind me", "and/or", "see /usr/bin", "",
+            "@jo ", "me@example.com", "at 12:30", "ok :)", "/remind me", "and/or", "see /usr/bin", "",
             "Note: ",
         ])
     func pickerClosed(line: String) {
         #expect(!AppPicker.isOpen(after: line))
     }
 
-    @Test("with the picker open, the turn settles quiet and neither Tab nor Escape is armed")
+    @Test("with the picker open, the turn settles quiet and navigation and acceptance go to the app")
     func pickerLeavesTabAndEscape() {
         for line in ["@jo", ":smi", "/rem"] {
             var session = SuggestionSession()
@@ -41,6 +43,10 @@ struct AppPickerTests {
                 KeyRouting.decision(for: KeyStroke(.tab), showing: update.suggestion) == .passThrough)
             #expect(
                 KeyRouting.decision(for: KeyStroke(.escape), showing: update.suggestion) == .passThrough)
+            for key in [Key.downArrow, .upArrow, .return] {
+                #expect(
+                    KeyRouting.decision(for: KeyStroke(key), showing: update.suggestion) == .passThrough)
+            }
         }
     }
 
@@ -68,5 +74,15 @@ struct AppPickerTests {
         let context = PredictionContext(typed: "/usr", isCommandLine: true)
         #expect(Quieting.reason(context) == nil)
         #expect(Quieting.reason(PredictionContext(typed: "/usr")) == .applicationPicker)
+    }
+
+    @Test("ordinary prose and terminated trigger tokens remain eligible for suggestions")
+    func ordinaryTextIsNotPicker() {
+        for line in ["Thanks for the update", "me@example.com", "at 12:30", "we use /usr/bin"] {
+            #expect(Quieting.reason(PredictionContext(typed: line, isProse: true)) == nil)
+        }
+        for line in ["@jo ", ":smile ", "/remind me"] {
+            #expect(Quieting.reason(PredictionContext(typed: line, isProse: true)) == nil)
+        }
     }
 }
