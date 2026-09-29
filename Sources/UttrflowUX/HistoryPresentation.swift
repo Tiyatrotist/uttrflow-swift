@@ -376,8 +376,12 @@ public enum HistoryPresenter {
     static func title(
         for day: Date, snapshot: HistorySnapshot, calendar: Calendar, locale: Locale
     ) -> String {
-        MainFormatting.todayOrYesterday(day, now: snapshot.now, calendar: calendar)
-            ?? day.formatted(.dateTime.day().month(.wide).locale(locale))
+        if let near = MainFormatting.todayOrYesterday(day, now: snapshot.now, calendar: calendar) {
+            return near
+        }
+        let dateStyle = Date.FormatStyle.dateTime.day().month(.wide).locale(locale)
+        let sameYear = calendar.component(.year, from: day) == calendar.component(.year, from: snapshot.now)
+        return day.formatted(sameYear ? dateStyle : dateStyle.year())
     }
 
     /// One dictation as a row, with the buttons it offers when pointed at.

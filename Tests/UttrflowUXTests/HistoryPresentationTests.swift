@@ -23,11 +23,17 @@ enum HistoryFixture {
     /// Mid-afternoon on 15 June 2025, so subtracting hours stays inside the same day.
     static let now = Date(timeIntervalSince1970: 1_750_000_800)
 
+    /// A date at noon in the fixture's fixed calendar.
+    static func date(year: Int, month: Int, day: Int) throws -> Date {
+        try #require(calendar.date(from: DateComponents(year: year, month: month, day: day, hour: 12)))
+    }
+
     /// One kept dictation; `changes` defaults to measured-and-unchanged, and `nil` means never measured.
     static func entry(
         _ text: String = "Hello there",
         minutesAgo: Int = 0,
         daysAgo: Int = 0,
+        when: Date? = nil,
         application: String? = "Slack",
         applicationIdentifier: String? = nil,
         changes: RecordedChanges? = RecordedChanges(),
@@ -36,8 +42,9 @@ enum HistoryFixture {
         HistoryEntry(
             id: UUID(),
             text: text,
-            when: now.addingTimeInterval(
-                Double(-minutesAgo) * 60 + Double(-daysAgo) * 86_400),
+            when: when
+                ?? now.addingTimeInterval(
+                    Double(-minutesAgo) * 60 + Double(-daysAgo) * 86_400),
             applicationName: application,
             applicationIdentifier: applicationIdentifier,
             changes: changes,
@@ -49,7 +56,8 @@ enum HistoryFixture {
         entries: [HistoryEntry],
         query: String = "",
         settings: Settings = .default,
-        keepsRecordings: Bool = false
+        keepsRecordings: Bool = false,
+        now: Date = HistoryFixture.now
     ) -> HistorySnapshot {
         HistorySnapshot(
             entries: entries, query: query, settings: settings,
@@ -98,6 +106,50 @@ struct HistoryPresentationTests {
         let page = HistoryFixture.page(entries: [HistoryFixture.entry(daysAgo: 3)])
         let title = page.days.first?.title
         #expect(title?.contains("June") == true)
+    }
+
+    @Test("same month and day in different years have distinct headings")
+    func distinguishesYearsForSameMonthAndDay() throws {
+        let snapshot = HistoryFixture.snapshot(
+            entries: [
+                HistoryFixture.entry(
+                    "Last year", when: try HistoryFixture.date(year: 2025, month: 9, day: 28)),
+                HistoryFixture.entry(
+                    "This year", when: try HistoryFixture.date(year: 2026, month: 9, day: 28)),
+            ], now: try HistoryFixture.date(year: 2026, month: 9, day: 30))
+
+        let page = HistoryPresenter.page(
+            for: snapshot, calendar: HistoryFixture.calendar, locale: HistoryFixture.locale)
+
+        #expect(page.days.map(\.title) == ["28 September 2025", "28 September"])
+    }
+
+    @Test("a date from this year keeps its existing heading")
+    func currentYearHeadingStaysUnchanged() throws {
+        let snapshot = HistoryFixture.snapshot(
+            entries: [
+                HistoryFixture.entry(
+                    "This year", when: try HistoryFixture.date(year: 2026, month: 9, day: 28))
+            ], now: try HistoryFixture.date(year: 2026, month: 9, day: 30))
+
+        let page = HistoryPresenter.page(
+            for: snapshot, calendar: HistoryFixture.calendar, locale: HistoryFixture.locale)
+
+        #expect(page.days.map(\.title) == ["28 September"])
+    }
+
+    @Test("an older heading formats its year in the selected locale")
+    func olderHeadingUsesLocaleFormatting() throws {
+        let snapshot = HistoryFixture.snapshot(
+            entries: [
+                HistoryFixture.entry(
+                    "Last year", when: try HistoryFixture.date(year: 2025, month: 9, day: 28))
+            ], now: try HistoryFixture.date(year: 2026, month: 9, day: 30))
+        let locale = Locale(identifier: "en_US")
+
+        let page = HistoryPresenter.page(for: snapshot, calendar: HistoryFixture.calendar, locale: locale)
+
+        #expect(page.days.map(\.title) == ["September 28, 2025"])
     }
 
     /// The store orders by arrival, and merging days as met stops a moved clock making two "Today"s.
