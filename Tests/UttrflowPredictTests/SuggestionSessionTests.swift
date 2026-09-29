@@ -988,6 +988,22 @@ struct SuggestionScoringTests {
         #expect(update?.suggestion == .certain("git checkout"))
     }
 
+    @Test("An unscored leader, from a missing or unloaded scorer, turns the turn silent.")
+    func missingScorerKeepsTurnQuiet() throws {
+        var session = SuggestionSession()
+        let asked = try asked(&session, typing: "git c")
+        // The scorer is absent or held back (Low Power Mode, weights still loading),
+        // so scoreCompletions returns [:] and no line is scored.
+        let noneScored = session.resolveGenerated(
+            ["git checkout"], for: asked, elapsedMilliseconds: 0, scores: [:])
+        #expect(noneScored == .quiet(because: .modelUnsure))
+        // A scorer that answered about other lines but missed the leader still does not pass it.
+        let missedLeader = session.resolveGenerated(
+            ["git checkout"], for: asked, elapsedMilliseconds: 0,
+            scores: ["something else": 0])
+        #expect(missedLeader == .quiet(because: .modelUnsure))
+    }
+
     @Test(
         "A model's later alternatives need a score over the choice floor; the machine's listed values need none."
     )
