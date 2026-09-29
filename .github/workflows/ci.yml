@@ -74,6 +74,30 @@ jobs:
       - name: Verify
         run: make verify
 
+      # `make verify`'s test run has crashed on this runner with no error and no exit code —
+      # the log simply stops. `coverage.sh` now tees that output to a file as it runs, so if
+      # the step above dies mid-run this still has something to show instead of losing it.
+      - name: Show test output tail on failure
+        if: failure()
+        run: |
+          LOG=".build/swift-test-output.log"
+          if [[ -f "$LOG" ]]; then
+            echo "::group::Last 300 lines of swift test output"
+            tail -n 300 "$LOG"
+            echo "::endgroup::"
+          else
+            echo "no $LOG — the crash happened before the test run started"
+          fi
+
+      - name: Upload swift test output
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: swift-test-output
+          path: .build/swift-test-output.log
+          if-no-files-found: ignore
+          retention-days: 7
+
       # The app bundle is not part of `make verify`, and building it here is what catches
       # the failures that only appear at packaging time — a resource that does not get
       # sealed, a signature that does not verify. Ad-hoc signed: no certificate is needed
