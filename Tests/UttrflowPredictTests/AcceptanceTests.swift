@@ -149,6 +149,21 @@ struct AcceptanceTests {
         #expect(edit.inserted == "\u{301}")
     }
 
+    @Test("A shared base letter does not split a decomposed grapheme in the field.")
+    func aSharedBaseLetterKeepsTheDecomposedGraphemeWhole() throws {
+        let typed = "e\u{301}"
+        let edit = try #require(Acceptance.edit(accepting: "e", after: typed))
+
+        #expect(edit.replaced == typed)
+        #expect(edit.inserted == "e")
+        #expect(edit.applied(to: typed) == "e")
+
+        let normalized = try #require(Acceptance.edit(accepting: "é", after: typed))
+        #expect(normalized.replaced == typed)
+        #expect(normalized.inserted == "é")
+        #expect(normalized.applied(to: typed) == "é")
+    }
+
     @Test("A combining mark mismatch replaces its whole typed grapheme.")
     func aCombiningMarkMismatchReplacesOneWholeGrapheme() throws {
         let typed = "cafe\u{301}"
