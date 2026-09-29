@@ -1008,13 +1008,13 @@ struct SuggestionScoringTests {
     )
     func reusedListedLineIsDrawn() throws {
         var session = SuggestionSession()
-        let asked = try asked(&session, typing: "git checkout ")
+        let first = try asked(&session, typing: "git checkout ")
         // The model picked "main" from the branch list; the others arrived via expandGenerated.
         _ = session.resolveGenerated(
-            ["git checkout main"], for: asked, elapsedMilliseconds: 0,
+            ["git checkout main"], for: first, elapsedMilliseconds: 0,
             scores: ["git checkout main": 0])
         _ = session.expandGenerated(
-            ["git checkout dev", "git checkout develop"], for: asked, scores: nil)
+            ["git checkout dev", "git checkout develop"], for: first, scores: nil)
         // A keystroke narrowed the line to "d"; only "dev" and "develop" prefix-match it.
         // Neither was put through a model pass, so neither has a score; the gate must let the listed ones through.
         let narrowed = try asked(&session, typing: "git checkout d")
@@ -1030,12 +1030,12 @@ struct SuggestionScoringTests {
     @Test("A reused machine-listed line alone draws as a certain ghost, no score needed.")
     func reusedListedAloneIsCertain() throws {
         var session = SuggestionSession()
-        let asked = try asked(&session, typing: "git checkout ")
+        let first = try asked(&session, typing: "git checkout ")
         _ = session.resolveGenerated(
-            ["git checkout main"], for: asked, elapsedMilliseconds: 0,
+            ["git checkout main"], for: first, elapsedMilliseconds: 0,
             scores: ["git checkout main": 0])
         _ = session.expandGenerated(
-            ["git checkout dev", "git checkout develop"], for: asked, scores: nil)
+            ["git checkout dev", "git checkout develop"], for: first, scores: nil)
         let narrowed = try asked(&session, typing: "git checkout dev")
         let update = session.resolveGenerated(
             ["git checkout develop"], for: narrowed, elapsedMilliseconds: 0, scores: [:],
@@ -1048,10 +1048,10 @@ struct SuggestionScoringTests {
     )
     func reusedModelLineWithoutScoreIsQuiet() throws {
         var session = SuggestionSession()
-        let asked = try asked(&session, typing: "git c")
+        let first = try asked(&session, typing: "git c")
         // The model wrote "git checkout" but it never produced a new score after typing narrowed the line.
         _ = session.resolveGenerated(
-            ["git checkout"], for: asked, elapsedMilliseconds: 0,
+            ["git checkout"], for: first, elapsedMilliseconds: 0,
             scores: ["git checkout": 0])
         let narrowed = try asked(&session, typing: "git ch")
         let update = session.resolveGenerated(
