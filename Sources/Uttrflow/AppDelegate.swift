@@ -132,6 +132,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private(set) var transformerAvailability: [TransformerKind: Bool] = [:]
     /// What the store last said about the speech model on disk; internal so a test can read it.
     private(set) var speechModelPresence: DiagnosticsModelPresence?
+    /// The built-in recogniser's locale asset inventory answer.
+    private(set) var appleSpeechStatus: DiagnosticsAppleSpeechStatus?
+    /// The built-in recogniser's last typed model-load failure.
+    private(set) var appleSpeechLoadFailure: SpeechEngineError?
 
     /// How far along that fetch is; internal so a test can read back what it did.
     private(set) var suggestionModel: SuggestionModelReadiness = .notAsked {
@@ -290,6 +294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         loadSpeechModel()
         probeTransformers()
         probeSpeechModel()
+        probeAppleSpeechAssets()
         refreshAccount()
         // A Mac that worked without an account keeps no trace of it, and meets sign-in like anyone signed out.
         RetiredLocalAccount.forget()
@@ -514,6 +519,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }.value
             guard let self else { return }
             speechModelPresence = presence
+            refreshMainWindow()
+        }
+    }
+
+    /// Reads the system recogniser's asset inventory for the locale its backend loads.
+    @discardableResult
+    func probeAppleSpeechAssets() -> Task<Void, Never> {
+        Task { [weak self] in
+            let status = await AppleSpeechBackend.assetStatus()
+            guard let self else { return }
+            appleSpeechStatus =
+                switch status {
+                case .installed: .installed
+                case .needsDownload: .needsDownload
+                case .downloading: .downloading
+                case .unsupported: .unsupported
+                }
             refreshMainWindow()
         }
     }
@@ -1721,6 +1743,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Recorded before the menu is drawn, and kept even when insertion failed. §19.
         switch state {
         case .inserted(let outcome):
+            if speechInUse == .appleSpeech {
+                appleSpeechLoadFailure = nil
+            }
             Self.log.notice(
                 """
                 dictation finished: method=\(outcome.method.rawValue, privacy: .public) \
@@ -1756,6 +1781,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // I4 — into the clipboard too, which the watcher never sees because this is not a copy.
             recordAsClip(kept, of: record.id)
         case .failed(let notice):
+            if notice.speechEngineKind == .appleSpeech,
+                case .modelLoadFailed? = notice.speechEngineError
+            {
+                appleSpeechLoadFailure = notice.speechEngineError
+            }
             Self.log.error(
                 """
                 dictation failed: \(notice.message, privacy: .public) \
@@ -2161,6 +2191,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     engines: settings.engines, speechInUse: speechInUse,
                     transformerAvailability: transformerAvailability,
                     speechModel: speechModelPresence, speechReadiness: speechReadiness,
+                    appleSpeechStatus: appleSpeechStatus,
+                    appleSpeechLoadFailure: appleSpeechLoadFailure,
                     permissions: knownPermissions,
                     measurements: measurements, cleaning: lastCleaning,
                     suggestionModel: suggestionModel, version: .ofThisBuild,
