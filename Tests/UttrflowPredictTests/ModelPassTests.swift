@@ -31,10 +31,23 @@ struct ModelPassTests {
     func reusesKept() {
         var pass = ModelPass()
         pass.remember(["git status", "Git stash", "git"], for: query("g"), at: nil)
-        #expect(pass.plan(for: query("git st"), at: nil) == .reuse(["git status", "Git stash"]))
-        #expect(pass.plan(for: query("git"), at: nil) == .reuse(["git status", "Git stash"]))
+        #expect(pass.plan(for: query("git st"), at: nil) == .reuse(["git status", "Git stash"], listed: []))
+        #expect(pass.plan(for: query("git"), at: nil) == .reuse(["git status", "Git stash"], listed: []))
         #expect(pass.plan(for: query("ls"), at: nil) == .ask)
         #expect(pass.plan(for: query("git", in: other), at: nil) == .ask)
+    }
+
+    @Test("A reused list remembers which lines were machine-listed, so the gate can skip them.")
+    func reuseCarriesListed() {
+        var pass = ModelPass()
+        pass.remember(
+            ["git checkout main", "git checkout dev", "git checkout develop"],
+            for: query("git checkout "), at: nil,
+            listed: ["git checkout dev", "git checkout develop"])
+        guard case .reuse(let kept, let listed) = pass.plan(for: query("git checkout d"), at: nil)
+        else { Issue.record("expected reuse"); return }
+        #expect(kept == ["git checkout dev", "git checkout develop"])
+        #expect(listed == Set(["git checkout dev", "git checkout develop"]))
     }
 
     @Test("A line that deletes back past the answered one is asked again, and the answer is forgotten.")
@@ -54,7 +67,8 @@ struct ModelPassTests {
         var pass = ModelPass()
         let line = query("Meeting with")
         pass.remember(["Meeting with the design team"], for: line, at: "Monday agenda")
-        #expect(pass.plan(for: line, at: "Monday agenda") == .reuse(["Meeting with the design team"]))
+        #expect(
+            pass.plan(for: line, at: "Monday agenda") == .reuse(["Meeting with the design team"], listed: []))
         #expect(pass.plan(for: line, at: "Budget review notes") == .ask)
         #expect(pass.plan(for: line, at: nil) == .ask)
         pass.follow(line, at: "Budget review notes")
@@ -68,7 +82,8 @@ struct ModelPassTests {
         pass.follow(query("Meeting with"), at: "agenda")
         #expect(pass.lastGenerated != nil)
         #expect(
-            pass.plan(for: query("Meeting with"), at: "agenda") == .reuse(["Meeting with the design team"]))
+            pass.plan(for: query("Meeting with"), at: "agenda")
+                == .reuse(["Meeting with the design team"], listed: []))
     }
 
     @Test("An empty or failed line is skipped only on that exact line, field and place.")
@@ -89,7 +104,7 @@ struct ModelPassTests {
         var pass = ModelPass()
         pass.remember(["git status"], for: query("g"), at: nil)
         pass.remember([], for: query("git s"), at: nil)
-        #expect(pass.plan(for: query("git s"), at: nil) == .reuse(["git status"]))
+        #expect(pass.plan(for: query("git s"), at: nil) == .reuse(["git status"], listed: []))
     }
 
     @Test("A new field or an emptied line forgets both memories, and anything else keeps them.")

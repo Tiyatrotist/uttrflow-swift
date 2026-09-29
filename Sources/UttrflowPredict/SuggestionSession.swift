@@ -293,7 +293,7 @@ public struct SuggestionSession: Sendable, Equatable {
     public mutating func resolveGenerated(
         _ completions: [String], for query: SuggestionQuery, elapsedMilliseconds: Int,
         whenEmpty silence: Quieting.Reason = .nothingOffered,
-        scores: [String: Double]
+        scores: [String: Double], listed: Set<String> = []
     ) -> SuggestionUpdate? {
         guard query.generation == generation, query.surface == surface, answersTheLatestRead,
             let pending
@@ -307,17 +307,21 @@ public struct SuggestionSession: Sendable, Equatable {
             Self.keepingTypedCase($0, typed: pending.typed)
         }
         guard let leader = usable.first else { return settle(.silent, silence: silence) }
-        let leaderScore = scores[drawable[0]]
+        let leaderListed = listed.contains(drawable[0])
+        let leaderScore = listed.contains(drawable[0]) ? Verification.choiceFloor : scores[drawable[0]]
         // A list's leader has to clear the choice bar, and so does every alternative kept beside it.
         guard Verification.clears(leaderScore, floor: Verification.choiceFloor) else {
             return settle(.silent, silence: .modelUnsure)
         }
         let others = zip(drawable.dropFirst(), usable.dropFirst()).compactMap { scored, drawn in
-            Verification.clears(scores[scored], floor: Verification.choiceFloor) ? drawn : nil
+            let lineScore = listed.contains(scored) ? Verification.choiceFloor : scores[scored]
+            return Verification.clears(lineScore, floor: Verification.choiceFloor) ? drawn : nil
         }
         let kept = Array(others.prefix(Self.verifiedDepth - 1))
-        // A lone leader has to clear the stricter bar; below it the turn goes quiet.
-        guard !kept.isEmpty || Verification.clears(leaderScore, floor: Verification.certainFloor) else {
+        // A lone leader has to clear the stricter bar; a machine-listed value is certain by existence and skips the score gate.
+        let leaderClearsCertain =
+            leaderListed || Verification.clears(leaderScore, floor: Verification.certainFloor)
+        guard !kept.isEmpty || leaderClearsCertain else {
             return settle(.silent, silence: .modelUnsure)
         }
         let update = settle(
