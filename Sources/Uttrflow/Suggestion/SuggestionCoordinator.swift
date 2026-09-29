@@ -49,6 +49,7 @@ final class SuggestionCoordinator {
     let capture: CaptureSession
     private let panel = SuggestionPanelController.shared
     private let interceptor = KeyInterceptor()
+    private let secureInput = SecureInputWatch()
     private let acceptor: SuggestionAcceptor
     /// What the user has decided on the Suggestions screen, which the app hands over as it changes.
     private var preferences: SuggestionPreferences
@@ -81,6 +82,8 @@ final class SuggestionCoordinator {
     private var monitors: [Any] = []
     /// The scroll monitor, present only while a ghost is drawn, since a scroll matters only then.
     private var scrollMonitor: Any?
+    private var secureInputObserver: (any NSObjectProtocol)?
+    private var activityIsWatched = false
     /// Polls only the focused selection while a ghost can still be accepted.
     private var selectionTimer: Timer?
     private var selectionGuard: ArmedSelectionGuard?
@@ -121,6 +124,8 @@ final class SuggestionCoordinator {
     private let ownBundleIdentifier = Bundle.main.bundleIdentifier
     /// Called when the user turns the feature off everywhere, so the choice is persisted and can be undone.
     var onTurnedOffEverywhere: (() -> Void)?
+    /// Tells the menu bar why suggestion input is paused.
+    var onSecureInputBlockingChanged: ((Bool) -> Void)?
 
     /// Opens the corpus, or reports why it could not; the scorer, when given, is the model that validates.
     init(
@@ -217,6 +222,22 @@ final class SuggestionCoordinator {
     func start() {
         isStopped = false
         tapRest.cancel()
+        secureInputObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.checkSecureInput()
+                if !self.secureInput.isBlocking { self.applicationChanged() }
+            }
+        }
+        checkSecureInput()
+        guard !secureInput.isBlocking else { return }
+        startInterceptor()
+    }
+
+    /// Starts the key tap and activity monitors after secure keyboard entry ends.
+    private func startInterceptor() {
         do {
             try interceptor.start()
         } catch {
@@ -233,12 +254,32 @@ final class SuggestionCoordinator {
             self?.armedOffer = nil
         }
         watchSwallowedKeys()
-        watchForActivity()
+        if !activityIsWatched {
+            watchForActivity()
+            activityIsWatched = true
+        }
+    }
+
+    /// Withdraws suggestions while secure keyboard entry prevents reliable key capture.
+    private func checkSecureInput() {
+        guard secureInput.check() else { return }
+        let now = secureInput.isBlocking ? "on" : "off"
+        Self.log.notice("suggestion secure keyboard entry \(now, privacy: .public)")
+        if secureInput.isBlocking {
+            withdraw()
+            interceptor.stop()
+            onSecureInputBlockingChanged?(true)
+            panel.announce(SecureInputWatch.suggestionNotice)
+        } else {
+            onSecureInputBlockingChanged?(false)
+            startInterceptor()
+        }
     }
 
     /// Takes the surface away, disarms the tap and stops watching.
     func stop() {
         isStopped = true
+        onSecureInputBlockingChanged?(false)
         tapRest.cancel()
         session.invalidate()
         interceptor.arm([])
@@ -255,6 +296,11 @@ final class SuggestionCoordinator {
         for monitor in monitors { NSEvent.removeMonitor(monitor) }
         monitors = []
         stopWatchingScrolls()
+        if let secureInputObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(secureInputObserver)
+        }
+        secureInputObserver = nil
+        activityIsWatched = false
         stopWatchingSelection()
         if let activations { NSWorkspace.shared.notificationCenter.removeObserver(activations) }
         activations = nil
@@ -294,11 +340,6 @@ final class SuggestionCoordinator {
             }
         }
         if let clicks { monitors.append(clicks) }
-        activations = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.applicationChanged() }
-        }
         for name in [
             NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.screensDidSleepNotification,
         ] {
@@ -1055,6 +1096,7 @@ final class SuggestionCoordinator {
 
     /// Every key the tap took, decided in the session and carried out here.
     private func watchSwallowedKeys() {
+        swallowed?.cancel()
         swallowed = Task { [weak self, interceptor] in
             for await event in interceptor.events {
                 guard let self else { return }
