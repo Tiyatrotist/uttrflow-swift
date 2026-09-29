@@ -67,6 +67,12 @@ public actor EnvironmentIndex {
     /// The longest a listing that keeps failing is left alone, so a program that never answers is asked rarely.
     public static let longestBackoffInSeconds = 600.0
 
+    /// The most answers held at once, so a day of visiting directories and typing paths cannot grow the index without bound.
+    public static let capacity = 256
+
+    /// How many of its own lifetimes an expired answer is kept for a refresh before it is dropped.
+    static let lifetimesKeptExpired = 4.0
+
     /// The last answer, when it stops being believed, and when the machine is next asked; a failed read is remembered too, so it is not repeated every keystroke.
     private struct Cached {
         let values: [String]?
@@ -75,6 +81,8 @@ public actor EnvironmentIndex {
         let retry: Date
         /// How many reads in a row came back with nothing, which is what the backoff doubles on.
         let failures: Int
+        /// When the answer was last asked for, which decides what goes first once the index is full.
+        var asked: Date
     }
 
     /// The half that actually asks the machine.
@@ -111,6 +119,7 @@ public actor EnvironmentIndex {
         // A machine-wide answer is kept under one key, or every directory pays for its own PATH scan.
         let key = Key(kind: kind, directory: kind.isMachineWide ? "" : directory)
         let entry = cached[key]
+        cached[key]?.asked = now
         if entry.map({ $0.retry <= now }) ?? true { refresh(key, now: now) }
         // An answer long past its lifetime is no fact about the machine now, so it is not served while the new one is read.
         guard let entry, now < entry.expires.addingTimeInterval(Self.staleGraceInSeconds) else { return nil }
@@ -138,17 +147,41 @@ public actor EnvironmentIndex {
     /// Believes an answer for the kind's lifetime; a failed read keeps the answer before it and is retried later each time.
     private func record(_ key: Key, values: [String]?, now: Date) {
         let previous = cached[key]
+        let asked = max(previous?.asked ?? now, now)
         if let values {
             let expires = now.addingTimeInterval(key.kind.lifetimeInSeconds)
-            cached[key] = Cached(values: values, expires: expires, retry: expires, failures: 0)
+            cached[key] = Cached(
+                values: values, expires: expires, retry: expires, failures: 0, asked: asked)
         } else {
             let failures = (previous?.failures ?? 0) + 1
             cached[key] = Cached(
                 values: previous?.values, expires: previous?.expires ?? now,
                 retry: now.addingTimeInterval(Self.lifetime(of: key.kind, failures: failures)),
-                failures: failures)
+                failures: failures, asked: asked)
         }
         refreshing[key] = nil
+        prune(keeping: key, now: now)
+    }
+
+    /// How many answers the index holds, which only a test has a reason to ask.
+    var count: Int { cached.count }
+
+    /// Drops answers long past their lifetime, then the expired and the least recently asked while over ``capacity``.
+    private func prune(keeping kept: Key, now: Date) {
+        cached = cached.filter { key, entry in
+            key == kept
+                || now.timeIntervalSince(entry.expires) < Self.lifetimesKeptExpired
+                    * key.kind.lifetimeInSeconds
+        }
+        guard cached.count > Self.capacity else { return }
+        let victims = cached.filter { $0.key != kept }
+            .sorted {
+                ($0.value.expires > now ? 1 : 0, $0.value.asked) < (
+                    $1.value.expires > now ? 1 : 0, $1.value.asked
+                )
+            }
+            .prefix(cached.count - Self.capacity)
+        for victim in victims { cached[victim.key] = nil }
     }
 
     /// The kind's own lifetime, doubled per failure in a row up to ``longestBackoffInSeconds``.
