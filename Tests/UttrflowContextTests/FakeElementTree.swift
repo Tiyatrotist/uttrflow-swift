@@ -41,6 +41,7 @@ struct FakeTree: ElementTree {
         return element.text
     }
     func children(of element: Node) -> [Node] { element.children }
+    func isHidden(_ element: Node) -> Bool { !element.visible }
     /// A hidden node reports no size, which is how a collapsed pane's text looks through Accessibility.
     func frame(of element: Node) -> CGRect? {
         visits?.count += 1

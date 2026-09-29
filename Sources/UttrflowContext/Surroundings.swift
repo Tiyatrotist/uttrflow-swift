@@ -14,10 +14,17 @@ public protocol ElementTree {
     func text(of element: Element) -> String?
     /// The element's children in the order they are laid out, which is the order they are read in.
     func children(of element: Element) -> [Element]
+    /// Whether the element is hidden from the user.
+    func isHidden(_ element: Element) -> Bool
     /// The element this one sits in, or nothing at the window.
     func parent(of element: Element) -> Element?
     /// Where the element is on screen, or nothing when it will not say, which is trusted.
     func frame(of element: Element) -> CGRect?
+}
+
+extension ElementTree {
+    /// A tree that has no hidden-state signal treats its elements as visible.
+    public func isHidden(_ element: Element) -> Bool { false }
 }
 
 /// What is on screen around the focused field, read for one pass and written nowhere. See `Docs/predict-context.md`.
