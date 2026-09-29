@@ -120,6 +120,18 @@ struct LayoutWordsPassTests {
     }
 
     @Test(
+        "leaves a layout phrase opened by a plural determiner",
+        arguments: [
+            "strip those new line characters from the file",
+            "remove these new line breaks",
+            "delete those new paragraph markers",
+        ]
+    )
+    func leavesPluralDeterminerMentions(input: String) {
+        #expect(cleaned(input, by: sut) == input)
+    }
+
+    @Test(
         "leaves a layout phrase after every modifier in the table",
         arguments: MentionGuard.modifiers.sorted())
     func leavesEachModifier(modifier: String) {

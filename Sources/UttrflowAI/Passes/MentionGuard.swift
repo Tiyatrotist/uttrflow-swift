@@ -3,13 +3,15 @@ import UttrflowCore
 /// Words that mean the word after them is being talked about rather than dictated.
 enum MentionGuard {
     static let determiners: Set<String> = [
-        "a", "an", "the", "put", "add", "insert", "with", "no", "this", "that", "each", "every",
+        "a", "an", "the", "put", "add", "insert", "with", "no", "this", "that", "these", "those", "each",
+        "every",
         "my", "your", "his", "her", "its", "their", "our", "another", "any", "some", "same",
     ]
 
     /// The ones a modifier may stand between and the mark; a verb takes its object with nothing in between.
     static let phraseOpeners: Set<String> = [
-        "a", "an", "the", "with", "no", "this", "that", "each", "every", "my", "your", "his",
+        "a", "an", "the", "with", "no", "this", "that", "these", "those", "each", "every", "my", "your",
+        "his",
         "her", "its", "their", "our", "another", "any", "some", "same",
     ]
 
