@@ -59,9 +59,9 @@ struct PromptBuilderTests {
     /// A block's own examples teach a layout, a stop or a repair the contract's do not show.
     @Test("shows a destination its own examples only where its layout, stop or grammar differs")
     func blockExamplesTeachTheDifference() {
-        #expect(builder.block(for: .plain).examples.isEmpty)
         #expect(builder.block(for: .sqlEditor).examples.isEmpty)
         #expect(builder.block(for: .email).examples.isEmpty)
+        #expect(builder.block(for: .plain).examples.count >= 2)
         #expect(builder.workedExamples(for: .messaging).contains("Ain't no rush, grab me a seat"))
         #expect(builder.workedExamples(for: .messaging).contains("Did the build go green?"))
         #expect(!builder.workedExamples(for: .document).contains("Did the build go green?"))

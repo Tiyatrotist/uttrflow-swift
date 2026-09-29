@@ -162,10 +162,17 @@ public enum PromptBlocks {
             In plain text:
             - full sentences; end with a full stop, question or exclamation mark
             - keep every line break given, and add none
-            - fix a grammar slip: "there is three" → "there are three", "have went" → \
-            "have gone", "a apple" → "an apple", a drifting tense
+            - fix a grammar slip: "there is three" → "there are three", "a apple" → \
+            "an apple", a drifting tense, a lowercase name or acronym
             - change a word's form, never the word; dialect stays — "gonna", "ain't", \
             a double negative
             """,
-        examples: [])
+        examples: [
+            WorkedExample(
+                spoken: "one on one with rahul before friday",
+                cleaned: "One on one with Rahul before Friday."),
+            WorkedExample(
+                spoken: "review sprint goals then planning",
+                cleaned: "Review sprint goals, then planning."),
+        ])
 }

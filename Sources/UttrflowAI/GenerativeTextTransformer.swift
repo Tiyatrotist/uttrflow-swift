@@ -59,6 +59,11 @@ public struct GenerativeTextTransformer: TextTransformationEngine {
 
         // Models echo the shape of the worked examples, so the answer is unwrapped before it is judged.
         let unwrapped = ResponseUnwrapper.unwrap(rewritten, spoken: spoken)
+        // A model that hands the input back unchanged did no work and leaves the rules engine to format it.
+        if Self.isUnchangedAnswer(unwrapped, spoken: spoken) {
+            throw .outputRejected(
+                reason: "the model returned the input unchanged", kind: .unchangedAnswer)
+        }
         let finishing =
             request.scope == .piece
             ? CleaningPipeline.afterModelPiece(
@@ -93,5 +98,19 @@ public struct GenerativeTextTransformer: TextTransformationEngine {
     private static func echo(in draft: Draft) -> String {
         draft.words.filter { $0.state == .removed(by: CaretEchoPass.id) }.map(\.text)
             .joined(separator: " ")
+    }
+
+    /// Whether the model's answer, once unwrapped, is byte-identical to what the speaker said and the input still needs formatting.
+    private static func isUnchangedAnswer(_ rewritten: String, spoken: String) -> Bool {
+        let collapsed = TextTidy.collapseSpacing(rewritten)
+        let spokenCollapsed = TextTidy.collapseSpacing(spoken)
+        guard collapsed == spokenCollapsed else { return false }
+        // A short reply or one that already carries a capital and a mark needs no rule formatting on top.
+        let wordCount = spokenCollapsed.split(whereSeparator: \.isWhitespace).count
+        guard wordCount > 3 else { return false }
+        let first = spokenCollapsed.first.map(String.init) ?? ""
+        let startsCapital = first != first.lowercased() && first == first.uppercased()
+        let hasMark = spokenCollapsed.contains(where: { ".!?;,".contains($0) })
+        return !startsCapital && !hasMark
     }
 }
