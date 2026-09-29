@@ -187,17 +187,12 @@ be assembled across a piece boundary any more than across a sentence.
 
 How each piece gets its language follows the Languages setting, `ListeningLanguages`:
 
-- **Hindi alone ticked**: every piece is decoded as Hindi, so a short reply cannot be heard as
-  English syllables.
-- **English and Hindi ticked**: every piece detects its own language among the two. A speaker
+- **English and Hindi ticked, or the default English profile**: every piece detects its own
+  language among the product's supported languages. A speaker
   who ticks both switches between sentences, and holding a Hindi sentence to the English of
   the first piece has Whisper translate it or drop it (issue 698).
-- **Hindi not ticked**, which is also the default: the first piece that reports a language
-  sets it for the dictation and every later piece is given it as a hint, and the next
-  dictation detects afresh. A piece that is short, quiet or heavy with proper nouns can
-  otherwise be detected as the other language. English alone cannot pin English, because it
-  is everybody's default, and pinning it would end Hindi dictation for anyone who never opened
-  Settings.
+- **Hindi alone ticked**: every piece is decoded as Hindi, so a short reply cannot be heard as
+  English syllables.
 
 Whatever is ticked, dictation is written in Latin letters: the setting steers what
 recognition listens for, never the script.

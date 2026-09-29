@@ -86,8 +86,6 @@ public actor DictationPipeline {
     private(set) var earlyReadsSettled = 0
     /// Ranked once per dictation, against the screen it began on, and given to every piece.
     private var dictationWords: [String]?
-    /// Detected by the first piece that reports one, and hinted to later pieces as the profile's listening says. See `Docs/early-transcription.md`.
-    private var dictationLanguage: LanguageCode?
     /// Pieces of this dictation that held speech and decoded to no words twice, left out of what is inserted.
     private var missedPieces = 0
 
@@ -372,10 +370,9 @@ public actor DictationPipeline {
         return true
     }
 
-    /// Clears what one attempt learnt about its words and language, so the next asks afresh.
+    /// Clears what one attempt learnt about its words, so the next asks afresh.
     private func forgetTheLastAttempt() {
         dictationWords = nil
-        dictationLanguage = nil
         missedPieces = 0
     }
 
@@ -719,7 +716,6 @@ public actor DictationPipeline {
         case .words(let transcription):
             // Kept beside the timing, since a re-decode is most of what a long transcription time is.
             await metrics.recordDecoding(transcription.effort)
-            if dictationLanguage == nil { dictationLanguage = transcription.detectedLanguage?.code }
             return transcription
         case .nothing:
             return nil
@@ -736,8 +732,8 @@ public actor DictationPipeline {
         _ slice: AudioSamples, whole: Bool, biasedTowards words: [String],
         recording metrics: any MetricsRecording
     ) async throws -> Heard {
-        // A profile that speaks Hindi switches language between pieces, so only it detects every piece. See `Docs/speech-engines.md`.
-        let language = ListeningLanguages(profile: runningProfile).hint(afterFirstPiece: dictationLanguage)
+        // The default profile detects each piece; a Hindi-only profile pins each piece to Hindi. See `Docs/speech-engines.md`.
+        let language = ListeningLanguages(profile: runningProfile).hint(afterFirstPiece: nil)
         let speaks = VoiceActivity.speechRange(in: slice.samples, sampleRate: slice.sampleRate) != nil
         let heard = try await metrics.measuringInTime(.transcription, clock: clock) {
             try await withStageTimeout(StageTimeout.transcription, clock: clock) {
