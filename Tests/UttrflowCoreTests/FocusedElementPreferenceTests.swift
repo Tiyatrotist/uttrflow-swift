@@ -57,8 +57,10 @@ import Testing
     }
 
     @Test func rejectsUnknownOwnershipSoTheApplicationLookupCanBeUsedAsFallback() {
-        #expect(!FocusedElementPreference.belongsToRequestedApplication(owner: nil, requested: 42, current: 7))
-        #expect(!FocusedElementPreference.belongsToRequestedApplication(owner: 42, requested: nil, current: 7))
+        #expect(
+            !FocusedElementPreference.belongsToRequestedApplication(owner: nil, requested: 42, current: 7))
+        #expect(
+            !FocusedElementPreference.belongsToRequestedApplication(owner: 42, requested: nil, current: 7))
 
         let chosen = FocusedElementPreference.choose(
             systemWide: Optional<String>.none, systemWideRole: { _ in nil },

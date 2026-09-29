@@ -81,10 +81,11 @@ relies on. `Docs/bakeoff.md` compares the engines; `Docs/offline.md` states the 
   both read it back off the options.
 - The detector's constraint is the product's languages, not the profile's. Every language
   Settings offers is in the transcribed set, so the profile narrows detection by the hint
-  instead: a profile that speaks only Hindi decodes every piece as Hindi, and one that speaks
-  both detects every piece (`ListeningLanguages`, `Docs/early-transcription.md`). English alone
-  narrows nothing, because `UserProfile.preferredLanguages` starts as English for everyone and
-  pinning it would force every Hindi speaker who never opened Settings into English.
+  instead: a profile that speaks only Hindi decodes every piece as Hindi, while the default
+  English profile and profiles that speak both detect every piece
+  (`ListeningLanguages`, `Docs/early-transcription.md`). English alone narrows nothing, because
+  `UserProfile.preferredLanguages` starts as English for everyone and pinning it would force
+  every Hindi speaker who never opened Settings into English.
 - WhisperKit re-runs detection for every fallback temperature and samples it the same way it
   samples text, top-k at that temperature. The allowed sampler ignores the temperature, so one
   window cannot change its language between retries.
