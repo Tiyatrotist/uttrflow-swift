@@ -14,8 +14,8 @@ private struct Field {
 
     func caret(at selection: (location: Int, length: Int)?) -> CGRect? {
         CaretLocator.caret(
-            at: selection, frame: frame, pointSize: pointSize, value: value, bounds: bounds,
-            markerBounds: { marker })
+            at: selection, frame: frame, pointSize: pointSize, value: value,
+            textSelectionLocation: selection?.location, bounds: bounds, markerBounds: { marker })
     }
 }
 
@@ -54,6 +54,46 @@ struct CaretLocatorTests {
             },
             marker: CGRect(x: 999, y: 999, width: 0, height: 16))
         #expect(field.caret(at: (location: 5, length: 0)) == CGRect(x: 48, y: 10, width: 0, height: 16))
+    }
+
+    @Test("A surrogate-pair emoji is queried as one character before the caret")
+    func surrogateEmojiUsesItsFullRange() {
+        var requested: (Int, Int)?
+        let field = CaretLocator.caret(
+            at: (location: 2, length: 0), frame: nil, value: "👍", textSelectionLocation: 2,
+            bounds: { location, length in
+                requested = (location, length)
+                return CGRect(x: 40, y: 10, width: 18, height: 16)
+            }, markerBounds: { nil })
+        #expect(requested?.0 == 0 && requested?.1 == 2)
+        #expect(field == CGRect(x: 58, y: 10, width: 0, height: 16))
+    }
+
+    @Test("A ZWJ family is queried as one character before the caret")
+    func familyEmojiUsesItsFullRange() {
+        let family = "👨‍👩‍👧‍👦"
+        var requested: (Int, Int)?
+        let field = CaretLocator.caret(
+            at: (location: family.utf16.count, length: 0), frame: nil, value: family, textSelectionLocation: family.utf16.count,
+            bounds: { location, length in
+                requested = (location, length)
+                return CGRect(x: 40, y: 10, width: 72, height: 16)
+            }, markerBounds: { nil })
+        #expect(requested?.0 == 0 && requested?.1 == family.utf16.count)
+        #expect(field == CGRect(x: 112, y: 10, width: 0, height: 16))
+    }
+
+    @Test("A bounded text window supplies its local selection while bounds use the field offset")
+    func boundedTextWindowKeepsTheFieldOffset() {
+        var requested: (Int, Int)?
+        let field = CaretLocator.caret(
+            at: (location: 1_002, length: 0), frame: nil, value: "a👍", textSelectionLocation: 3,
+            bounds: { location, length in
+                requested = (location, length)
+                return CGRect(x: 40, y: 10, width: 18, height: 16)
+            }, markerBounds: { nil })
+        #expect(requested?.0 == 1_000 && requested?.1 == 2)
+        #expect(field == CGRect(x: 58, y: 10, width: 0, height: 16))
     }
 
     @Test("A caret after Return uses the first glyph on the new line, not the line break's bounds.")
