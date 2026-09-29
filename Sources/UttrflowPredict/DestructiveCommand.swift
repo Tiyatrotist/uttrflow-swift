@@ -33,6 +33,40 @@ public enum DestructiveCommand {
             || flag == "--remove-sent-files"
     }
 
+    /// The source operands of `cp`, after options and their values are removed.
+    private static func cpSources(_ arguments: [String]) -> [String] {
+        var operands: [String] = []
+        var rest = arguments[...]
+        var targetDirectory = false
+        while let argument = rest.popFirst() {
+            if argument == "--" {
+                operands += rest
+                break
+            }
+            if argument == "-S" || argument == "--suffix" {
+                if !rest.isEmpty { rest.removeFirst() }
+                continue
+            }
+            if argument.hasPrefix("-S") && argument.count > 2 || argument.hasPrefix("--suffix=") {
+                continue
+            }
+            if argument == "-t" || argument == "--target-directory" {
+                targetDirectory = true
+                if !rest.isEmpty { rest.removeFirst() }
+                continue
+            }
+            if argument.hasPrefix("-t") && argument.count > 2 || argument.hasPrefix("--target-directory=") {
+                targetDirectory = true
+                continue
+            }
+            if argument.count > 1 && argument.hasPrefix("-") {
+                continue
+            }
+            operands.append(argument)
+        }
+        return targetDirectory ? operands : Array(operands.dropLast())
+    }
+
     /// A word that runs the command after it: its flags that take a value, and how many plain words of its own precede the command.
     private struct Wrapper {
         let valued: Set<String>
@@ -296,8 +330,14 @@ public enum DestructiveCommand {
             {
                 return true
             }
-        case "mv", "cp":
+        case "mv":
             if lowered.last == "/dev/null" { return true }
+        case "cp":
+            if cpSources(arguments).contains(where: {
+                $0.lowercased() == "/dev/null" || $0.lowercased() == "/dev/zero"
+            }) {
+                return true
+            }
         case "rsync":
             if lowered.contains(where: rsyncDeletes) { return true }
         case "tee":
