@@ -64,12 +64,16 @@ final class SuggestionCoordinator {
     private var generating: Task<[String], any Error>?
     /// A turn booked for the moment a rule stops refusing, so a prose pause is answered then, not at the next tick.
     private var pendingWake: Task<Void, Never>?
+    /// Distinguishes the latest delayed wake from a canceled task that just finished sleeping.
+    private var pendingWakeGeneration = 0
     /// The restart booked after macOS disabled the tap, cancelled by `stop()` so a turned-off tap stays off.
     let tapRest = TapRest()
     /// The turn in flight, cancelled by the next keystroke so its scoring stops rather than running past the line it was for.
     private var running: Task<Void, Never>?
     /// How long a burst of keystrokes must pause before the model is asked about its last prefix.
     nonisolated static let generationDebounceInMilliseconds = 120
+    /// How long typing must pause before a field snapshot may begin.
+    nonisolated static let fieldReadDebounceInMilliseconds = 180
 
     private var session = SuggestionSession()
     private var monitors: [Any] = []
@@ -231,7 +235,7 @@ final class SuggestionCoordinator {
         swallowed?.cancel()
         swallowed = nil
         generating?.cancel()
-        pendingWake?.cancel()
+        cancelPendingWake()
         running?.cancel()
         ticker?.invalidate()
         ticker = nil
@@ -327,8 +331,9 @@ final class SuggestionCoordinator {
     private func withdraw() {
         session.invalidate()
         generating?.cancel()
-        pendingWake?.cancel()
+        cancelPendingWake()
         running?.cancel()
+        FocusedFieldReader.cancelRead()
         interceptor.arm([])
         panel.hide()
     }
@@ -410,7 +415,7 @@ final class SuggestionCoordinator {
         guard panel.isShowing, !isInserting, let update = session.typedThrough(text) else { return false }
         // Whatever was being worked out was for the shorter line, and the turn woken below reads the new one.
         generating?.cancel()
-        pendingWake?.cancel()
+        cancelPendingWake()
         running?.cancel()
         interceptor.arm(update.armed)
         armedOffer = update.suggestion.accepting
@@ -429,17 +434,34 @@ final class SuggestionCoordinator {
 
     /// Books one turn for later, replacing any already booked, which is how a pause is answered the moment it is long enough.
     private func wake(_ reason: SuggestionReason, afterMilliseconds delay: Int) {
-        pendingWake?.cancel()
+        cancelPendingWake()
+        pendingWakeGeneration += 1
+        let generation = pendingWakeGeneration
         pendingWake = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(max(delay, 1)))
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, self?.pendingWakeGeneration == generation else { return }
+            self?.pendingWake = nil
             self?.wake(reason)
         }
+    }
+
+    /// Cancels a booked wake and makes a task that already passed its sleep stale.
+    private func cancelPendingWake() {
+        pendingWakeGeneration += 1
+        pendingWake?.cancel()
+        pendingWake = nil
     }
 
     /// Runs one turn, or notes that another is wanted, so two never run at once and a stuck one never ends the loop.
     private func wake(_ reason: SuggestionReason) {
         guard !isDictating else { return }
+        if reason == .keystroke || reason == .tick {
+            let delay = Self.remainingFieldReadDebounce(sinceKeystroke: lastKeystroke, now: Date())
+            if delay > 0 {
+                wake(reason, afterMilliseconds: delay)
+                return
+            }
+        }
         switch turns.begin(at: Date()) {
         case .busy:
             // A Return or a switch waiting its turn is never overwritten by the tick that follows it.
@@ -786,6 +808,13 @@ final class SuggestionCoordinator {
     nonisolated static func remainingDebounce(sinceKeystroke keystroke: Date, now: Date) -> Duration {
         let passed = now.timeIntervalSince(keystroke) * 1000
         return .milliseconds(max(0, Double(Self.generationDebounceInMilliseconds) - passed))
+    }
+
+    /// Milliseconds left before typing has paused long enough to read the field.
+    nonisolated static func remainingFieldReadDebounce(sinceKeystroke keystroke: Date, now: Date) -> Int {
+        let passed = now.timeIntervalSince(keystroke) * 1000
+        let remaining = Double(Self.fieldReadDebounceInMilliseconds) - passed
+        return remaining <= 0.001 ? 0 : Int(ceil(remaining - 0.001))
     }
 
     /// Whether the window around this field is walked, which a terminal's is not since its value already holds the scrollback.
