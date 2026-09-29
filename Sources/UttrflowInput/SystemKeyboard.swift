@@ -297,6 +297,7 @@ func systemKeyboardCallback(
         }
         return Unmanaged.passUnretained(event)
     }
+    guard !SyntheticEvent.isOurs(event) else { return Unmanaged.passUnretained(event) }
     let phase: KeyPhase? =
         switch type {
         case .flagsChanged: .modifiersChanged
