@@ -300,30 +300,23 @@ public struct AXAccessibilityFocus: AccessibilityFocus {
 
     /// As much as the field holds before the caret, so a field shorter than the request is still read.
     public func tail(upTo count: Int) -> FieldTail {
-        guard
-            count > 0, let element = focusedElement(),
+        guard count > 0, let element = focusedElement(),
             let (value, caret) = textBeforeCaret(count, of: element),
             let tail = BackwardSelection.tail(in: value, endingAt: caret, upTo: count)
         else { return .unreadable }
         return .text(tail)
     }
 
-    /// Text ending at the caret, read by range where the field allows it, with the caret's offset into it.
+    /// Reads a bounded window where possible, refusing an ambiguous multi-range selection.
     private func textBeforeCaret(_ count: Int, of element: AXUIElement) -> (String, Int)? {
-        guard
-            count > 0, !isSecure(element),
-            let range = rangeAttribute(kAXSelectedTextRangeAttribute, of: element)
-        else { return nil }
+        guard count > 0, !isSecure(element), let range = selectionRange(of: element) else { return nil }
         if let window = CaretWindow.before(
             range.location, characters: count, ranged: { stringForRange($0, of: element) })
         {
             return (window, window.utf16.count)
         }
-        return stringAttribute(kAXValueAttribute, of: element).map { ($0, range.location) }
+        return readableValue(of: element).map { ($0, range.location) }
     }
-
-    /// Reads a field's security metadata and only checks masked text when the metadata is inconclusive.
-    private func isSecure(_ element: AXUIElement) -> Bool { isSecureField(element) }
 
     /// Reads the window and its text from one AX element, so matching text in another window cannot authorize a write.
     public func windowNumberAndTail(upTo count: Int) -> (windowNumber: UInt32?, tail: FieldTail) {
@@ -348,10 +341,27 @@ public struct AXAccessibilityFocus: AccessibilityFocus {
     }
 
     public func focusedTextField() -> (any FocusedTextField)? {
-        guard let candidate = focusedElement() else { return nil }
+        guard let candidate = focusedElement(), acceptsSingleSelection(candidate) else { return nil }
+        return SelectionWriter(field: AXSelectionAttributes(element: candidate))
+    }
 
-        guard
-            FocusedTextFieldEligibility.accepts(
+    public func focusedTextField(in destination: InsertionDestination) -> (any FocusedTextField)? {
+        guard let bundleIdentifier = destination.bundleIdentifier,
+            frontmostApplication()?.bundleIdentifier == bundleIdentifier,
+            let candidate = focusedElement()
+        else { return nil }
+        var processIdentifier: pid_t = 0
+        guard AXUIElementGetPid(candidate, &processIdentifier) == .success,
+            NSRunningApplication(processIdentifier: processIdentifier)?.bundleIdentifier == bundleIdentifier,
+            acceptsSingleSelection(candidate)
+        else { return nil }
+        return SelectionWriter(field: AXSelectionAttributes(element: candidate))
+    }
+
+    /// Rejects ambiguous multi-caret selections and fields that cannot accept text writes.
+    private func acceptsSingleSelection(_ candidate: AXUIElement) -> Bool {
+        guard case .discontinuous = selection(of: candidate) else {
+            return FocusedTextFieldEligibility.accepts(
                 role: stringAttribute(kAXRoleAttribute, of: candidate),
                 selectedTextIsReadable: {
                     var selection: AnyObject?
@@ -364,26 +374,8 @@ public struct AXAccessibilityFocus: AccessibilityFocus {
                         candidate, kAXSelectedTextAttribute as CFString, &settable) == .success
                         && settable.boolValue
                 })
-        else { return nil }
-
-        return SelectionWriter(field: AXSelectionAttributes(element: candidate))
-    }
-
-    public func focusedTextField(in destination: InsertionDestination) -> (any FocusedTextField)? {
-        guard let bundleIdentifier = destination.bundleIdentifier,
-            frontmostApplication()?.bundleIdentifier == bundleIdentifier,
-            let candidate = focusedElement()
-        else { return nil }
-        var processIdentifier: pid_t = 0
-        guard AXUIElementGetPid(candidate, &processIdentifier) == .success,
-            NSRunningApplication(processIdentifier: processIdentifier)?.bundleIdentifier == bundleIdentifier
-        else { return nil }
-        var selection: AnyObject?
-        guard
-            AXUIElementCopyAttributeValue(
-                candidate, kAXSelectedTextAttribute as CFString, &selection) == .success
-        else { return nil }
-        return SelectionWriter(field: AXSelectionAttributes(element: candidate))
+        }
+        return false
     }
 }
 
@@ -409,7 +401,7 @@ private struct AXSelectionAttributes: SelectionAttributes, @unchecked Sendable {
     }
 
     func selectedRange() -> CFRange? {
-        rangeAttribute(kAXSelectedTextRangeAttribute, of: element)
+        selectionRange(of: element)
     }
 
     func length() -> Int? {
@@ -514,6 +506,35 @@ private func rangeAttribute(_ name: String, of element: AXUIElement) -> CFRange?
     else { return nil }
 
     // Checked by type ID above; `as?` on a Core Foundation type always succeeds.
+    var range = CFRange()
+    guard AXValueGetValue(unsafeDowncast(value, to: AXValue.self), .cfRange, &range) else {
+        return nil
+    }
+    return range
+}
+
+/// The focused field's single usable selection, or nothing when it reports multiple ranges.
+private func selectionRange(of element: AXUIElement) -> CFRange? {
+    if case .range(let range) = selection(of: element) { return range }
+    return nil
+}
+
+/// Reads plural selections before the singular attribute, which can be stale for multi-cursor fields.
+private func selection(of element: AXUIElement) -> AccessibilitySelection {
+    var plural: AnyObject?
+    let pluralResult = AXUIElementCopyAttributeValue(
+        element, kAXSelectedTextRangesAttribute as CFString, &plural)
+    if pluralResult == .success, let values = plural as? [AnyObject], values.count > 1 {
+        return .discontinuous
+    }
+    let pluralRanges = (plural as? [AnyObject])?.compactMap { rangeValue($0) }
+    return AccessibilitySelection.resolve(
+        singular: rangeAttribute(kAXSelectedTextRangeAttribute, of: element), plural: pluralRanges)
+}
+
+/// Unwraps one Accessibility value as a character range.
+private func rangeValue(_ value: AnyObject) -> CFRange? {
+    guard CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
     var range = CFRange()
     guard AXValueGetValue(unsafeDowncast(value, to: AXValue.self), .cfRange, &range) else {
         return nil
