@@ -59,6 +59,10 @@ ROWS = [
          (f"{stem}.dc.html", *size, None),
          (f"{stem}-Dark.dc.html", *size, None))]),
 
+    ("home",
+     "The app window: Home\nThe first destination in the shipped sidebar, with today's figures, dictations and clipboard demonstration.",
+     [("Main-Home.dc.html", *MAIN, None), ("Main-Home-Dark.dc.html", *MAIN, None)]),
+
     ("dictation",
      "The app window: Dictation\nThe sidebar turns a utility into an application. Product mark at the top, a flat list of destinations, the active one in accent, and — where a competitor puts a promo banner — your own most recent dictation. Dictation is the home surface: today's list newest first, hover actions on the row, and a rail of the three things the app can actually measure. Empty is a returning user who has not spoken today, so it shows yesterday rather than nothing.",
      [("Main-Dictation.dc.html", *MAIN, None), ("Main-Dictation-Dark.dc.html", *MAIN, None),

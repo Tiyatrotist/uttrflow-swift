@@ -6,6 +6,11 @@ Dark is not a filter over the light artboard. It re-declares the same tokens
 inherits both appearances from one place and neither can drift from the other.
 """
 from _gen_common import *
+from pathlib import Path
+import plistlib
+
+_INFO = plistlib.loads((Path(__file__).resolve().parent.parent / "Resources" / "Uttrflow-Info.plist").read_bytes())
+VERSION = f"{_INFO['CFBundleShortVersionString']} ({_INFO['CFBundleVersion']})"
 
 W, H = 900, 620
 STAGE_W, STAGE_H = 980, 700
@@ -41,6 +46,10 @@ WIFI_OFF = ('<path d="M2.4 8.8A15.2 15.2 0 0 1 7.6 5.8"/>'
             '<path d="M9.3 16.3a4.7 4.7 0 0 1 5.1-.4"/>'
             '<path d="M12 20v.1"/><path d="M3.2 3.2 20.8 20.8"/>')
 SEARCH_GLYPH = '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/>'
+HOUSE = '<path d="M4 12 12 4.5 20 12"/><path d="M6.2 10.3V19a1 1 0 0 0 1 1h9.6a1 1 0 0 0 1-1v-8.7"/>' \
+        '<path d="M10 20v-6h4v6"/>'
+
+# ---- the shell -----------------------------------------------------------
 # The sidebar-toggle glyph: a divided pane, the same shape as the system's own sidebar
 # symbols (`sidebar.leading` / `sidebar.left`), which `MainWindowStrip` draws.
 SIDEBAR_TOGGLE = '<rect x="3.4" y="5" width="17.2" height="14" rx="2.6"/><path d="M9.6 5v14"/>'
@@ -129,8 +138,8 @@ SHELL_CSS = """
     .recent .box .w { font-size: var(--t-footnote); color: var(--label-2);
                       display: flex; gap: 5px; }
     .recent .box .t { font-size: var(--t-subhead); line-height: 1.4; margin-top: 4px; }
-    .sidehint { display: flex; align-items: center; gap: 5px; margin: 11px 5px 2px;
-                font-size: var(--t-footnote); color: var(--label-3); }
+    .sidefoot { margin-top: auto; padding: 0 7px 10px; font-size: var(--t-footnote);
+                color: var(--label-3); }
 
     .pane { flex: 1; min-width: 0; display: flex; flex-direction: column;
             background: var(--window-bg); }
@@ -237,39 +246,14 @@ APPS = {
 }
 
 NAV = [
-    ("Dictation", MIC), ("History", CLOCK), ("Dictionary", BOOK), ("Corrections", SWAP),
-    ("Insights", CHART), ("Snippets", SNIPPET), ("Style", SPARKLE), ("Diagnostics", GAUGE),
-    ("Settings", GEAR), ("Account", PERSON),
+    ("Home", HOUSE), ("History", CLOCK), ("Insights", CHART),
+    ("Dictionary", BOOK), ("Snippets", SNIPPET), ("Settings", GEAR),
 ]
 
-RECENT = """<div class="recent">
-          <p class="cap">Most recent</p>
-          <div class="box">
-            <div class="w"><span>4:12 PM</span><span>&middot;</span><span>Slack</span></div>
-            <div class="t">&ldquo;Hey John, I&rsquo;ll probably be about 20 minutes late to
-              the meeting&hellip;&rdquo;</div>
-          </div>
-        </div>"""
-
-RECENT_NONE = """<div class="recent">
-          <p class="cap">Most recent</p>
-          <div class="box">
-            <div class="w"><span>Yesterday</span><span>&middot;</span><span>6:58 PM</span></div>
-            <div class="t" style="color: var(--label-2)">&ldquo;Bhai kal subah call kar
-              lenge, aaj bahut late ho gaya.&rdquo;</div>
-          </div>
-        </div>"""
-
-RECENT_NEVER = """<div class="recent">
-          <p class="cap">Most recent</p>
-          <div class="box">
-            <div class="t" style="color: var(--label-3)">Nothing yet. Your last dictation
-              shows up here.</div>
-          </div>
-        </div>"""
+RECENT = RECENT_NONE = RECENT_NEVER = ""
 
 
-def sidebar(active, recent=RECENT, tails=None):
+def sidebar(active, recent="", tails=None):
     tails = tails or {}
     items = ""
     for name, glyph in NAV:
@@ -281,10 +265,7 @@ def sidebar(active, recent=RECENT, tails=None):
         <div style="height: 26px; display: flex; align-items: center; padding: 0 4px">{lights()}</div>
         <div class="brand">{logo(20)}<span class="n">Uttrflow</span></div>
         {items}
-        {recent}
-        <div class="sidehint"><span class="key" style="height:17px; min-width:17px; padding:0 4px;
-          font-size:9px">&#8997;</span><span class="key" style="height:17px; min-width:17px;
-          padding:0 5px; font-size:9px">Space</span><span>Hold anywhere</span></div>
+        <div class="sidefoot">{VERSION}</div>
       </div>"""
 
 

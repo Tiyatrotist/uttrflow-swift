@@ -105,4 +105,3 @@ bytes on disk, pinned or not; pinning enough large screenshots to overflow it is
 asked for, and `withinDisk` will keep evicting unpinned pictures to make room for the next
 copy. A pinned picture set that has already overflowed the cap stays in place until the user
 unpins; eviction is still exempt, by the kept pool's rule.
-

@@ -69,6 +69,33 @@ APP_CSS = """
     .swatch { width: 8px; height: 8px; border-radius: 3px; flex: none; }
     .track { height: 7px; border-radius: 4px; background: var(--fill-2); overflow: hidden; }
     .track > i { display: block; height: 100%; border-radius: 4px; background: var(--accent-light); }
+    /* Home: the stage, the figures row, and today's list beside the clipboard demonstration. */
+    .stage-card { padding: 20px 22px 18px; }
+    .status { display: flex; align-items: center; gap: 6px; font-size: var(--t-footnote);
+              color: var(--label-2); font-weight: 500; }
+    .status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+    .greet { font-size: var(--t-title1); font-weight: 600; letter-spacing: -0.3px;
+             margin: 8px 0 3px; }
+    .subtitle { font-size: var(--t-body); color: var(--label-2); }
+    .hint { margin-top: 12px; display: flex; align-items: center; gap: 6px;
+            font-size: var(--t-callout); color: var(--label-2); }
+    .figrow { display: flex; margin-top: 16px; }
+    .figrow .fig { flex: 1; text-align: center; }
+    .figrow .fig .v { font-size: var(--t-title1); font-weight: 600;
+                      font-variant-numeric: tabular-nums; }
+    .figrow .fig .k { font-size: var(--t-subhead); color: var(--label-2); margin-top: 2px; }
+    .today-split { display: flex; align-items: flex-start; }
+    .today-list { flex: 1; min-width: 0; }
+    .clip-rail { width: 260px; flex: none; padding-left: 20px; margin-left: 20px;
+                 border-left: 0.5px solid var(--separator); }
+    .clip-rail h4 { font-size: var(--t-body); font-weight: 600; margin: 0 0 4px; }
+    .clip-rail p { font-size: var(--t-subhead); color: var(--label-2); line-height: 1.4;
+                    margin: 0 0 10px; }
+    .clip-row { display: flex; align-items: center; gap: 7px; padding: 6px 8px;
+                border-radius: 6px; font-size: var(--t-callout); }
+    .clip-row.chosen { background: var(--accent-wash); }
+    .clip-row .meta { margin-left: auto; font-size: var(--t-footnote); color: var(--label-3);
+                       white-space: nowrap; }
 """
 
 TAILS = {"Corrections": "4"}
@@ -81,6 +108,66 @@ def iconbtn(glyph, size=13, width=1.6):
 ACTS = ('<div class="acts">' + iconbtn(COPY) + iconbtn(REPEAT) + iconbtn(FLAG)
         + iconbtn(MORE) + "</div>")
 
+
+# =====================================================================
+# Home — the window's first destination: a greeting, today's figures, today's
+# list, and the clipboard shown working. What HomePresenter draws from the
+# app's own state (Sources/UttrflowUX/HomePresentation.swift).
+# =====================================================================
+HOME_ROWS = [
+    ("4:12 PM", "Slack",
+     "Hey John, I&rsquo;ll probably be about 20 minutes late to the meeting&hellip;"),
+    ("3:48 PM", "Notes", "Kal ke standup mein main deployment ke baare mein bataunga."),
+    ("2:30 PM", "Code",
+     "Create a function that takes a user ID and returns their most recent order."),
+]
+
+
+def home_rows():
+    out = ""
+    for when, app, text in HOME_ROWS:
+        out += f"""<div class="drow">
+            <span class="when">{when}</span>
+            <div class="body"><div class="said">{text}</div></div>
+            <div class="row" style="gap:6px; font-size: var(--t-footnote);
+                 color: var(--label-2)">{appchip(app)}</div>
+          </div>"""
+    return out
+
+
+home = f"""<div class="card stage-card">
+          <div class="status"><span class="dot"></span><span>Ready</span></div>
+          <div class="greet">Good afternoon, Naveen</div>
+          <div class="subtitle">3 dictations today, 90 words.</div>
+          <div class="hint"><span class="key" style="height:20px; min-width:20px;
+            padding:0 5px; font-size:10px">&#8997;</span><span class="key" style="height:20px;
+            min-width:20px; padding:0 6px; font-size:10px">Space</span>
+            <span>Say it once &mdash; hold anywhere on your Mac.</span></div>
+          <div class="figrow">
+            <div class="fig"><div class="v">1,240</div><div class="k">Words dictated</div></div>
+            <div class="fig"><div class="v">131</div><div class="k">Words per minute</div></div>
+            <div class="fig"><div class="v">97.2%</div><div class="k">Left as dictated</div></div>
+          </div>
+        </div>
+        <div class="today-split" style="margin-top: 16px">
+          <div class="today-list">
+            <p class="daylabel">Today</p>
+            <div class="card">{home_rows()}</div>
+          </div>
+          <div class="clip-rail">
+            <h4>Everything you have copied, one shortcut away</h4>
+            <p>Uttrflow remembers what you copy, so the thing you had two copies ago is
+              still there.</p>
+            <div class="clip-row"><span>&#128279;</span><span style="flex:1">uttrflow.com/download</span>
+              <span class="meta">just now</span></div>
+            <div class="clip-row"><span>&#128273;</span>
+              <span style="flex:1">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
+              <span class="meta">2 min ago</span></div>
+            <div class="clip-row chosen"><span>&#128196;</span>
+              <span style="flex:1">Flat 402, Example Residences&hellip;</span>
+              <span class="meta">11 min ago</span></div>
+          </div>
+        </div>"""
 
 # =====================================================================
 # Dictation — today's list, the surface that replaces the old Home.
@@ -627,6 +714,8 @@ STYLE_CAPTION = "How much tidying Uttrflow does to what you actually said."
 ACCOUNT_CAPTION = "Who you are signed in as, and what you are paying for."
 
 SCREENS = [
+    # Home is the first destination in SidebarPresenter.order.
+    ("Main-Home", "Home", "Today at a glance.", "", "", "", home, "", None),
     # Dictation: search only when today has rows (DictationPresenter's chrome).
     ("Main-Dictation", "Dictation", DICTATION_CAPTION,
      "", searchbox("Search today"), "", dictation, RECENT, TAILS),
