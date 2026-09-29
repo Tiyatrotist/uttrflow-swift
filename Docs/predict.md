@@ -242,18 +242,39 @@ tap, the panel, and the corpus. It reads the field off the main thread, and a tu
 takes longer than `SuggestionSession.turnBudgetInMilliseconds` draws nothing at all —
 answering a moment that has passed is worse than answering nothing.
 
-**The field read has a budget of its own.** Each Accessibility message gives up after
-`FocusedFieldReader.elementTimeoutInSeconds`, but giving up only stops the waiting: the other
-application still does the work for every message that was sent, on the thread that also
-handles the user's typing. So one read asks each question once — the field's names in one
-batched message, the caret, the window and the frames once each — and the whole read stops
-at the next question once `FieldReadBudget.allowanceInNanoseconds` (40 ms) has passed. A
-field's first overrun is forgiven, because the first read in a new process is a cold start
-(about 60 ms in a browser once its full tree is switched on); a second overrun leaves the
-field alone for a rest that starts at 10 s and doubles on each further overrun up to
-5 minutes (`SlowFields`), and a read that keeps to the budget ends the rest. A very long web text area, whose caret questions each run into the
-timeout, therefore costs its application one read per rest rather than one per turn, and
-draws no suggestion.
+**A field snapshot starts only after a 180 ms typing pause.** Keystrokes withdraw the ghost
+and disarm its key immediately, then replace the pending snapshot deadline. A delayed wake
+is generation-checked after cancellation, and a read already in progress stops after its
+current Accessibility message when a newer key invalidates it. Return, focus changes and
+other non-typing wakes keep their immediate path. This places the pause before the field
+read; the 120 ms generation debounce remains measured from the latest key, so it has already
+elapsed when generation begins.
+
+**Stable answers belong to one focused element and its window.** The five field identity
+attributes are requested in one `AXUIElementCopyMultipleAttributeValues` call, with the
+existing per-attribute fallback when that batch is unsupported. The result, document,
+window title and field/window frames are held for that process, focused element and window.
+The next read checks the focused element and its current window before using the cache;
+focus moves clear it, and a process, element or window change replaces it. The cache holds
+one entry, so it cannot carry another process's answers forward.
+
+**Per-keystroke message budget: at most 3 in a steady 10-key-per-second burst.** The
+deterministic counting fake charges 24 Accessibility messages for one ordinary field
+snapshot. Eight keys 100 ms apart reset the 180 ms deadline, so the burst produces one
+snapshot: 24 messages across eight keys, or 3 per key. A newer key cancels queued work, and
+the queue invalidation stops a running read before its next message. This is the burst
+budget; a single isolated key can still cause one full snapshot.
+
+Each Accessibility message also gives up after `FocusedFieldReader.elementTimeoutInSeconds`,
+but that only stops the waiting: the other application still does the work for every
+message already sent. A snapshot stops at the next question once
+`FieldReadBudget.allowanceInNanoseconds` (40 ms) has passed. A field's first overrun is
+forgiven, because the first read in a new process is a cold start (about 60 ms in a browser
+once its full tree is switched on); a second overrun leaves the field alone for a rest that
+starts at 10 s and doubles on each further overrun up to 5 minutes (`SlowFields`), and a
+read that keeps to the budget ends the rest. A very long web text area, whose caret questions
+each run into the timeout, therefore costs its application one read per rest rather than
+one per turn, and draws no suggestion.
 
 **A resting field quiets its whole application.** Asking an application which element has
 focus can itself be the slow part (about 100 ms in a browser holding a 200 KB text area), so

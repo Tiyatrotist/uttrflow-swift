@@ -27,6 +27,39 @@ public enum FocusedFieldReader {
     /// Its own thread, because these calls block until the other application answers.
     private static let queue = LatestOnlyQueue(label: "com.uttrflow.focused-field", qos: .userInitiated)
 
+    /// Holds the stable answers for one focused field and window only.
+    private static let stableSnapshot = OneEntryCache<StableSnapshotKey, StableSnapshotValue>()
+
+    /// The process, field and window that give cached answers their identity.
+    private struct StableSnapshotKey: @unchecked Sendable, Equatable {
+        let processIdentifier: Int32
+        let field: AXUIElement
+        let window: AXUIElement?
+
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.processIdentifier == rhs.processIdentifier && CFEqual(lhs.field, rhs.field)
+                && sameWindow(lhs.window, rhs.window)
+        }
+    }
+
+    /// Stable Accessibility answers, retained only for one focused field and window.
+    private struct StableSnapshotValue: @unchecked Sendable {
+        let identity: FieldIdentity
+        let document: String?
+        let fieldFrame: CGRect?
+        let windowFrame: CGRect?
+        let windowTitle: String?
+    }
+
+    /// The five field names fetched together because none changes while that field stays focused.
+    private struct FieldIdentity: Sendable {
+        let role: String?
+        let subrole: String?
+        let identifier: String?
+        let placeholder: String?
+        let description: String?
+    }
+
     /// The primary screen's top edge, cached because `NSScreen` is main-thread-only and this reads off it.
     private static let cachedPrimaryScreenMaxY = Mutex<CGFloat>(0)
 
@@ -85,6 +118,9 @@ public enum FocusedFieldReader {
             return reading
         }
     }
+
+    /// Stops the current field read after its in-flight message, so a canceled turn sends no further questions.
+    public static func cancelRead() { queue.invalidate() }
 
     /// The full Accessibility trees the suggestion loop turned on, kept so stopping the loop turns them off.
     private static let fullTree = FullTreeSwitch()
@@ -150,6 +186,7 @@ public enum FocusedFieldReader {
     /// Lets an application quieted by a resting field be asked again, for a click, a switch or a key that may move focus.
     public static func focusMayHaveMoved() {
         slowFields.focusMayHaveMoved()
+        stableSnapshot.clear()
     }
 
     /// The same reading, synchronously, for the queue above and for the capability probe; the identity is read on main.
@@ -188,8 +225,39 @@ public enum FocusedFieldReader {
     private static func read(
         _ field: AXUIElement, of app: FrontmostApp, started: UInt64, while goOn: () -> Bool
     ) -> FocusedFieldSnapshot? {
-        let identity = identity(of: field)
-        guard let role = identity.role else { return nil }
+        let window = element(field, kAXWindowAttribute)
+        guard goOn() else { return nil }
+        let cacheKey = StableSnapshotKey(
+            processIdentifier: app.processIdentifier, field: field, window: window)
+        let cached = stableSnapshot.value(for: cacheKey)
+        let fieldIdentity = cached?.identity ?? identity(of: field)
+        guard let role = fieldIdentity.role else { return nil }
+        guard goOn() else { return nil }
+        let stable: StableSnapshotValue
+        if let cached {
+            stable = cached
+        } else {
+            let fieldDocument = SurfaceProbe.string(field, kAXDocumentAttribute)
+            guard goOn() else { return nil }
+            let document =
+                fieldDocument
+                ?? window.flatMap {
+                    goOn() ? SurfaceProbe.string($0, kAXDocumentAttribute) : nil
+                }
+            guard goOn() else { return nil }
+            let fieldFrame = frame(of: field)
+            guard goOn() else { return nil }
+            let windowFrame = window.flatMap { frame(of: $0) }
+            guard goOn() else { return nil }
+            let windowTitle = window.flatMap { SurfaceProbe.string($0, kAXTitleAttribute) }
+            guard goOn() else { return nil }
+            let value = StableSnapshotValue(
+                identity: fieldIdentity, document: document, fieldFrame: fieldFrame,
+                windowFrame: windowFrame, windowTitle: windowTitle)
+            stableSnapshot.insert(value, for: cacheKey)
+            stable = value
+        }
+        let identity = stable.identity
         // Decided before the value is fetched, so a declared secure field's contents are never read at all.
         let declaredSecure = SecureField.isDeclaredSecure(
             role: role, subrole: identity.subrole, identifier: identity.identifier,
@@ -212,16 +280,10 @@ public enum FocusedFieldReader {
         // A combobox field says when its own list is open, one flag on the field itself.
         let ownList = SurfaceProbe.integer(field, "AXExpanded") == 1
         guard goOn() else { return nil }
-        let window = element(field, kAXWindowAttribute)
-        guard goOn() else { return nil }
-        let document = document(of: field, in: window)
-        guard goOn() else { return nil }
-        let fieldRect = frame(of: field)
-        guard goOn() else { return nil }
+        let fieldRect = stable.fieldFrame
         let caretRect = caret(field, at: range, frame: fieldRect, pointSize: style?.size, while: goOn)
         guard goOn() else { return nil }
-        let windowRect = window.flatMap { frame(of: $0) }
-        guard goOn() else { return nil }
+        let windowRect = stable.windowFrame
         let appPickerOpen =
             ownList
             || window.map {
@@ -229,8 +291,7 @@ public enum FocusedFieldReader {
                     in: AXNode($0), near: fieldRect, using: AXElementTree(), while: goOn)
             } ?? false
         guard goOn() else { return nil }
-        let title = window.flatMap { SurfaceProbe.string($0, kAXTitleAttribute) }
-        guard goOn() else { return nil }
+        let title = stable.windowTitle
         // An editor that draws its own text keeps an empty input at the caret, so its line is read off the rendered text.
         let hidden =
             secure ? nil : hiddenInputLine(field, role: role, value: value, frame: fieldRect, while: goOn)
@@ -243,7 +304,7 @@ public enum FocusedFieldReader {
             identifier: identity.identifier,
             placeholder: identity.placeholder,
             accessibilityDescription: identity.description,
-            document: document,
+            document: stable.document,
             value: secure ? nil : hidden.map { $0.before + $0.after } ?? value,
             selection: hidden.map { NSRange(location: $0.before.utf16.count, length: 0) } ?? read.selection,
             caret: (hidden?.caret ?? caretRect).map { flip($0, below: flipped) },
@@ -275,9 +336,7 @@ public enum FocusedFieldReader {
     }
 
     /// What names the field, asked in one message: its role and the four names it may publish for itself.
-    private static func identity(
-        of field: AXUIElement
-    ) -> (role: String?, subrole: String?, identifier: String?, placeholder: String?, description: String?) {
+    private static func identity(of field: AXUIElement) -> FieldIdentity {
         let attributes = [
             kAXRoleAttribute, kAXSubroleAttribute, kAXIdentifierAttribute, kAXPlaceholderValueAttribute,
             kAXDescriptionAttribute,
@@ -289,10 +348,23 @@ public enum FocusedFieldReader {
         guard result == .success, let values = answers as? [AnyObject], values.count == attributes.count
         else {
             let named = attributes.map { SurfaceProbe.string(field, $0) }
-            return (named[0], named[1], named[2], named[3], named[4])
+            return FieldIdentity(
+                role: named[0], subrole: named[1], identifier: named[2], placeholder: named[3],
+                description: named[4])
         }
         let named = values.map { $0 as? String }
-        return (named[0], named[1], named[2], named[3], named[4])
+        return FieldIdentity(
+            role: named[0], subrole: named[1], identifier: named[2], placeholder: named[3],
+            description: named[4])
+    }
+
+    /// Whether both keys name the same window, including the absence of a window.
+    private static func sameWindow(_ lhs: AXUIElement?, _ rhs: AXUIElement?) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil): true
+        case (let lhs?, let rhs?): CFEqual(lhs, rhs)
+        default: false
+        }
     }
 
     /// The field's value around the caret, with the selection moved into it, so a long scrollback is never copied whole.
@@ -319,12 +391,6 @@ public enum FocusedFieldReader {
     /// An attribute that is an element, under the same short timeout the field itself answers under.
     private static func element(_ owner: AXUIElement, _ attribute: String) -> AXUIElement? {
         SurfaceProbe.element(owner, attribute, timeoutInSeconds: elementTimeoutInSeconds)
-    }
-
-    /// The page or the directory the field belongs to, which the window publishes when the field does not.
-    private static func document(of field: AXUIElement, in window: AXUIElement?) -> String? {
-        if let own = SurfaceProbe.string(field, kAXDocumentAttribute) { return own }
-        return window.flatMap { SurfaceProbe.string($0, kAXDocumentAttribute) }
     }
 
     /// An element's rectangle as Accessibility reports it, or nothing when it gives no position or no size.
