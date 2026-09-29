@@ -79,7 +79,7 @@ moment the person returns, because it shares their keyboard.
   an empty input with no line of its own (the line is read off the rendered row). Confirmed live in
   Chrome on a SQL-mode editor; accepting a completion into such an editor is not yet measured.
 - **Idle drafts in a chat composer.** Fixed: `CommitPolicy.whereReturnSends` (used by the
-  coordinator, see `Sources/Uttrflow/Suggestion/SuggestionCoordinator.swift:118-123`) rejects
+  coordinator, see `SuggestionCoordinator` in `Sources/Uttrflow/Suggestion/SuggestionCoordinator.swift`) rejects
   idle, focus-loss and deactivation commits for messaging apps, so an abandoned or half-typed
   message no longer gets committed as a line this person wrote
   (`Sources/UttrflowPredictCapture/CommitPolicy.swift:23-34`, covered by
