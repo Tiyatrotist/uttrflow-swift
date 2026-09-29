@@ -10,7 +10,7 @@ public actor DictationPipeline {
     /// A `var` so a clean-up step switched off takes effect on the next dictation rather than the next launch.
     private var cleaner: any TranscriptCleaning
     private let context: any ContextEngine
-    /// The dictation's words, ranked against the screen it began on; a closure so the speech module stays out of here.
+    /// The dictation's words, ranked against its initial screen; a closure so speech stays out of here.
     private let speechWords: @Sendable (AppContext) async -> [String]
     private let inserter: any TextInserting
     private let corrector: any WordCorrecting
@@ -497,9 +497,11 @@ public actor DictationPipeline {
             // Cut here, before the tidy, so a key-up mid-tidy still knows what audio is left to recognise.
             earlyCut = end
             if let heard {
+                let correctionContext = await readContext()
                 let tidy = Task {
                     await self.finish(
-                        heard, seeing: seeing, recording: NoOpMetricsRecorder(), for: mine)
+                        heard, seeing: seeing, correctionSeeing: correctionContext,
+                        recording: NoOpMetricsRecorder(), for: mine)
                 }
                 earlyTidyTask = tidy
                 // Warm for the next piece after this one finishes, without making key-up wait for warm-up.
@@ -676,10 +678,12 @@ public actor DictationPipeline {
                 if state == .transcribing { transition(to: .tidying) }
                 if appContext == nil { appContext = await contextFor(delivery) }
                 let seeing = appContext ?? AppContext()
+                let correctionContext = await correctionContext(for: delivery)
                 let finalPiece = spanIndex == finalPending
                 tidying.addTask {
                     await self.finish(
-                        heard, seeing: seeing, finalPiece: finalPiece, recording: tally, for: mine)
+                        heard, seeing: seeing, correctionSeeing: correctionContext,
+                        finalPiece: finalPiece, recording: tally, for: mine)
                 }
             }
             while let last = await tidying.next() { pieces.append(last) }
@@ -779,6 +783,14 @@ public actor DictationPipeline {
         }
     }
 
+    /// Reads correction evidence at each piece, unless the dictation only goes to the clipboard.
+    private func correctionContext(for delivery: Delivery) async -> AppContext {
+        switch delivery {
+        case .insert: await readContext()
+        case .copy: AppContext()
+        }
+    }
+
     /// Recognises one window of the audio, answering `nil` when nothing was said in it; speech with no words is decoded twice.
     private func transcribe(
         _ audio: AudioSamples, _ window: Range<Int>, biasedTowards words: [String],
@@ -865,11 +877,12 @@ public actor DictationPipeline {
 
     /// Runs the dictionary and the tidier over one recognised piece.
     private func finish(
-        _ heard: Transcription, seeing appContext: AppContext, finalPiece: Bool = false,
+        _ heard: Transcription, seeing appContext: AppContext,
+        correctionSeeing correctionContext: AppContext, finalPiece: Bool = false,
         recording metrics: any MetricsRecording, for mine: Int
     ) async -> Piece {
         // The dictionary before the tidier: a correction is argued from the sentence as heard.
-        let corrected = await correct(heard, seeing: appContext, recording: metrics)
+        let corrected = await correct(heard, seeing: correctionContext, recording: metrics)
         let cleaned = await tidy(
             heard, saying: corrected, seeing: appContext, finalPiece: finalPiece,
             recording: metrics, for: mine)
