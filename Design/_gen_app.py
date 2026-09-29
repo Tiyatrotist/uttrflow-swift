@@ -406,20 +406,40 @@ corrections_empty = f"""<div class="empty">
 # =====================================================================
 # Insights — only what the app already measures.
 # =====================================================================
+# One retention window feeds the scope label, the day count and the bars below,
+# so the fixture cannot claim one window and draw another.
+RETENTION_DAYS = 14
+SCOPE_TITLE = f"Last {RETENTION_DAYS} days"
 DAYS = [310, 640, 0, 520, 880, 960, 210, 705, 890, 1120, 0, 795, 1150, 1240]
-DATES = [str(d) for d in range(10, 24)]
+assert len(DAYS) == RETENTION_DAYS
+DATES = [str(d) for d in range(24 - RETENTION_DAYS, 24)]
 WPM = [118, 124, 121, 129, 133, 126, 130, 128, 135, 131, 134, 131]
 PEAK = max(DAYS)
+# The mean across the whole window, silent days included — same arithmetic as
+# InsightsPresenter.average, measured against the tallest bar.
+AVERAGE_WORDS = round(sum(DAYS) / len(DAYS))
+AVERAGE_FRACTION = AVERAGE_WORDS / PEAK
+# The bars are drawn at most 70px tall, with a 16px label row beneath them —
+# matching InsightsBars' `height` and `labelHeight`, so the line sits where the view puts it.
+BAR_HEIGHT = 70
+LABEL_HEIGHT = 16
 
 
 def day_bars():
     out = ""
     for i, (v, label) in enumerate(zip(DAYS, DATES)):
         cls = "b today" if i == len(DAYS) - 1 else ("b none" if v == 0 else "b")
-        height = 4 if v == 0 else max(6, round(v / PEAK * 70))
+        height = 4 if v == 0 else max(6, round(v / PEAK * BAR_HEIGHT))
         out += (f'<div class="{cls}"><i style="height:{height}px"></i>'
                 f'<span>{label}</span></div>')
     return out
+
+
+def average_line():
+    """The dashed reference line over the bars, labelled at its right-hand end."""
+    bottom = LABEL_HEIGHT + round(AVERAGE_FRACTION * BAR_HEIGHT)
+    return (f'<div class="avgline" style="bottom:{bottom}px">'
+            f'<span>{AVERAGE_WORDS} a day</span></div>')
 
 
 def sparkline(values, w=150, h=30):
@@ -433,29 +453,30 @@ def sparkline(values, w=150, h=30):
             'stroke-linecap="round" stroke-linejoin="round"/></svg>')
 
 
-LANGS = [("English", 68, "var(--accent)"), ("Hinglish", 24, "var(--accent-2)"),
-         ("Hindi", 8, "var(--accent-tint)")]
-PLACES = [("Slack", 41), ("Code", 26), ("Mail", 18), ("Notes", 15)]
+# Word counts alongside each share, as InsightsPlace carries both.
+PLACES = [("Slack", 41, "3,201 words"), ("Code", 26, "2,032 words"),
+          ("Mail", 18, "1,406 words"), ("Notes", 15, "1,172 words")]
 
-lang_bar = "".join(f'<div style="width:{p}%; background:{c}"></div>' for _, p, c in LANGS)
-lang_legend = "".join(
-    f'<span class="row" style="gap:5px"><span class="swatch" style="background:{c}"></span>'
-    f'{n} {p}%</span>' for n, p, c in LANGS)
 place_rows = "".join(
     f"""<div class="row" style="gap:8px; margin-top:{7 if i else 9}px;
          font-size: var(--t-footnote)">
-      <span style="width:78px; display:flex; align-items:center; gap:5px">{appchip(n)}</span>
+      <span style="width:78px; flex:none; display:flex; align-items:center; gap:5px">
+        {appchip(n)}</span>
       <div class="mini" style="flex:1"><i style="width:{p * 2.4:.0f}%"></i></div>
-      <span class="num" style="width:26px; color: var(--label-2)">{p}%</span>
-    </div>""" for i, (n, p) in enumerate(PLACES))
+      <span class="num" style="width:64px; flex:none; color: var(--label-3)">{w}</span>
+      <span class="num" style="width:30px; flex:none; color: var(--label-2)">{p}%</span>
+    </div>""" for i, (n, p, w) in enumerate(PLACES))
 
 insights = f"""<div class="card" style="padding: 12px 14px">
           <div class="row" style="justify-content: space-between; align-items: baseline">
             <span style="font-size: var(--t-title3); font-weight: 600">Words dictated</span>
             <span class="muted" style="font-size: var(--t-footnote)">
-              {sum(DAYS):,} words &middot; 10&ndash;23 August</span>
+              {sum(DAYS):,} words &middot; {DATES[0]}&ndash;23 August</span>
           </div>
-          <div class="bars" style="margin-top: 10px">{day_bars()}</div>
+          <div class="chart-bars" style="margin-top: 10px">
+            <div class="bars">{day_bars()}</div>
+            {average_line()}
+          </div>
         </div>
         <div class="row" style="gap: 12px; margin-top: 12px; align-items: stretch">
           <div class="card stat" style="flex: 1; padding: 11px 13px">
@@ -463,39 +484,27 @@ insights = f"""<div class="card" style="padding: 12px 14px">
               <div><div class="v">131</div><div class="k">Words per minute</div></div>
               {sparkline(WPM)}
             </div>
-            <div class="c">Your 14-day average is 128. Days you did not dictate are skipped.</div>
+            <div class="c">Days you did not dictate are skipped.</div>
           </div>
           <div class="card stat" style="width: 214px; flex: none; padding: 11px 13px">
-            <div class="v">97.2%</div><div class="k">Accuracy</div>
+            <div class="v">97.2%</div><div class="k">Left as dictated</div>
             <div class="row" style="gap: 7px; margin-top: 9px; font-size: var(--t-footnote);
                  color: var(--label-2)">
               <span style="width: 46px">Now</span>
               <div class="mini" style="flex:1"><i style="width: 97%"></i></div>
             </div>
-            <div class="row" style="gap: 7px; margin-top: 5px; font-size: var(--t-footnote);
-                 color: var(--label-2)">
-              <span style="width: 46px">Baseline</span>
-              <div class="mini" style="flex:1">
-                <i style="width: 95%; background: var(--label-3)"></i></div>
-            </div>
-            <div class="c">Words kept as written, against your first week: 94.8%.</div>
+            <div class="c">The share of your words the clean-up left exactly as you said
+              them. It does not say whether they were heard correctly.</div>
           </div>
         </div>
-        <div class="row" style="gap: 12px; margin-top: 12px; align-items: stretch">
-          <div class="card" style="flex: 1; padding: 11px 13px">
-            <div style="font-size: var(--t-body); font-weight: 600">Languages you spoke</div>
-            <div class="bar-mix" style="display:flex; height: 22px; border-radius: 6px;
-                 overflow: hidden; margin-top: 11px">{lang_bar}</div>
-            <div class="legend">{lang_legend}</div>
-          </div>
-          <div class="card" style="width: 214px; flex: none; padding: 11px 13px">
-            <div style="font-size: var(--t-body); font-weight: 600">Where you dictate</div>
-            {place_rows}
-          </div>
+        <div class="card" style="margin-top: 12px; padding: 11px 13px">
+          <div style="font-size: var(--t-body); font-weight: 600">Where you dictate</div>
+          {place_rows}
         </div>
-        <div class="foot">Measured on this Mac over the last 14 days. Never sent anywhere.<br>
-          There is no &ldquo;time saved&rdquo; tile: it would need a guess at how fast you type,
-          and Uttrflow has never watched you type.</div>"""
+        <div class="foot">Measured on this Mac over the last {RETENTION_DAYS} days. Never sent
+          anywhere.<br>
+          There is no &ldquo;time saved&rdquo; figure: it would need a guess at how fast you
+          type, and Uttrflow has never watched you type.</div>"""
 
 insights_empty = f"""<div class="empty">
           <div class="ring">{icon(CHART, size=34, width=1.4)}</div>
@@ -733,9 +742,9 @@ SCREENS = [
      "", "", "", corrections_empty, RECENT, None),
     # Insights: a scope label always, never a choice; no search, no add.
     ("Main-Insights", "Insights", INSIGHTS_CAPTION,
-     pop("Last 14 days"), "", "", insights, RECENT, TAILS),
+     scopelabel(SCOPE_TITLE), "", "", insights, RECENT, TAILS),
     ("Main-Insights-Empty", "Insights", INSIGHTS_CAPTION,
-     pop("Since 21 August"), "", "", insights_empty, RECENT_NONE, None),
+     scopelabel(SCOPE_TITLE), "", "", insights_empty, RECENT_NONE, None),
     # Snippets: search only when there are snippets; New Snippet always.
     ("Main-Snippets", "Snippets", SNIPPETS_CAPTION,
      "", searchbox("Search snippets"), addbtn("New Snippet"), snippets, RECENT, TAILS),
