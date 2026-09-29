@@ -495,8 +495,19 @@ public actor DictationPipeline {
             // Cut here, before the tidy, so a key-up mid-tidy still knows what audio is left to recognise.
             earlyCut = end
             if let heard {
-                earlyTidyTask = Task {
+                let tidy = Task {
                     await self.finish(heard, seeing: seeing, recording: NoOpMetricsRecorder())
+                }
+                earlyTidyTask = tidy
+                // Warm for the next piece after this one finishes, without making key-up wait for warm-up.
+                Task {
+                    _ = await tidy.value
+                    guard self.state == .recording, self.generation == mine,
+                        !self.wasCancelled(mine)
+                    else { return }
+                    await self.runningCleaner.warm(
+                        for: SituationResolver.resolve(
+                            from: seeing, overrides: self.runningOverrides))
                 }
             }
             pieceInFlight = earlyTidyTask != nil
