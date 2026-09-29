@@ -58,7 +58,7 @@ public struct SnippetEditor: Sendable, Equatable {
     public let cancel: MainAction
 
     /// Whether Save is enabled.
-    public var canSave: Bool { problem == nil }
+    public var canSave: Bool { problem == nil && (!trigger.isEmpty || !text.isEmpty) }
 
     /// Builds the editor from its parts.
     public init(
