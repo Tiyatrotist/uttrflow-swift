@@ -8,7 +8,7 @@ import UttrflowHistory
 struct DictationSecretPresentationTests {
     @Test("History, Home, and Recent use the shared mask and concealment decision")
     func everyDictationSurfaceUsesTheSharedSecretDecision() throws {
-        let secret = "API_KEY=9f2b7c4e1a8d3f6b"
+        let secret = "password=demo1"
         let now = Date(timeIntervalSince1970: 1_750_000_800)
         let entry = DictationRecord(text: secret, when: now)
         let presentation = DictationTextPresentation(secret)

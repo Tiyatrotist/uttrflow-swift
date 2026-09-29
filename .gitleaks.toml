@@ -65,10 +65,11 @@
 #
 # Two of those values, `9f2b7c4e1a8d3f6b` and `abcd1234efgh5678`, are short enough that
 # a real secret could plausibly collide with them by value alone, so their fixture lines
-# that gitleaks flags are allowed by
-# their exact matched text (`regexTarget = "match"`, key name and all) rather than by
-# the bare value — a real `api_key`-shaped credential with that same value but a
-# different key name or separator still fails.
+# that gitleaks flags are allowed by their exact matched text (`regexTarget = "match"`,
+# key name and all) rather than by the bare value. The exact match for the retired
+# dictation-presentation fixture also keeps the full-history scan clean after its
+# source literal is replaced; a real `api_key`-shaped credential with that same value
+# but a different assignment still fails.
 [extend]
 useDefault = true
 
@@ -114,6 +115,7 @@ useDefault = true
   regexTarget = "match"
   regexes = [
     '''^API_KEY=9f2b7c4e1a8d3f6b"$''',
+    '''^secret = "API_KEY=9f2b7c4e1a8d3f6b"$''',
     '''^api_key: 9f2b7c4e1a8d3f6b"$''',
     '''^secret-keys = abcd1234efgh5678"$''',
     '''^SECRETKEY=abcd1234efgh5678"$''',
