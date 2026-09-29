@@ -22,6 +22,29 @@ struct PanelRowMemoTests {
         #expect(page.rows.filter(\.isSelected).map(\.id) == [Self.clips[1].id])
     }
 
+    @Test("a new list refreshes timestamps once, then keystrokes reuse those rows")
+    func refreshedRowsStayMemoized() {
+        let openedAt = Date(timeIntervalSince1970: 1_000_000)
+        let original = Clip(text: "original", kind: .text, copiedAt: openedAt)
+        let panel = PanelFixture.panel([original])
+        _ = PanelPresenter.present(panel)
+        let beforeRefresh = panel.rowMemo.builds
+        let copiedAt = openedAt.addingTimeInterval(90)
+        let refreshedAt = copiedAt.addingTimeInterval(1)
+        let arrived = Clip(text: "just copied", kind: .text, copiedAt: copiedAt)
+        var refreshed = panel
+        refreshed.install(
+            [arrived, original], missingImages: [], formattableLanguages: [], now: refreshedAt)
+        _ = PanelPresenter.present(refreshed)
+        let afterRefresh = refreshed.rowMemo.builds
+
+        refreshed = refreshed.applying(.down).state
+        _ = PanelPresenter.present(refreshed)
+
+        #expect(afterRefresh - beforeRefresh == 2)
+        #expect(refreshed.rowMemo.builds == afterRefresh)
+    }
+
     @Test("the rows drawn after an arrow key are the rows a fresh panel draws")
     func sameRows() {
         let panel = PanelFixture.panel(Self.clips)

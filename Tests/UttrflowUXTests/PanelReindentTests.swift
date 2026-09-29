@@ -141,11 +141,11 @@ struct PanelReindentCostTests {
     func reopeningDoesNotReindent() {
         let clips = Self.codeClips()
         var first = PanelSnapshot.opening(now: PanelFixture.now)
-        first.install(clips, missingImages: [], formattableLanguages: [])
+        first.install(clips, missingImages: [], formattableLanguages: [], now: PanelFixture.now)
         #expect(Self.reindents { _ = PanelPresenter.present(first) } == clips.count)
 
         var second = PanelSnapshot.opening(now: PanelFixture.now)
-        second.install(clips, missingImages: [], formattableLanguages: [])
+        second.install(clips, missingImages: [], formattableLanguages: [], now: PanelFixture.now)
         var rows: [PanelRow] = []
         #expect(Self.reindents { rows = PanelPresenter.present(second).rows } == 0)
         #expect(rows.allSatisfy { $0.actions.contains { $0.title == "Re-indent" } })
