@@ -253,11 +253,7 @@ struct SettingsDiagnosticsView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            """
-            \(stage.title): \(stage.typical) typically, \(stage.slowest) at worst, \
-            over \(stage.samples) measurements.
-            """)
+        .accessibilityLabel(stage.accessibilityLabel)
     }
 
     /// Colours taken in the journey's order, so a stage cannot swap colours between the bar and the list.

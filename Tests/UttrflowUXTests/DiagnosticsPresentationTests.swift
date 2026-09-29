@@ -35,6 +35,30 @@ enum DiagnosticsFixture {
     }
 }
 
+@Suite("Diagnostics timing accessibility labels")
+struct DiagnosticsAccessibilityTests {
+    @Test("one timing row uses the singular measurement label")
+    func singularMeasurementLabel() throws {
+        let page = DiagnosticsFixture.page(measurements: [
+            DiagnosticsFixture.timing(.transcription, 1)
+        ])
+
+        let row = try #require(page.latency?.stages.first)
+        #expect(row.accessibilityLabel.hasSuffix("over 1 measurement."))
+    }
+
+    @Test("multiple timings use the plural measurement label")
+    func pluralMeasurementLabel() throws {
+        let page = DiagnosticsFixture.page(measurements: [
+            DiagnosticsFixture.timing(.transcription, 1),
+            DiagnosticsFixture.timing(.transcription, 2),
+        ])
+
+        let row = try #require(page.latency?.stages.first)
+        #expect(row.accessibilityLabel.hasSuffix("over 2 measurements."))
+    }
+}
+
 @Suite("Diagnostics reports only what was measured")
 struct DiagnosticsLatencyTests {
     /// One of everything, which is what a dictation that ran the whole way through records.

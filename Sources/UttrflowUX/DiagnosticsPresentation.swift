@@ -52,6 +52,12 @@ public struct DiagnosticsStageRow: Sendable, Equatable, Identifiable {
     /// How many timings the row rests on.
     public let samples: Int
 
+    /// The row's VoiceOver label, including the count of its measurements.
+    public var accessibilityLabel: String {
+        "\(title): \(typical) typically, \(slowest) at worst, over "
+            + "\(MainFormatting.count(samples, "measurement", "measurements"))."
+    }
+
     /// The stage, which appears once.
     public var id: PipelineStage { stage }
 
