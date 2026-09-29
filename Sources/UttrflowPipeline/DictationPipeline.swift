@@ -481,8 +481,8 @@ public actor DictationPipeline {
             let heard: Transcription?
             do {
                 heard = try await transcribe(
-                    audio, lead..<cut, biasedTowards: await vocabulary(seeing: seeing),
-                    recording: NoOpMetricsRecorder(), skippingAMiss: false)
+                    audio, lead..<cut, biasedTowards: await vocabulary(mine, seeing: seeing),
+                    recording: NoOpMetricsRecorder(), skippingAMiss: false, for: mine)
             } catch {
                 guard generation == mine, !wasCancelled(mine) else { return }
                 // A failed piece is left for the end, where it is reported; the rest still work ahead.
@@ -496,7 +496,8 @@ public actor DictationPipeline {
             earlyCut = end
             if let heard {
                 let tidy = Task {
-                    await self.finish(heard, seeing: seeing, recording: NoOpMetricsRecorder())
+                    await self.finish(
+                        heard, seeing: seeing, recording: NoOpMetricsRecorder(), for: mine)
                 }
                 earlyTidyTask = tidy
                 // Warm for the next piece after this one finishes, without making key-up wait for warm-up.
@@ -515,10 +516,12 @@ public actor DictationPipeline {
     }
 
     /// The words every piece of this dictation is biased towards, ranked once and then remembered.
-    private func vocabulary(seeing context: AppContext) async -> [String] {
+    private func vocabulary(_ mine: Int, seeing context: AppContext) async -> [String] {
         if let dictationContext { return dictationContext.vocabulary }
         if let dictationWords { return dictationWords }
         let words = await speechWords(context)
+        // A cancelled dictation's words are not kept for the one now under way.
+        guard isStillRunning(mine) else { return words }
         dictationWords = words
         return words
     }
@@ -651,8 +654,8 @@ public actor DictationPipeline {
                 do {
                     heard = try await transcribe(
                         audio, window,
-                        biasedTowards: await vocabulary(seeing: earlyContext ?? AppContext()),
-                        recording: tally, skippingAMiss: true)
+                        biasedTowards: await vocabulary(mine, seeing: earlyContext ?? AppContext()),
+                        recording: tally, skippingAMiss: true, for: mine)
                 } catch {
                     failure = DictationFailure(error, speechEngineKind: speech.kind)
                     tidying.cancelAll()
@@ -674,7 +677,7 @@ public actor DictationPipeline {
                 let finalPiece = spanIndex == finalPending
                 tidying.addTask {
                     await self.finish(
-                        heard, seeing: seeing, finalPiece: finalPiece, recording: tally)
+                        heard, seeing: seeing, finalPiece: finalPiece, recording: tally, for: mine)
                 }
             }
             while let last = await tidying.next() { pieces.append(last) }
@@ -771,7 +774,7 @@ public actor DictationPipeline {
     /// Recognises one window of the audio, answering `nil` when nothing was said in it; speech with no words is decoded twice.
     private func transcribe(
         _ audio: AudioSamples, _ window: Range<Int>, biasedTowards words: [String],
-        recording metrics: any MetricsRecording, skippingAMiss skips: Bool
+        recording metrics: any MetricsRecording, skippingAMiss skips: Bool, for mine: Int
     ) async throws -> Transcription? {
         let slice =
             AudioSamples(samples: Array(audio.samples[window]), sampleRate: audio.sampleRate) ?? .empty
@@ -783,7 +786,9 @@ public actor DictationPipeline {
         }
         switch heard {
         case .words(let transcription):
-            if firstPieceLanguage == nil, let detected = transcription.detectedLanguage?.code {
+            if firstPieceLanguage == nil, let detected = transcription.detectedLanguage?.code,
+                isStillRunning(mine)
+            {
                 firstPieceLanguage = detected
                 if var dictationContext {
                     dictationContext.listening = .firstPiece
@@ -853,12 +858,13 @@ public actor DictationPipeline {
     /// Runs the dictionary and the tidier over one recognised piece.
     private func finish(
         _ heard: Transcription, seeing appContext: AppContext, finalPiece: Bool = false,
-        recording metrics: any MetricsRecording
+        recording metrics: any MetricsRecording, for mine: Int
     ) async -> Piece {
         // The dictionary before the tidier: a correction is argued from the sentence as heard.
         let corrected = await correct(heard, seeing: appContext, recording: metrics)
         let cleaned = await tidy(
-            heard, saying: corrected, seeing: appContext, finalPiece: finalPiece, recording: metrics)
+            heard, saying: corrected, seeing: appContext, finalPiece: finalPiece,
+            recording: metrics, for: mine)
         return Piece(heard: heard, corrected: corrected, cleaned: cleaned)
     }
 
@@ -886,7 +892,7 @@ public actor DictationPipeline {
     private func tidy(
         _ transcription: Transcription, saying corrected: CorrectedTranscript,
         seeing appContext: AppContext, finalPiece: Bool = false,
-        recording metrics: any MetricsRecording
+        recording metrics: any MetricsRecording, for mine: Int
     ) async -> TransformationResult {
         let text = corrected.text
         // Every piece of a dictation is tidied against the one screen read, so all see one situation.
@@ -910,7 +916,8 @@ public actor DictationPipeline {
             }
             // A language model that never answers costs the tidying, never the words.
             guard let tidied else { return untidied }
-            if let cleaning = tidied.cleaning { cleaningRecords.append(cleaning) }
+            // A cancelled dictation's record is not merged into the one now under way.
+            if let cleaning = tidied.cleaning, isStillRunning(mine) { cleaningRecords.append(cleaning) }
             return tidied
         } catch {
             return untidied
