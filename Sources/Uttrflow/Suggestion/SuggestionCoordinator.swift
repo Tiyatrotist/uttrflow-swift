@@ -673,15 +673,17 @@ final class SuggestionCoordinator {
         // Whether the model wrote lines and the machine denied every one, which is a silence with its own name.
         var invented = false
         var reused = false
+        var reusedListed: Set<String> = []
         let place = SuggestionMoment.place(of: snapshot)
         // A deletion, another line or changed text before it leaves the last answer describing a line that is gone.
         modelPass.follow(query, at: place)
         switch modelPass.plan(for: query, at: place) {
-        case .reuse(let kept):
+        case .reuse(let kept, let listed):
             // A kept line meets the machine again, since what it names may have changed since it was written.
             entering(.attest, turn: number)
             completions = await attested(kept, for: query)
             guard turns.isCurrent(number) else { return }
+            reusedListed = listed
             reused = true
         case .skip:
             return
@@ -730,7 +732,8 @@ final class SuggestionCoordinator {
         guard
             let update = session.resolveGenerated(
                 completions, for: query, elapsedMilliseconds: since(started),
-                whenEmpty: invented ? .notOnThisMachine : .nothingOffered, scores: scores)
+                whenEmpty: invented ? .notOnThisMachine : .nothingOffered, scores: scores,
+                listed: reusedListed)
         else { return }
         // A silence has nothing to place, so it is settled and logged against the field it read.
         guard update.silence == nil else { return settle(update, in: snapshot, since: started) }
@@ -750,7 +753,8 @@ final class SuggestionCoordinator {
             guard turns.isCurrent(number), !others.isEmpty,
                 let expanded = session.expandGenerated(others, for: query, scores: nil)
             else { return }
-            modelPass.remember([leader] + others, for: query, at: place)
+            modelPass.remember(
+                [leader] + others, for: query, at: place, listed: Set(others))
             return await drawFresh(expanded, for: snapshot, turn: number)
         }
         // Quiet never shows the list, so no model pass is spent building one.
