@@ -1253,7 +1253,9 @@ public actor DictationPipeline {
             guard !wasCancelled(mine) else { return nil }
             // Either way the dictation has to end, so the next one can begin.
             guard let attempt = inserted else {
-                throw TextInsertionError.insertionTimedOut
+                throw delivery == .copy
+                    ? TextInsertionError.clipboardUnavailable
+                    : TextInsertionError.insertionTimedOut
             }
             // A field found secure at the write counts from here on, before anything is learnt from it.
             if attempt.intoSecureField { destinationIsSecure = true }
