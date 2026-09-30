@@ -63,6 +63,9 @@ public struct SettingsCapabilities: Sendable, Equatable {
     /// How far along the model tab-to-complete needs is, so the screen can say why it is silent.
     public var suggestionModel: SuggestionModelReadiness
 
+    /// Whether the suggestions key tap is starting or why it stopped.
+    public var suggestionRuntime: SuggestionRuntimeStatus
+
     /// Shortcuts the app could not claim, so a row never shows a key that does nothing.
     public var unarmedShortcuts: Set<ShortcutAction>
 
@@ -78,6 +81,7 @@ public struct SettingsCapabilities: Sendable, Equatable {
         readySpeechEngines: Set<SpeechEngineKind>,
         readyTransformers: Set<TransformerKind>,
         suggestionModel: SuggestionModelReadiness = .notAsked,
+        suggestionRuntime: SuggestionRuntimeStatus = .idle,
         unarmedShortcuts: Set<ShortcutAction> = [],
         globeKeyAction: GlobeKeyAction = .doNothing
     ) {
@@ -88,6 +92,7 @@ public struct SettingsCapabilities: Sendable, Equatable {
         self.readySpeechEngines = readySpeechEngines
         self.readyTransformers = readyTransformers
         self.suggestionModel = suggestionModel
+        self.suggestionRuntime = suggestionRuntime
         self.unarmedShortcuts = unarmedShortcuts
         self.globeKeyAction = globeKeyAction
     }
@@ -113,6 +118,16 @@ public struct SettingsCapabilities: Sendable, Equatable {
         guard binding.isFunctionHold else { return nil }
         return globeKeyAction.warning
     }
+}
+
+/// Whether suggestions can currently receive keystrokes.
+public enum SuggestionRuntimeStatus: Sendable, Equatable {
+    case idle
+    case starting
+    case running
+    case secureInputBlocked
+    case tapFailed
+    case corpusFailed
 }
 
 /// How far along the model tab-to-complete needs is, so a switch that is on can say what it is doing.
