@@ -338,9 +338,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         startTelemetry()
         crashReports.follow(isEnabled: settings.sendsCrashReports)
         buildPipeline()
-        seedTheDictionary()
         Task { await restoreLastTranscript() }
-        sweepExpired()
         wireInterface()
         CGEventKeystrokeSender.startObservingLayout()
         startWatchingForTheShortcut()
@@ -348,10 +346,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         startCompletingWhatIsTyped()
         pressureSource.start { [weak self] in self?.memoryPressureChanged(to: $0) }
         loadSpeechModel()
-        probeTransformers()
-        probeSpeechModel()
-        probeAppleSpeechAssets()
-        refreshAccount()
         // A Mac that worked without an account keeps no trace of it, and meets sign-in like anyone signed out.
         RetiredLocalAccount.forget()
         // Everything above armed itself only with a session; this records which state that was.
@@ -364,6 +358,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         } else {
             refreshMainWindow()
         }
+        // These launch tasks do not feed the first window, so let it appear before starting the work.
+        seedTheDictionary()
+        sweepExpired()
+        probeTransformers()
+        probeSpeechModel()
+        probeAppleSpeechAssets()
+        refreshAccount()
         // Configured last, from the setting; the automatic check itself waits for `modelLoadingSettled()`.
         updates.onProgressChanged = { [weak self] in self?.refreshMenuBar() }
         updates.begin(
@@ -384,7 +385,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func sweepExpired(now: Date = Date()) {
         let retention = Retention(days: settings.transcriptRetentionDays, now: now)
         let previous = sweeping
-        sweeping = Task { [recordings, history] in
+        sweeping = Task(priority: .utility) { [recordings, history] in
             await previous?.value
             _ = await recordings.waiting(now: now)
             _ = await history.records(keeping: retention)
@@ -393,7 +394,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Writes the words this build ships knowing, which happens once and never blocks the launch.
     private func seedTheDictionary() {
-        Task { [dictionary] in
+        Task(priority: .utility) { [dictionary] in
             do {
                 try await dictionary.seedShippedWords(at: Date())
             } catch {
@@ -566,7 +567,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func probeTransformers() -> Task<Void, Never> {
         transformerProbeGeneration += 1
         let generation = transformerProbeGeneration
-        return Task { [weak self] in
+        return Task(priority: .utility) { [weak self] in
             guard let self else { return }
             let ready = await transformerReadiness(settings.profile)
             guard generation == transformerProbeGeneration else { return }
@@ -580,7 +581,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @discardableResult
     func probeSpeechModel() -> Task<Void, Never> {
         let store = modelStore
-        return Task { [weak self] in
+        return Task(priority: .utility) { [weak self] in
             let presence = await Task.detached(priority: .utility) {
                 let model = SpeechModel.default
                 let installed = store.isInstalled(model)
@@ -597,7 +598,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Reads the system recogniser's asset inventory for the locale its backend loads.
     @discardableResult
     func probeAppleSpeechAssets() -> Task<Void, Never> {
-        Task { [weak self] in
+        Task(priority: .utility) { [weak self] in
             let status = await AppleSpeechBackend.assetStatus()
             guard let self else { return }
             appleSpeechStatus =
@@ -626,7 +627,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Re-reads the account in the background at launch; internal so a test can await it. See `Docs/entitlements.md`.
     @discardableResult
     func refreshAccount() -> Task<Void, Never> {
-        Task { [account] in
+        Task(priority: .utility) { [account] in
             let outcome = await account.refresh.run()
             // Only a change is worth a redraw; `unchanged` is the common answer.
             guard outcome == .updated || outcome == .signedOut else { return }
