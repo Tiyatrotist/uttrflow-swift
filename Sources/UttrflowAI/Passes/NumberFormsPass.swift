@@ -144,7 +144,11 @@ public struct NumberFormsPass: CleaningPass {
                 return nil
             }
             guard policy == .always || ordinal.value >= 10 else { return nil }
-            return Phrase(text: String(ordinal.value), count: end - position)
+            let month = WordShape.capitalised(keys[end])
+            let preposition = hasOf ? " of" : ""
+            return Phrase(
+                text: "\(ordinal.value)\(ordinalSuffix(ordinal.value))\(preposition) \(month)",
+                count: end - position + 1)
         }
         guard let item = item(at: position, keys: keys, shapes: shapes) else { return nil }
         let contextPosition =
@@ -323,6 +327,17 @@ public struct NumberFormsPass: CleaningPass {
     private static func singleDigit(_ key: String) -> String? {
         if key == "oh" { return "0" }
         return NumberWords.units[key].map(String.init)
+    }
+
+    private static func ordinalSuffix(_ value: Int) -> String {
+        let remainder = value % 100
+        if (11...13).contains(remainder) { return "th" }
+        switch value % 10 {
+        case 1: return "st"
+        case 2: return "nd"
+        case 3: return "rd"
+        default: return "th"
+        }
     }
 
     /// "twenty twenty four" and "nineteen ninety nine", from a spoken 19 or 20 and a spoken 10 to 99.
