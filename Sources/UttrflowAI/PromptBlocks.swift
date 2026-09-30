@@ -59,7 +59,8 @@ public enum PromptBlocks {
         rules: """
             In a document:
             - full sentences; keep the breaks given, and a list only where one was spoken
-            - fix a grammar slip: "there is three" → "there are three", "a apple" → "an apple", \
+            - fix a grammar slip: "the documents is ready" → "the documents are ready", \
+            "a orange" → "an orange", \
             a drifting tense
             - change a word's form, never the word; dialect stays — "gonna", "ain't", \
             a double negative
@@ -148,10 +149,11 @@ public enum PromptBlocks {
         id: "email",
         rules: """
             In an email:
-            - full sentences and paragraphs; keep the greeting and every break as given
+            - full sentences and paragraphs; keep the greeting and every break as given, except format a recognized closing and name at the end
             - at the end only, put a spoken closing followed only by a name on its own lines: blank line, closing, name; use only thanks, best regards, regards, cheers or best, and keep every word in order
-            - fix a grammar slip: "there is three" → "there are three", "have went" → \
-            "have gone", "a apple" → "an apple", a drifting tense
+            - fix a grammar slip: "the documents is ready" → "the documents are ready", \
+            "we have ate" → "we have eaten", "there is three" → "there are three", \
+            "have went" → "have gone", "a orange" → "an orange", "a apple" → "an apple", a drifting tense
             - change a word's form, never the word; dialect stays — "gonna", "ain't", \
             a double negative
             """,
@@ -170,8 +172,9 @@ public enum PromptBlocks {
             In plain text:
             - full sentences; end with a full stop, question or exclamation mark
             - keep every line break given, and add none
-            - fix a grammar slip: "there is three" → "there are three", "a apple" → \
-            "an apple", a drifting tense, a lowercase name or acronym
+            - fix a grammar slip: "the documents is ready" → "the documents are ready", \
+            "a orange" → \
+            "an orange", a drifting tense, a lowercase name or acronym
             - change a word's form, never the word; dialect stays — "gonna", "ain't", \
             a double negative
             """,
