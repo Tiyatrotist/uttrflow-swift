@@ -237,6 +237,24 @@ struct PieceJoinerRestatementTests {
         #expect(joined(["Let's meet at four.", "No, sorry, at five."], .document) == "Let's meet at five.")
     }
 
+    @Test("keeps a seam restatement when self-corrections are switched off")
+    func selfCorrectionOffKeepsBothPieces() {
+        let pieces = [
+            piece("We shipped the build on Monday."), piece("Actually shipped the build on Tuesday."),
+        ]
+        let steps = CleaningSteps.default.setting(.selfCorrection, isOn: false)
+
+        #expect(
+            PieceJoiner.join(pieces, under: .standard(for: .document)).cleaned.text
+                == "We shipped the build on Tuesday.")
+
+        let whole = PieceJoiner.join(
+            pieces, under: .standard(for: .document), steps: steps)
+
+        #expect(
+            whole.cleaned.text == "We shipped the build on Monday. Actually shipped the build on Tuesday.")
+    }
+
     @Test("matches two numbers across the cut the way the pass does inside one piece")
     func numbersAcrossTheCut() {
         #expect(joined(["Coffee at 2.", "Actually 3."], .document) == "Coffee at 3.")
