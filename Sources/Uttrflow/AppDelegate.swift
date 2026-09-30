@@ -2302,6 +2302,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     appleSpeechStatus: appleSpeechStatus,
                     appleSpeechLoadFailure: appleSpeechLoadFailure,
                     permissions: knownPermissions,
+                    dictationShortcutArmed: surfaces.listensForDictation
+                        && shortcutArming.failure == nil,
+                    hasDefaultInputDevice: SettingsCapabilities.hasAudioInput,
                     measurements: measurements, cleaning: lastCleaning,
                     lastCleanedBy: lastCleanedBy,
                     suggestionModel: suggestionModel, version: .ofThisBuild,
