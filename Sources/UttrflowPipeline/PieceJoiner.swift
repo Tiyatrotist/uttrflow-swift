@@ -76,7 +76,7 @@ enum PieceJoiner {
 
     /// Every piece but the last ended as a sentence the way the place ends one; the message's own stop is the cleaner's.
     static func seamed(_ pieces: [String], under formatter: DestinationFormatter) -> [String] {
-        let pieces = joiningAmountsAcrossSeams(pieces)
+        let pieces = joiningSpokenMarksAcrossSeams(joiningAmountsAcrossSeams(pieces))
         return pieces.enumerated().map { index, text in
             guard index > 0, sentenceRunsOn(pieces[index - 1], into: text) else {
                 return index == pieces.count - 1
@@ -84,6 +84,77 @@ enum PieceJoiner {
             }
             return lowercasedOpening(text, in: pieces[index - 1] + " " + text)
         }
+    }
+
+    /// Attaches standalone spoken marks to adjacent words across piece boundaries.
+    private static func joiningSpokenMarksAcrossSeams(_ pieces: [String]) -> [String] {
+        guard pieces.count > 1 else { return pieces }
+        var joined = pieces
+        for index in joined.indices {
+            let words = joined[index].split(whereSeparator: \.isWhitespace)
+            guard !words.isEmpty else { continue }
+            if let leading = spokenMark(at: words, fromStart: true), leading.opening,
+                words.count == leading.words.count,
+                let following = joined[(index + 1)...].indices.first(where: {
+                    !joined[$0].split(whereSeparator: \.isWhitespace).isEmpty
+                })
+            {
+                let nextWords = joined[following].split(whereSeparator: \.isWhitespace)
+                if let first = nextWords.first {
+                    let rest = nextWords.dropFirst().joined(separator: " ")
+                    joined[following] = leading.symbol + String(first) + (rest.isEmpty ? "" : " " + rest)
+                    joined[index] = ""
+                }
+            }
+            guard let trailing = spokenMark(at: words, fromStart: false), !trailing.opening,
+                words.count == trailing.words.count,
+                !isMentionedSpokenMark(preceding: joined[..<index])
+            else { continue }
+            guard
+                let previous = joined[..<index].indices.reversed().first(where: {
+                    !joined[$0].split(whereSeparator: \.isWhitespace).isEmpty
+                })
+            else { continue }
+            joined[previous] = WordShape.marked(joined[previous], with: trailing.symbol)
+            joined[index] = ""
+        }
+        return joined
+    }
+
+    /// Keeps a spoken mark as words when a nearby determiner introduces its name.
+    private static func isMentionedSpokenMark(preceding pieces: ArraySlice<String>) -> Bool {
+        let prior = pieces.flatMap {
+            $0.split(whereSeparator: \.isWhitespace).map { WordShape(String($0)).key }
+        }
+        guard let previous = prior.last else { return false }
+        if ["the", "a", "an", "this", "that", "these", "those", "my", "your", "our", "their"].contains(
+            previous)
+        {
+            return true
+        }
+        if let lastSentenceEnd = prior.lastIndex(where: { [".", "?", "!"].contains($0) }) {
+            return lastSentenceEnd == prior.index(before: prior.endIndex)
+        }
+        return prior.suffix(2).first == "word"
+            && ["the", "a", "this", "that"].contains(prior.dropLast().last ?? "")
+    }
+
+    /// Finds a spoken mark at the start or end of a piece.
+    private static func spokenMark(
+        at words: [Substring], fromStart: Bool
+    ) -> (words: [String], symbol: String, opening: Bool)? {
+        let names: [([String], String, Bool)] = [
+            (["open", "quote"], "\"", true), (["close", "quote"], "\"", false),
+            (["full", "stop"], ".", false), (["question", "mark"], "?", false),
+            (["exclamation", "mark"], "!", false), (["exclamation", "point"], "!", false),
+            (["semi", "colon"], ";", false), (["comma"], ",", false), (["period"], ".", false),
+            (["colon"], ":", false), (["semicolon"], ";", false),
+        ]
+        for (name, symbol, opening) in names where words.count >= name.count {
+            let candidate = fromStart ? words.prefix(name.count) : words.suffix(name.count)
+            if candidate.map({ WordShape(String($0)).key }) == name { return (name, symbol, opening) }
+        }
+        return nil
     }
 
     /// Lowers a capital opened by the recognizer while keeping spellings the casing passes protect.

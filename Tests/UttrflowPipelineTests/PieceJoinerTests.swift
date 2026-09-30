@@ -436,6 +436,54 @@ struct PieceJoinerSeamTests {
         #expect(whole.cleaned.text == "I left the office. The traffic is bad. I will be late")
     }
 
+    @Test(
+        "attaches a standalone spoken trailing mark to the previous piece",
+        arguments: [
+            ("We shipped it", "comma", "We shipped it,"),
+            ("We shipped it", "full stop", "We shipped it."),
+            ("Did we ship it", "question mark", "Did we ship it?"),
+        ])
+    func standaloneTrailingMarkAttachesToPrevious(first: String, mark: String, expected: String) {
+        let whole = PieceJoiner.join(
+            [piece(first), piece(mark)], under: .standard(for: .messaging))
+
+        #expect(whole.cleaned.text == expected)
+    }
+
+    @Test("attaches adjacent standalone trailing marks in spoken order")
+    func adjacentTrailingMarksAttachInOrder() {
+        let whole = PieceJoiner.join(
+            [piece("We shipped it"), piece("comma"), piece("full stop")],
+            under: .standard(for: .messaging))
+
+        #expect(whole.cleaned.text == "We shipped it.")
+    }
+
+    @Test("attaches a standalone opening quote to the following piece")
+    func standaloneOpeningQuoteAttachesToFollowing() {
+        let whole = PieceJoiner.join(
+            [piece("open quote"), piece("hello there")], under: .standard(for: .messaging))
+
+        #expect(whole.cleaned.text == "\"hello there\"")
+    }
+
+    @Test("does not carry a mark mention across a sentence boundary")
+    func markMentionStopsAtSentenceBoundary() {
+        let whole = PieceJoiner.join(
+            [piece("we shipped it."), piece("the word"), piece("full stop")],
+            under: .standard(for: .messaging))
+
+        #expect(whole.cleaned.text == "We shipped it. The word full stop")
+    }
+
+    @Test("keeps a spoken mark name when it is mentioned across a piece boundary")
+    func mentionGuardKeepsSpokenMarkName() {
+        let whole = PieceJoiner.join(
+            [piece("the word"), piece("full stop")], under: .standard(for: .messaging))
+
+        #expect(whole.cleaned.text == "the word full stop")
+    }
+
     @Test("keeps a question mark at a seam rather than adding a stop after it")
     func keepsAQuestionMarkAtASeam() {
         let whole = PieceJoiner.join(
