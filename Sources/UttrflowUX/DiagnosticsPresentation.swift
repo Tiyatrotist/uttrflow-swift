@@ -188,6 +188,8 @@ public struct DiagnosticsSnapshot: Sendable, Equatable {
     public let hasDefaultInputDevice: Bool?
     /// Every stage timing recorded since the app started.
     public let measurements: [StageMeasurement]
+    /// The words the active recogniser last kept in its prompt, from the local recorder.
+    public let vocabularyPrompt: [String]
     /// The bounded per-piece decode effort recorded since the app started.
     public let decoding: [DecodeEffort]
     /// What the clean-up steps did to the last dictation, absent until one has been tidied.
@@ -214,6 +216,7 @@ public struct DiagnosticsSnapshot: Sendable, Equatable {
         dictationShortcutArmed: Bool? = nil,
         hasDefaultInputDevice: Bool? = nil,
         measurements: [StageMeasurement] = [],
+        vocabularyPrompt: [String] = [],
         decoding: [DecodeEffort] = [],
         cleaning: CleaningRecord? = nil,
         lastCleanedBy: TransformerKind? = nil,
@@ -232,6 +235,7 @@ public struct DiagnosticsSnapshot: Sendable, Equatable {
         self.dictationShortcutArmed = dictationShortcutArmed
         self.hasDefaultInputDevice = hasDefaultInputDevice
         self.measurements = measurements
+        self.vocabularyPrompt = vocabularyPrompt
         self.decoding = decoding
         self.cleaning = cleaning
         self.lastCleanedBy = lastCleanedBy
@@ -278,6 +282,8 @@ public struct DiagnosticsPresentation: Sendable, Equatable {
     public let engines: [DiagnosticsRow]
     /// What each clean-up step did to the last dictation, and which steps are switched off.
     public let cleanUp: [DiagnosticsRow]
+    /// The exact dictionary words included in the latest recogniser prompt.
+    public let vocabularyPrompt: DiagnosticsRow
     /// One row per permission, granted or not.
     public let permissions: [DiagnosticsRow]
     /// Whether the shortcut and input device can start dictation.
@@ -300,6 +306,7 @@ public struct DiagnosticsPresentation: Sendable, Equatable {
         decoding: [DiagnosticsRow],
         engines: [DiagnosticsRow],
         cleanUp: [DiagnosticsRow],
+        vocabularyPrompt: DiagnosticsRow,
         permissions: [DiagnosticsRow],
         availability: [DiagnosticsRow],
         storage: [DiagnosticsRow],
@@ -315,6 +322,7 @@ public struct DiagnosticsPresentation: Sendable, Equatable {
         self.decoding = decoding
         self.engines = engines
         self.cleanUp = cleanUp
+        self.vocabularyPrompt = vocabularyPrompt
         self.permissions = permissions
         self.availability = availability
         self.storage = storage
@@ -355,6 +363,12 @@ public enum DiagnosticsPresenter {
             decoding: decodingRows(for: snapshot.decoding),
             engines: engines,
             cleanUp: cleanUpRows(for: snapshot.cleaning),
+            vocabularyPrompt: DiagnosticsRow(
+                title: "Words in recogniser prompt",
+                detail: snapshot.vocabularyPrompt.isEmpty
+                    ? "No dictionary words in the last prompt"
+                    : snapshot.vocabularyPrompt.joined(separator: ", "),
+                state: .unknown),
             permissions: permissions,
             availability: availability,
             storage: storage,

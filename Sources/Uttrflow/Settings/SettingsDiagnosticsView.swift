@@ -38,6 +38,9 @@ struct SettingsDiagnosticsView: View {
                         })
                 }
             }
+            section("Recogniser prompt") {
+                rows([presentation.vocabularyPrompt])
+            }
             section("Last dictation") {
                 SettingsCard {
                     VStack(spacing: 0) {
