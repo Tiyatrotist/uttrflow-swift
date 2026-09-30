@@ -942,9 +942,11 @@ public actor DictationPipeline {
         _ audio: AudioSamples, _ window: Range<Int>, biasedTowards words: [String],
         recording metrics: any MetricsRecording, skippingAMiss skips: Bool, for mine: Int
     ) async throws -> Transcription? {
-        let slice =
-            AudioSamples(samples: Array(audio.samples[window]), sampleRate: audio.sampleRate) ?? .empty
         let whole = window == audio.samples.indices
+        // Reuse the full recording when this window already covers it.
+        let slice = whole
+            ? audio
+            : AudioSamples(samples: Array(audio.samples[window]), sampleRate: audio.sampleRate) ?? .empty
         var heard = try await decode(slice, whole: whole, biasedTowards: words, recording: metrics)
         // The second decode goes without the vocabulary, which is the one input a retry can change.
         if case .missed = heard {
