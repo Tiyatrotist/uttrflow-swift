@@ -110,6 +110,12 @@ public struct NumberFormsPass: CleaningPass {
     ) -> Phrase? {
         let keys = shapes.map(\.key)
 
+        if keys[position] == "plus", joined(position + 1, shapes),
+            let run = spokenDigitRun(at: position + 1, keys: keys, shapes: shapes)
+        {
+            return Phrase(text: "+" + run.text, count: run.count + 1)
+        }
+        if let run = spokenDigitRun(at: position, keys: keys, shapes: shapes) { return run }
         if let decade = decade(at: position, keys: keys, shapes: shapes) {
             return decade
         }
@@ -210,20 +216,6 @@ public struct NumberFormsPass: CleaningPass {
                 }
             }
         }
-        // Three or more single digits spoken in a row are a digit string, even outside any context word.
-        if !isPhrase, item.spoken, let value = item.value, value < 10 {
-            var run = String(value)
-            var p = end
-            while p < keys.count, joined(p, shapes), let digit = singleDigit(keys[p]) {
-                run.append(digit)
-                p += 1
-            }
-            if run.count >= 3 {
-                text = run
-                end = p
-                isPhrase = true
-            }
-        }
         if !isPhrase, item.spoken, let value = item.value {
             let beforeCurrency = joined(end, shapes) && currencies.contains(keys[end])
             guard policy == .always || inContext || value >= 10 || beforeCurrency else { return nil }
@@ -321,6 +313,19 @@ public struct NumberFormsPass: CleaningPass {
     private static func singleDigit(_ key: String) -> String? {
         if key == "oh" { return "0" }
         return NumberWords.units[key].map(String.init)
+    }
+
+    /// A run starts with any digit word, including "oh", and only joins three or more.
+    private static func spokenDigitRun(at start: Int, keys: [String], shapes: [WordShape]) -> Phrase? {
+        guard let first = singleDigit(keys[start]) else { return nil }
+        var text = first
+        var end = start + 1
+        while joined(end, shapes), let digit = singleDigit(keys[end]) {
+            text.append(digit)
+            end += 1
+        }
+        guard text.count >= 3 else { return nil }
+        return Phrase(text: text, count: end - start)
     }
 
     private static func ordinalSuffix(_ value: Int) -> String {
