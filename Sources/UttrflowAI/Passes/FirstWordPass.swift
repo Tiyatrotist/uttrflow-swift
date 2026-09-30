@@ -144,7 +144,7 @@ public struct FirstWordPass: WholeTextCleaningPass {
         return shape.replacingCore(with: WordShape.capitalised(shape.core))
     }
 
-    private static func isProperName(_ text: String, in context: String) -> Bool {
+    static func isProperName(_ text: String, in context: String) -> Bool {
         let key = WordShape(text).key.lowercased()
         return properNames.contains(key) || isNewYorkWord(key, in: context)
     }
