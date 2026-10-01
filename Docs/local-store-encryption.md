@@ -4,8 +4,8 @@
 
 This page records the scheme chosen for issue #3152 and its reset contract. On `main`,
 history, dictionary and snippets use encrypted JSON envelopes. Clipboard indexes and images,
-the typed-line SQLite corpus, and raw audio recordings still have separate implementation
-work; their status must not be inferred from this shared scheme.
+and retry recordings use encrypted storage. The typed-line SQLite corpus still has separate
+implementation work; its status must not be inferred from this shared scheme.
 
 ## Decision
 
@@ -55,8 +55,9 @@ payload; the envelope is the only on-disk wrapper.
 
 JSON stores seal the complete encoded file on every write through the `PrivateFile` seam.
 The writer continues to use its atomic replacement, owner-only mode and backup exclusion,
-but writes only the envelope. SQLite, pictures and recordings do not go through that JSON
-seam and need their own changes under issues #3153, #3154 and #3156.
+but writes only the envelope. SQLite and pictures do not go through that JSON seam and need
+their own changes under #3153 and #3154. Retry recordings use the shared seal/open operations
+for independently authenticated PCM chunks under #3156.
 
 ## Reading, migration and failure
 
@@ -111,7 +112,8 @@ is replaced by an envelope, while malformed JSON and failed writes preserve the 
 Store-level tests must show that a Keychain failure is visible and does not produce an
 empty successful read.
 
-The shared envelope, history/dictionary/snippet migration and key-reset operation are in
-place. Handle SQLite and its `-wal`/`-shm` files separately in #3153; clipboard indexes and
-pictures in #3154; and raw audio recordings in #3156. Do not update user-facing docs to say
-those remaining stores are encrypted until their implementation and migration have shipped.
+The shared envelope, history/dictionary/snippet migration, clipboard index and picture
+encryption, retry-recording encryption, and reset-key revocation are in place. Handle the
+typed-line SQLite corpus and its `-wal`/`-shm` files separately in #3153. Do not update
+user-facing docs to say those files are encrypted until their implementation and migration
+ship.
