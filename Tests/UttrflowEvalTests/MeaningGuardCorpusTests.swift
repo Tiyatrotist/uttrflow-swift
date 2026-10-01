@@ -29,4 +29,25 @@ struct MeaningGuardCorpusTests {
         }
     }
 
+    @Test("as-spoken chat examples keep dialect verb forms")
+    func asSpokenExamplesKeepDialectVerbForms() {
+        let guarder = MeaningPreservationGuard()
+        let examples = [
+            ("we was just talking about you", "We was just talking about you"),
+            ("they was at the shop", "They was at the shop"),
+            ("i seen it yesterday", "I seen it yesterday"),
+            ("he come by yesterday", "He come by yesterday"),
+        ]
+        #expect(examples.count == 4)
+        for (spoken, expected) in examples {
+            #expect(
+                guarder.verdict(
+                    draft: Draft(text: spoken), rewritten: expected,
+                    grammar: DestinationFormatter.standard(for: .messaging).grammar
+                ).isAccepted,
+                "\(spoken) should preserve its spoken form"
+            )
+        }
+    }
+
 }
