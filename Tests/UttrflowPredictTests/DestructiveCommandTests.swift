@@ -584,4 +584,32 @@ struct DestructiveCommandTests {
     func systemReadsAreOrdinary(_ line: String) {
         #expect(!DestructiveCommand.matches(line, failClosedOnUnresolved: true), "\(line) should be ordinary")
     }
+
+    @Test(
+        "Every find action clause is judged, in any order, and any of -ok or -okdir is recognised.",
+        arguments: [
+            "find . -name '*.log' -exec echo {} \\; -exec rm -rf {} \\;",
+            "find . -exec echo {} \\; -exec rm -rf {} \\;",
+            "find . -exec echo {} \\; -exec rm {} +",
+            "find . -ok rm -rf {} \\;",
+            "find . -okdir rm -rf {} \\;",
+            "find . -exec rm -rf {} \\; -exec echo {} \\;",
+            "find . -exec echo {} + -exec rm -rf {} +",
+        ])
+    func everyFindActionClauseIsJudged(_ line: String) {
+        #expect(DestructiveCommand.matches(line), "\(line) should be destructive")
+    }
+
+    @Test(
+        "A find whose every action clause is ordinary stays ordinary, however many -exec it stacks.",
+        arguments: [
+            "find . -name '*.log' -exec echo {} \\;",
+            "find . -exec echo {} \\; -exec ls {} \\;",
+            "find . -exec ls {} + -exec echo {} \\;",
+            "find . -ok ls {} \\;",
+            "find . -okdir ls {} \\;",
+        ])
+    func ordinaryFindActionClausesStayOrdinary(_ line: String) {
+        #expect(!DestructiveCommand.matches(line), "\(line) should be ordinary")
+    }
 }
