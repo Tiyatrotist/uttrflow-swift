@@ -362,6 +362,11 @@ the answer here, however small the bug looks.**
    against the corpus (`make bakeoff`) and records the before and after.
 5. **Extendable by default.** Ask what the next case of the same kind needs, and make that
    a data or configuration change rather than another branch in the code.
+6. **One path per capability.** Never ship two implementations of the same job: two
+   language models for tidying, two scorers, two seam deciders, two lexicons. When a choice
+   is needed, measure the candidates against the corpus, keep one, and delete the other in
+   the same pull request. Two parallel paths are a standing maintenance cost that no
+   measurement ever pays back.
 
 The pull request states the root cause and why it cannot recur; a description that only
 says what changed is incomplete. This is a rule rather than a preference because a fix
