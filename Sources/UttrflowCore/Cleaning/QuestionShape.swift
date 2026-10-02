@@ -16,8 +16,29 @@ public enum QuestionShape {
         if opensHindiQuestion(openingClause) { return true }
         guard let start = trailingQuestionStart(in: shapes) else { return false }
         let clause = clauseAfterOpeners(Array(words[start...]))
+        // A comma-led relative pronoun introduces a non-restrictive clause, not a trailing question.
+        let precededByComma = start > 0 && shapes[start - 1].suffix.contains(",")
+        if isRelativeClause(clause, afterComma: precededByComma) { return false }
         return opensAQuestion(clause) && !runsOn(clause)
     }
+
+    /// Whether a clause opening with "which", "whom" or "whose" is a non-restrictive relative clause.
+    private static func isRelativeClause(_ clause: [String], afterComma: Bool) -> Bool {
+        guard afterComma, let first = clause.first, relativePronouns.contains(first),
+            clause.count >= 2
+        else { return false }
+        let second = clause[1]
+        // "Which is yours" reads as a copula, not an inverted question, when the next word names a predicate.
+        guard relativeClauseVerbs.contains(second) else { return false }
+        // An inverted subject pronoun after the verb is a question, not a relative clause.
+        return !subjects.contains(clause.dropFirst(2).first ?? "")
+    }
+
+    /// Words that introduce a non-restrictive relative clause after a relative pronoun.
+    private static let relativePronouns: Set<String> = ["which", "whom", "whose"]
+
+    /// Verbs that, following a relative pronoun after a comma, head a predicate rather than an inversion.
+    private static let relativeClauseVerbs: Set<String> = verbsBeforeSubject.union(lexicalQuestionVerbs)
 
     /// The word that closes a leading address or question lead-in before an inverted clause.
     public static func leadingQuestionOpenerIndex(in shapes: [WordShape]) -> Int? {
