@@ -80,6 +80,7 @@ struct QuestionShapeTests {
             "I sent it, which one do you want",
             "I have three, which is it",
             "Which version are you running",
+            "i forgot my umbrella, which one do you want",
         ])
     func commaLedWhichAsks(text: String) {
         #expect(QuestionShape.asks(shapes(text)))
