@@ -435,7 +435,8 @@ let package = Package(
         .testTarget(
             name: "UttrflowBakeoffTests",
             dependencies: [
-                "uttrflow-bakeoff", .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                "uttrflow-bakeoff", "UttrflowPredict",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             swiftSettings: sharedSwiftSettings
         ),
