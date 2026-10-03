@@ -283,6 +283,51 @@ Every row is checked by a command. Breaking one is a bug whatever it improves.
 | Agent commits on `main`, tags, or direct pushes to it | 0 | ruleset, `git log origin/main..main` |
 | Worktrees, branches, processes left by a session | 0 | `git worktree list` |
 
+## Mistakes that have already cost time
+
+Each rule below prevents a mistake that is in this repository's code or history. One rule, one
+line of evidence; the long form lives in the issue it came from.
+
+1. **A rule names the command that fails when it is broken, or says it is unenforced.** A gate
+   that cannot find its tool fails instead of passing, and a count quoted in this file is
+   checked by running the script in the same commit. *Evidence:* `Scripts/loose_match_audit.py`
+   skips its named-width check when `rg` is not on `PATH`, so the baseline count in this file
+   can be false without anything going red.
+2. **When `make verify` is red on `main`, the next merge is its repair.** *Evidence:* `ci.yml`
+   failed in each of its last 300 runs on `main` (checked 2026-10-03).
+3. **A key proposes; it never disposes.** A phonetic or other hash is a recall tool. Whether two
+   spellings are one word is decided by `MeaningPreservationGuard.sameForm`, and a helper that
+   compares letters is a shape match even when it hides inside a function. *Evidence:*
+   `ReadingRestraint.opensAlike` (a two-letter prefix test) rejects v/w and th/t pairs the
+   phonetic key had merged.
+4. **A table has one home, and dead code goes in the commit that stops using it.** A second
+   literal table with the same members is a bug. *Evidence:* sentence ends are defined in
+   several places, number words in three, and `IrregularVerbForms.swift` is unused but tested.
+5. **Show the measured value, and treat missing evidence as its own value.** Never default an
+   unknown to the strongest value, and never render a sentinel. *Evidence:* an override is
+   written with confidence 1.0 (`DictationPipeline.swift`), and the prompt prints "heard at
+   0.00" for words scored 0.97 (`PromptBuilder.swift`).
+6. **A configured threshold needs a live signal behind it, proved by a test that varies the
+   signal.** *Evidence:* `noSpeechThreshold` is set to 0.6 while WhisperKit 1.1.0 returns a
+   constant 0 for the probability it is compared with (`TextDecoder.swift`).
+7. **Read the artefact before you write the premise.** Before an issue says "X does not exist",
+   search the module's own vocabulary; before it proposes reusing a computed value, say what
+   the value depends on; before it says a library cannot do something, cite the access level
+   of the symbol. *Evidence:* a prompt-prefix cache proposed for reuse across audio depends on
+   the audio; a field observer reported missing exists in `CommitDetector.swift`.
+8. **A claim about speed or accuracy, in a document or in the interface, names the measurement
+   that makes it true and where its clock starts and stops.** State a threshold by naming the
+   constant, not by repeating its value. *Evidence:* a "length-independent wait" taken from a
+   harness that ends at "words ready" and inserts breaths into its audio.
+9. **A fix for behaviour that depends on its neighbours is proved by a property over every cut
+   of the corpus, not by the failing example.** A pass that reads its neighbours runs once over
+   the joined message. *Evidence:* `PieceJoiner.swift` has had 19 fix commits since the piece
+   design settled and two example tests of the invariant behind them.
+10. **A pull request that changes cleaning code may add corpus cases but does not edit an
+    existing case's expectation without naming the issue that decided it.** The instrument
+    must not move with the patch. A decision to decline an approach is written, with its
+    evidence, in `Docs/`.
+
 ## Working agreement
 
 1. **Surgical.** `git diff --stat origin/main` lists only files the task needs; 0 drive-by edits.
