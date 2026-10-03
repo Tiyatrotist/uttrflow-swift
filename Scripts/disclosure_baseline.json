@@ -1,10 +1,9 @@
 {
-  "total": 79,
+  "total": 74,
   "files": {
     ".githooks/commit-msg": 1,
     ".githooks/pre-push": 1,
     ".github/workflows/quality.yml": 3,
-    "AGENTS.md": 5,
     "Design/_gen_canvas.py": 1,
     "Design/_gen_predict.py": 1,
     "Design/canvas.json": 1,
