@@ -1,6 +1,7 @@
 import Foundation
 import OSLog
 import UttrflowContext
+import UttrflowCore
 import UttrflowPredict
 import UttrflowPredictStore
 
@@ -76,6 +77,16 @@ final class RejectedSuggestionRecorder {
 private struct RejectedSuggestion: Hashable {
     let text: String
     let surface: Surface
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(TextMatching.caseFoldedKey(text))
+        hasher.combine(surface)
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.surface == rhs.surface
+            && TextMatching.caseFoldedKey(lhs.text) == TextMatching.caseFoldedKey(rhs.text)
+    }
 }
 
 private struct PendingRejection {
