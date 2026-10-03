@@ -61,9 +61,29 @@ struct QuestionShapeTests {
             "the printer is jammed again who used it last",
             "please close the door will you be home tonight",
             "are you around yet i should be there in ten",
+            "the report is late, which is annoying",
+            "we moved the launch, which has upset the client",
+            "the server crashed twice, which can happen",
+            "the plan is simple, which does not help",
+            "I forgot my umbrella again, which is really annoying",
+            "the memory usage keeps growing, which looks like a leak in the cache layer",
+            "the author, whose work I had admired, retired last year",
+            "the man, whom I met yesterday, sent a follow-up note",
         ])
     func leaves(text: String) {
         #expect(!QuestionShape.asks(shapes(text)))
+    }
+
+    @Test(
+        "keeps a comma-led determiner \"which\" as a question opener",
+        arguments: [
+            "I sent it, which one do you want",
+            "I have three, which is it",
+            "Which version are you running",
+            "i forgot my umbrella, which one do you want",
+        ])
+    func commaLedWhichAsks(text: String) {
+        #expect(QuestionShape.asks(shapes(text)))
     }
 
     @Test(
