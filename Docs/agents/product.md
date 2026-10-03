@@ -145,15 +145,4 @@ unverified in the PR.
 1. Name the change a bug fix, a feature or a rewrite in the pull request.
 2. A feature records its measurement: corpus score for cleanup, precision and coverage for
    suggestions, bytes for the clipboard.
-3. A promise in `Docs/definition-of-done.md` changes only with a maintainer's approval.
-4. A maintainer decides releases, tags and version numbers. See `RELEASING.md`.
-
-## Issues
-
-1. Read the whole thread before branching for an issue.
-2. If anyone outside the maintainers asked for it or said they are working on it, it is theirs:
-   add the `claimed` label, reply, and choose other work.
-3. Never do a `good first issue` yourself, claimed or not; the label is inventory for
-   contributors. If a branch is already open against one, remove the label.
-4. `CONTRIBUTING.md` states what a claim guarantees a contributor; that promise is the project's
-   to keep.
+3. A promise in `Docs/definition-of-done.md` changes only after an issue agrees it.
