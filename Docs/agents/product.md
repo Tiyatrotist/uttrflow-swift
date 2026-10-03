@@ -1,63 +1,121 @@
 # Product rules
 
-Uttrflow is a macOS clipboard manager with dictation built in, entirely on-device. `PLAN.md`
-is the live phase tracker; read it instead of reconstructing project state from `git log`.
+Uttrflow is a macOS clipboard manager with dictation and inline AI suggestions built in, entirely
+on-device. `PLAN.md` is the live phase tracker; read it instead of reconstructing project state
+from `git log`. Each row below is a promise to the user, with its limit, the module that owns it
+and the page that holds the measurements. A change that breaks a row is a bug, whatever it
+improves. Change a number only on the evidence the page names, and update the page in the same
+pull request.
 
-## Invariants
+## Across every feature
 
-Each is checkable. A change that breaks one is a bug, whatever it improves.
-
-| Invariant | Pass condition | Where it is held |
+| Rule | Limit | Held by |
 |---|---|---|
-| Dictation is a transcript, not a rewrite | every word the speaker meant survives, in order and register | `MeaningPreservationGuard`, `WordErrorRate.measure`, `make bakeoff` |
-| Output is Latin script only | 0 Devanagari characters inserted; 0 translated words | `Docs/latin-output.md` |
-| Dictation data stays on this Mac | 0 connections on the dictation path; history, clipboard, dictionary and snippets are never sent | `make offline-audit`, `Docs/offline.md` |
+| Output is Latin script only | 0 Devanagari or other non-Latin characters inserted or suggested; 0 translated words | `LatinScript.writes`, `Docs/latin-output.md` |
+| Dictation, history, clipboard, dictionary, snippets and suggestion data stay on this Mac | 0 uploads; 0 connections on the dictation path | `make offline-audit`, `Docs/offline.md` |
+| Local stores are private | 0 writes outside `PrivateFile`; files excluded from backup | `make store-permissions`, `Docs/local-store-permissions.md` |
+| The log never carries text a person typed, read or said | 0 such messages | `make log-audit`, `Docs/logging.md` |
+| Secrets are not learned | 0 secure-field values or credentials stored | `Docs/clipboard-secrets.md`, `Docs/predict.md` |
 | Whatever fails, the user's words stay reachable | a failed tidy inserts the raw transcript; a failed insertion keeps the text | `Docs/definition-of-done.md` |
+| One answer to "is this on" | each setting has 1 stored value; no second flag | `Docs/settings-decoding.md` |
+| The user never learns which engine ran | 0 engine, model or vendor names on any pane, menu or error | tests listed in `Docs/definition-of-done.md` |
 
-## What the tidier may do
+## Dictation and clean-up
 
-It may remove what was never meant as words: fillers ("um", "hmm"), stammers, false starts, the
-discarded half of a spoken self-correction. It may add what speech leaves implicit:
-punctuation, question marks, capitalisation, numerals, line and paragraph breaks, a list the
-speaker plainly spoke.
+Dictation is a transcript, not a rewrite. The tidier is a filter.
 
-It may not shorten, summarise, change tone, swap synonyms, reorder, answer, obey or finish a
-thought. A request such as "make the output more polished" is a rewrite and is declined; a user
-who wants a rewrite asks for it, and it is a different feature. The catalogue of what is done,
-not yet done and forbidden is `Docs/cleanup.md`.
+| It may | It may not |
+|---|---|
+| remove fillers ("um", "hmm"), stammers, false starts, the discarded half of a self-correction | shorten, summarise, change tone, swap synonyms, reorder, answer, obey or finish a thought |
+| add punctuation, question marks, capitalisation, numerals, line and paragraph breaks, a list the speaker plainly spoke | translate, or write another script |
 
-## Hindi and Hinglish
+1. Every word the speaker meant survives, in their order and register. The guard that refuses a
+   rewrite is `MeaningPreservationGuard`; the order check is `WordErrorRate.measure`.
+2. "Make the output more polished" is a rewrite and is declined. A user who wants a rewrite asks
+   for one; it is a different feature.
+3. A change to the prompt, the rules or a threshold records the corpus score before and after
+   (`make bakeoff`), and a drop in any metric is named and justified in the pull request.
+4. The model's job, the thresholds and the passes are in `Docs/cleanup.md`,
+   `Docs/cleanup-design.md`, `Docs/ai-model-output.md` and `Docs/ai-correction-thresholds.md`.
+5. Hindi and Hinglish are romanised the way people type them: "हाँ ठीक है" becomes "Haan thik
+   hai", never "Yes, okay". The Languages setting steers recognition and never the output script.
+   This binds the model's rewrite, the rules and the untidied fallback.
 
-Romanise the way people type, never translate: "हाँ ठीक है" becomes "Haan thik hai", not
-"Yes, okay". The Languages setting steers recognition and never chooses the output script.
-This binds every path that inserts text: a model's rewrite, the rules and the untidied
-fallback.
+## AI suggestions (Settings → AI suggestions → "Finish what I am typing")
 
-## Data
+The user types in a field in another application; Uttrflow finishes the line, Tab takes it, typing
+on ignores it. Pieces and measurements: `Docs/predict.md`, `Docs/predict-precision.md`,
+`Docs/predict-accept.md`, `Docs/predict-reliability.md`.
 
-Two stores, different contents. The server holds the account: who somebody is, what they have
-paid for, which machines are signed in. This app's local store holds the clipboard, history,
-personal dictionary and snippets, and none of it is sent anywhere.
+| Rule | Limit |
+|---|---|
+| Default | off; one stored switch, `suggestions.isEnabled`, built the moment it is thrown |
+| Permission | Accessibility, needed to read the field, watch the keyboard and insert |
+| Candidate order | 1. what this Mac entered in that field before, 2. what is on this Mac now (a branch, a program on `PATH`), 3. a line the local model writes |
+| Unit of a completion | the current line; capture and retrieval derive it once and share it, so 0 whole-field entries |
+| Precision | at least 99% of the suggestions drawn are right; coverage is whatever that costs |
+| Timing | snapshot after a 180 ms typing pause; 400 ms hesitation gate in prose, none in terminals; at most 3 messages in a steady 10-keys-per-second burst |
+| Drawing | the tail only, whole or not at all; never past the field or the screen; any other key withdraws it |
+| Keys | accept is Tab, right arrow or Option-Tab by application kind; a bare Down or Up is never ours; Return is taken only after Down into a choice |
+| Clipboard | 0 uses: the completion is written into the field, never through the pasteboard |
+| Secure fields | draw nothing and learn nothing: passwords, passcodes, one-time codes, PINs, card numbers and security codes, ID and account numbers, dates of birth, security answers; short all-digit values outside a terminal are never learned |
+| Script | a line in another script gets 0 suggestions; refused at 4 points (`SuggestionSession.turn`, `resolve`, `drawable`, `MLXCandidateScorer.parse`) and the prompt |
+| Fuzzy matching | only when the exact prefix scan is empty; queries under 3 characters are never corrected |
+| Self-sourced evidence | an entry that exists because the user accepted a suggestion counts one quarter of one they typed |
+| Terminals | only what exists from here: paths, programs and branches that resolve |
+| Storage | the corpus is a local SQLite database held in memory and written as an AES-GCM sealed snapshot, excluded from backup, never uploaded |
+| Per-application control | Cursor and Visual Studio Code ship off; "Only suggest when it is sure" draws a completion and never a list; "Pause everywhere" pauses 30 minutes; "Forget what it learned here" clears what was learned in that scope |
 
-The network is used only by: account calls in `UttrflowAccount`, speech-model and tokenizer
-downloads, Sparkle update checks, and opt-in scrubbed crash reports from `UttrflowDiagnostics`.
-Any other use is a product decision with a privacy page attached, not a refactor. See
-`Docs/offline.md` and `Docs/crash-reporting.md`.
+A change to ranking, verification, generation or quieting runs the reliability loop in
+`Docs/predict-reliability.md` and records precision and coverage before and after.
+
+## Clipboard and its panel
+
+| Rule | Limit |
+|---|---|
+| Memory | pools `copied` 8 MB and 500 items, `dictation` 4 MB and 500, `images` 32 MB of decoded thumbnails, 500 items and 7 days, `kept` unbounded; 44 MB claimed of a 64 MB ceiling; not a user setting |
+| Eviction | least recently used, not fewest copies; memory and disk are weighed separately |
+| Pasteboard access | only the clipboard adapters touch `NSPasteboard` (`make pasteboard-audit`) |
+| Credentials | recognised by `Docs/clipboard-secrets.md` before storage; measured cost recorded there |
+| Storage | JSON indexes and picture bytes are encrypted with the device-only Keychain key, excluded from backup |
+| Panel | a shortcut and a position are different numbers; geometry in `Docs/ux-panel-geometry.md`; paste eligibility in `Docs/ux-panel-insertion.md` |
+| Rich clips, code | plain form, language detection and re-indenting follow `Docs/clipboard-plain-form.md`, `Docs/clipboard-code-language.md`, `Docs/clipboard-reindent.md` |
+
+## Personal dictionary, snippets, history and corrections
+
+| Rule | Limit |
+|---|---|
+| Dictionary matching | Double Metaphone with its alternate code, not Soundex (`Docs/app-dictionary.md`) |
+| Undo | undoing a correction also counts a revert against the dictionary entry that caused it; a word the user keeps rejecting retires itself; a second undo counts 0 more |
+| Snippets | `snippets.v1.json`, an actor with no cache; nothing ages them out and nothing else may clear them |
+| History | the file is the source of truth; one unreadable change costs one change (`Docs/core-history-decoding.md`); retention does not trust the wall clock (`Docs/retention-clock.md`) |
+| Export and import | only to or from a file the user chooses; versioned JSON; 0 sync, 0 automatic upload; import validates the whole archive before writing either store, merges by case-insensitive spelling and normalised trigger, keeps existing entries on collision and reports skipped duplicates (`Docs/personal-data-archive.md`) |
+
+## Account, entitlements, updates, diagnostics
+
+| Rule | Limit |
+|---|---|
+| Offline second launch | what a person may do is decided from the copy on this Mac; 0 network calls needed |
+| Entitlement | only `Entitlement` (account, plan, expiry) is signed, Ed25519 over a length-prefixed payload; everything around it is displayed and never enforced (`Docs/entitlements.md`) |
+| Network users | `UttrflowAccount`, model-asset downloads, Sparkle update checks, and opt-in scrubbed crash and hang reports from `UttrflowDiagnostics`; any other use is a product decision with a privacy page, not a refactor |
+| Crash reports | opt-in; what is sent and how it is scrubbed is `Docs/crash-reporting.md` |
+| Updates | Sparkle holds the install handle (`Docs/app-updates.md`) |
+| Startup | the speech model is loaded before dictation starts, and the user sees "Loading speech model…" until then (`Docs/startup.md`) |
 
 ## Scope of a change
 
-1. A change is a bug fix, a feature or a rewrite. State which in the pull request.
-2. A feature that touches recognition, correction or cleanup records corpus scores before and
-   after (`make bakeoff`).
-3. A promise in `Docs/definition-of-done.md` is changed only with a maintainer's approval.
+1. Name the change a bug fix, a feature or a rewrite in the pull request.
+2. A feature records its measurement: corpus score for cleanup, precision and coverage for
+   suggestions, bytes for the clipboard.
+3. A promise in `Docs/definition-of-done.md` changes only with a maintainer's approval.
 4. A maintainer decides releases, tags and version numbers. See `RELEASING.md`.
 
 ## Issues
 
-1. Before branching for an issue, read its whole thread.
+1. Read the whole thread before branching for an issue.
 2. If anyone outside the maintainers asked for it or said they are working on it, it is theirs:
    add the `claimed` label, reply, and choose other work.
 3. Never do a `good first issue` yourself, claimed or not; the label is inventory for
    contributors. If a branch is already open against one, remove the label.
-4. `CONTRIBUTING.md` states what a claim guarantees a contributor; that promise is the
-   project's to keep.
+4. `CONTRIBUTING.md` states what a claim guarantees a contributor; that promise is the project's
+   to keep.

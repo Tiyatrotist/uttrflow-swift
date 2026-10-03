@@ -28,6 +28,11 @@ branch, `main`, is always releasable; a release is a tag, not a branch.
 There is no staging branch and none should be proposed; the reasoning is in `CONTRIBUTING.md`.
 Releases are batched; see `RELEASING.md` and `Docs/releasing.md`.
 
+## Pull request title
+
+The title becomes the squash commit subject: imperative mood, at most 72 characters, no trailing
+period, no `fix:` or `feat:` prefix.
+
 ## Pull request description
 
 Five labelled fields, each filled:
@@ -39,6 +44,8 @@ Five labelled fields, each filled:
 | Measured | commands run and numbers, before and after |
 | Assumed | what was not verified |
 | Least sure of | the weakest part, for the reviewer to read first |
+
+Open the PR with the five fields written out; `gh pr create --fill` is 0 uses, because it skips them.
 
 Merging is not reviewing: nobody else read the change, so the description is what the reviewer
 has.
@@ -101,6 +108,7 @@ Each worktree carries its own `.build` of 0.5–5 GB.
 |---|---|
 | Stage paths by name; 0 uses of `git add -A`, `git add .`, `git commit -a` | `git status --short` shows only your paths |
 | 0 rewrites of pushed history; 0 rebases while another session commits | `ps aux \| grep -c '[c]laude.*--add-dir'` before any rebase |
+| 0 rebases, amends or force-pushes after the first push; bring in `main` with a merge | `git merge origin/main` |
 | 0 commits on `main` by an agent; changes arrive by pull request only | `git log origin/main..main` is empty |
 | 0 `Co-Authored-By` trailers | `git log origin/main..HEAD --format=%B \| grep -c Co-Authored-By` prints 0 |
 

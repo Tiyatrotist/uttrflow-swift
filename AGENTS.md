@@ -72,6 +72,17 @@ Every row is checked by a command. Breaking one is a bug whatever it improves.
 | Agent commits on `main`, tags, or direct pushes to it | 0 | ruleset, `git log origin/main..main` |
 | Worktrees, branches, processes left by a session | 0 | `git worktree list` |
 
+## Working agreement
+
+1. **Surgical.** `git diff --stat origin/main` lists only files the task needs; 0 drive-by edits.
+   0 behaviour-neutral reformatting, renames or reflows outside the lines the task changes.
+   Anything else you notice becomes a follow-up in the PR, not a change.
+2. **Goal first.** Before coding, write the success check: one command and its expected result.
+3. **Honest reports.** Every "passes" or "works" cites the command and its exit code. List each
+   check you did not run, and why. 0 claims without evidence.
+4. **Assume, then say so.** Ask only for the triggers under "Stop and ask"; for anything else
+   take the reasonable assumption and record it under "Assumed" in the PR.
+
 ## Stop and ask
 
 Stop, report what you saw, and wait, never force-fixing and never deleting state to make a
