@@ -80,7 +80,7 @@ Use these owners; do not reimplement them.
 | Is a word written out at its own boundaries? | `spelledInto`, `isWritten` | `make match-audit` |
 | Is a word still there, in the order spoken? | `WordErrorRate.measure` | `make match-audit` |
 | Is a scalar in the Latin range? | `UttrflowCore.LatinScript.isInLatinRange` | tests, `Docs/latin-output.md` |
-| Does text write only Latin? | `LatinScript.writes` in `UttrflowPredict`, built on the row above | tests, `Docs/latin-output.md` |
+| Does text write only Latin? | `LatinScript.writesOnlyLatin` in `UttrflowCore`, built on the row above | tests, `Docs/latin-output.md` |
 | What is the current line? | `FocusedFieldSnapshot.currentLine` | tests, `Docs/predict.md` |
 | Which application is a terminal? | `TerminalApplications` | tests, `Docs/predict.md` |
 | How much memory may the clipboard use? | `ClipboardBudget.standard` | `Docs/clipboard-budget.md` |
