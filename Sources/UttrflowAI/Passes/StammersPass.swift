@@ -56,7 +56,11 @@ public struct StammersPass: CleaningPass {
 
     /// Whether a number word sits immediately before or after the doubled pair at `i`.
     private static func surroundedByNumber(at i: Int, in live: [Int], draft: Draft) -> Bool {
-        if i >= 2, NumberWords.isNumber(draft.words[live[i - 2]].text.lowercased()) { return true }
+        if i >= 2 {
+            let prev = draft.words[live[i - 2]].text.lowercased()
+            if NumberWords.isNumber(prev) { return true }
+            if prev == "point" { return true }
+        }
         if i + 1 < live.count,
             NumberWords.isNumber(draft.words[live[i + 1]].text.lowercased())
         {
