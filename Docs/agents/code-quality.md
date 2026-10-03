@@ -3,8 +3,9 @@
 Readability, maintainability and design quality outrank speed of delivery. The principles below
 are non-negotiable on every change, without exception: **single source of truth (DRY), SOLID,
 KISS, YAGNI, design patterns where they remove duplication or branching, and modular low-level
-design.** Every rule has a measure, a limit and the way it is checked. "Pass" means the command
-exits 0; a rule with no command is checked in review with the measure shown.
+design.** Every rule has a measure, a limit and the way it is checked. "Pass" means the command exits 0.
+A rule whose check is a command is a gate; a rule whose check is reading the diff is a review
+rule, and the measure shown is what the reviewer counts.
 
 ## Gated limits
 
@@ -15,7 +16,8 @@ exits 0; a rule with no command is checked in review with the measure shown.
 | Line coverage per module | percent | at least 95 | `make coverage` |
 | Coverage exclusion size | lines per excluded file | at most 400, unless listed in `OVERSIZED_EXCLUSIONS` | `make exclusion-audit` |
 | Spelling matches decided by shape, per file | count | never above `Scripts/loose_match_baseline.json` | `make match-audit` |
-| Force unwraps, `try!`, implicitly unwrapped optionals | count | 0 | `make lint` |
+| Line length and indentation | characters, spaces | 110, 4 | `make lint` |
+| Force unwraps, `try!`, implicitly unwrapped optionals, leading underscores, non-`///` doc comments | count | 0 | `make lint` |
 | Compiler warnings | count | 0 | `make build` |
 | Swift language mode | version | 6, strict concurrency | `make build` |
 | Real email or postal addresses in fixtures | count | 0 | `make pii-audit` |
@@ -25,6 +27,9 @@ exits 0; a rule with no command is checked in review with the measure shown.
 | Typed text in log messages | count | 0 | `make log-audit` |
 | `swiftlint:disable` and `swift-format-ignore` markers | count | 0 | `grep -rE 'swiftlint:disable\|swift-format-ignore' Sources Tests` prints nothing |
 | Remote scripts piped into a shell | count | 0 | `grep -rE 'curl[^\|]*\|[[:space:]]*(ba)?sh' Scripts .github Makefile` prints nothing |
+| `@testable import` in `Sources/` | count | 0 | `grep -rE '@testable import' Sources` prints nothing |
+| XCTest in the test suite | count | 0; tests use Swift Testing (`import Testing`) | `grep -rlE 'import XCTest' Tests` prints nothing |
+| Test functions named after an issue number | count | 0 | `grep -rE 'func test[A-Za-z_]*(Issue\|issue)[0-9]+' Tests` prints nothing |
 | Files named `*_v2`, `*_new`, `*_old` or `* copy` | count | 0 | `git ls-files \| grep -c -E '_v2\|_new\.\|_old\.\| copy'` prints 0 |
 | Cleanup change, corpus score after versus before | each metric | no drop without the metric named and justified in the PR | `make bakeoff` |
 
@@ -41,12 +46,17 @@ grow when you touch it: extract first, then add. Today 134 of 4,861 functions ex
 | Nesting depth | at most 3 levels; use early returns | read the diff |
 | Parameters per function | at most 5; more means a value type | read the signature |
 | Primary types per file | 1, plus its extensions and private helpers | read the file |
+| New `default:` arm in a `switch` over our own enum | 0, so a new case forces every switch to handle it | `git diff origin/main \| grep -E '^\+\s*default:'` lists none for our own types (today: 120 arms) |
+| Boolean parameters that select behaviour | 0; use an enum or an option type | read the signature |
 | Requirements per protocol | at most 5 | read the protocol |
 | Access level | `internal` by default; `public` only for a cross-module API | `grep -n '^public\|^    public' <file>` |
 | Duplicated code | 0 blocks of 3 or more identical lines; 0 literal collections with the same members in 2 places | search before adding (below) |
+| URLs to chat, tracker or pull-request pages in comments, new | 0; link to a `Docs/` page | `git diff origin/main \| grep -E '^\+\s*//.*https?://'` prints nothing |
 | Commented-out code, new | 0 | `git diff origin/main \| grep -E '^\+\s*//\s*(let\|var\|func\|if\|for\|return\|guard)\b'` prints nothing |
 | UI frameworks in logic modules | 0 imports of `AppKit`, `ApplicationServices`, `SwiftUI` or `Cocoa` outside the platform modules | see "Modules" |
 | Modules a behaviour change edits | at most 3; more means the seam is wrong, so say why in the PR | `git diff --stat origin/main` |
+| New `@unchecked Sendable`, `nonisolated(unsafe)` or `Unsafe*Pointer` | 0 in logic modules; in a platform module 1 only with a one-line reason | `git diff origin/main \| grep -E '^\+.*(@unchecked Sendable\|nonisolated\(unsafe\)\|Unsafe[A-Za-z]*Pointer)'` (today: 30 and 59 uses) |
+| New singletons (`static let shared`) | 0; inject the dependency (today: 7) | `git diff origin/main \| grep -E '^\+.*static (let\|var) shared'` prints nothing |
 | Unused declarations added | 0; delete code in the commit that stops using it | search for the name |
 
 ## Single source of truth (DRY) — non-negotiable
@@ -72,7 +82,8 @@ The owners that exist today. Use them; do not reimplement them.
 | Are two spellings one word? | `MeaningPreservationGuard.sameForm` | `make match-audit` |
 | Is a word written out at its own boundaries? | `spelledInto`, `isWritten` | `make match-audit` |
 | Is a word still there, in the order spoken? | `WordErrorRate.measure` | `make match-audit` |
-| Does text use a non-Latin script? | `LatinScript.writes` | tests, `Docs/latin-output.md` |
+| Is a scalar in the Latin range? | `UttrflowCore.LatinScript.isInLatinRange` | tests, `Docs/latin-output.md` |
+| Does text write only Latin? | `LatinScript.writes` in `UttrflowPredict`, built on the row above | tests, `Docs/latin-output.md` |
 | What is the current line? | `FocusedFieldSnapshot.currentLine` | tests, `Docs/predict.md` |
 | Which application is a terminal? | `TerminalApplications` | tests, `Docs/predict.md` |
 | How much memory may the clipboard use? | `ClipboardBudget.standard` | `Docs/clipboard-budget.md` |
@@ -102,13 +113,20 @@ The owners that exist today. Use them; do not reimplement them.
 
 ## KISS and YAGNI
 
-1. Build the smallest design that passes the check you wrote first. A simpler design that
+1. Write the check first: the test or command that fails now and passes when the work is done.
+   Build the smallest design that passes it. A simpler design that
    passes is the one you ship.
 2. A protocol, generic, option, parameter or configuration key has at least 2 uses, or 1 use plus
    a test double that needs the seam. Otherwise delete it.
-3. Do not build for a case no caller has. Make the next case cheap (an extension point) only
+3. 0 compatibility shims, aliases or re-exports for code you removed; the app is not a library.
+   The only compatibility code is a migration of persisted data, and it names the stored version
+   it reads.
+4. Do not build for a case no caller has. Make the next case cheap (an extension point) only
    when 2 cases of the same kind already exist.
-4. Prefer a value type and a pure function to a class with state. Shared mutable state lives in
+5. Make invalid states unrepresentable. A closed set is an enum with one exhaustive `switch`, an
+   identifier is its own type, and a runtime check is added only where the type system cannot say
+   it. A test is not written for what a type or the compiler already guarantees.
+6. Prefer a value type and a pure function to a class with state. Shared mutable state lives in
    an actor, or behind one owner.
 
 ## Design patterns
@@ -153,7 +171,8 @@ responsibility, the modules it depends on and why none points the wrong way, its
 at most 10 declarations, its test target, and its page in `Docs/README.md`. The module meets the
 95% coverage floor from its first commit.
 
-A non-trivial change writes its design in the pull request before the diff: the responsibilities
+A non-trivial change (3 or more files, or 2 or more modules) writes its design in the pull request
+before the diff: the responsibilities
 of each type in one sentence each, the direction of every new dependency, the test seams.
 
 ## Readability and maintainability
@@ -162,20 +181,27 @@ of each type in one sentence each, the direction of every new dependency, the te
    Types are nouns, functions are verbs, booleans read as assertions (`isEmpty`, `hasFocus`).
    A name that needs a comment to explain it is renamed.
 2. **A literal that carries meaning is a named constant at its single owner.**
-3. **Errors are explicit.** A failure is typed and handled or propagated. A new `try?` carries a
+3. **Errors are explicit, and a fallback needs a promise behind it.** A silent substitute for a
+   failure hides the defect, so a failure propagates unless a product promise requires a
+   fallback (the user's words stay reachable, `Docs/definition-of-done.md`). Input from the
+   user, the screen, a model or the disk never reaches `fatalError`, `precondition` or `try!`.
+   **Errors are explicit.** A failure is typed and handled or propagated. A new `try?` carries a
    one-line reason for discarding the error, and ends in an unchanged user-visible state.
 4. **Concurrency is declared.** Shared mutable state is an actor or has one owner; strict
-   concurrency stays on.
+   concurrency stays on. 0 blocking I/O inside a lock or critical section; work that must follow
+   it is handed off after the lock is released.
 5. **The next case of the same kind** edits 1 data or configuration location and adds 1 test. If
    it edits more, the design has a branch where it needs a table.
 6. **Docs move with behaviour.** A measurement, platform trap or rejected approach goes on a
-   `Docs/` page in the same pull request.
+   `Docs/` page in the same pull request. A page is evidence, not authority: when code and a page
+   disagree, the code and a run decide, and the page is corrected in the same pull request.
 
 ## Fixing a defect
 
 Answer in the pull request, in this order, before the diff is read:
 
-1. **Why does the defect exist?** Name the code that is wrong, not the symptom.
+1. **Why does the defect exist?** Name the code that is wrong, not the symptom, and the evidence
+   that proves it: a failing test, a log line or a measurement. 0 unproven hypotheses.
 2. **Why was it not caught?** Name the missing test, audit or measurement, and add it. The new
    test fails on the original code and passes on the fix; show both runs.
 3. **What class of input does the fix cover?** If the answer is one phrase, one app, one fixture
@@ -232,18 +258,30 @@ a given match is right.
 
 ## Tests and coverage
 
-1. A test asserts behaviour a user or caller depends on, never code structure, and its name is a
+0. Tests are load-bearing. Deleting, skipping or weakening an existing assertion needs a
+   maintainer's approval; list each one the diff removes:
+   `git diff origin/main -- Tests \| grep -E '^-.*(#expect\|#require\|@Test)'`. A test that is
+   genuinely broken is surfaced in the PR, not edited until it passes.
+1. Prefer a real object, then a hand-written fake, and a mock last. A test asserts behaviour a user
+   or caller depends on, never code structure, and its name is a
    sentence. It fails only when our code changes.
 2. A test asserts exact values and counts, never a bound ("more than 0") or the mere absence of
    an error. It never asserts a value the test itself just set and stored.
 3. A test that executes lines without asserting behaviour is worse than the exclusion it hides.
+   A new test is run by name (`swift test --filter`), and the run shows it executed: a test that
+   is not discovered covers 0 lines.
 4. An exclusion lives in `Scripts/coverage_report.py` with a stated reason, printed on every
    run. Adding tests until the exclusion can go is the way out.
 5. A change to recognition, correction or cleanup runs `make bakeoff` and records the score
    before and after.
 6. A change to insertion, input or context reading is run once in a real target app, and the PR
    names the app and the result.
-7. Probe the real API before coding. A command-line tool is not a representative test bed for the
+7. A test leaves 0 side effects: every temporary file, `UserDefaults` suite and Keychain item it
+   creates is removed (`Docs/preferences-suites.md`).
+8. A test injects a fake for the Keychain, the pasteboard and `UserDefaults`; `make test` shows 0
+   macOS permission prompts. A new `sleep` to fix a race is 0: wait on the event, and a `sleep` that
+   must stay carries a one-line reason.
+9. Probe the real API before coding. A command-line tool is not a representative test bed for the
    Accessibility API; `Docs/` and `Sources/UttrflowInput/` carry the traps.
 
 ## Protected files
@@ -257,11 +295,15 @@ Change one only when the task is about it, and say so in the PR.
 | `Scripts/*_baseline.json` | written only by the script's `--update`; never by hand |
 | `Scripts/disclosure_audit.py` | never loosened |
 | `Resources/Uttrflow-Info.plist` version fields | released by a maintainer |
+| Bundle identifier and signing identity | unchanged across builds; Keychain items are tied to the signature (`Docs/account-keychain.md`) |
 | `Design/*.dc.html` artboards | regenerated from `Design/_gen_*.py`; edit the generator |
 
 ## Dependencies and workflows
 
+Dependencies are updated one at a time, `swift package update <name>`; 0 whole-lockfile updates.
 Adding a package dependency or a file in `.github/workflows/` needs explicit approval from a
-maintainer. Workflows today: CI, CodeQL (weekly), dependency review, Oracle sweep, Quality,
+maintainer. A dependency PR states its purpose, a licence compatible with `LICENSE`, whether the project is maintained, and
+the count of transitive dependencies it adds; a dependency that duplicates an existing one is
+refused. Workflows today: CI, CodeQL (weekly), dependency review, Oracle sweep, Quality,
 Release, Scorecard and Security. The project builds against macOS frameworks, so it runs on
 macOS runners only.

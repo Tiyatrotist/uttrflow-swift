@@ -7,6 +7,24 @@ and the page that holds the measurements. A change that breaks a row is a bug, w
 improves. Change a number only on the evidence the page names, and update the page in the same
 pull request.
 
+## Names
+
+One feature has up to three names. Use the user-facing name in UI text and pull-request titles, and
+the module name when you edit code.
+
+| User-facing name | Docs term | Modules |
+|---|---|---|
+| Dictation | pipeline, gestures | `UttrflowPipeline`, `UttrflowSpeech`, `UttrflowAudio` |
+| Clean-up (the tidier) | cleanup | `UttrflowAI`, `UttrflowCore` |
+| AI suggestions, "Finish what I am typing" | tab-to-complete, predict, the ghost | `UttrflowPredict`, `UttrflowPredictStore`, `UttrflowPredictCapture`, `UttrflowInput` (accept), `Uttrflow/Suggestion` (surface), `UttrflowLocalModel` (generation) |
+| Clipboard and its panel | clipboard store, panel | `UttrflowClipboard`, `UttrflowUX` (presentation) |
+| Personal dictionary | dictionary | `UttrflowDictionary` |
+| Snippets | snippet store | `UttrflowAI` |
+| History, corrections, Insights | history, accuracy | `UttrflowHistory`, `UttrflowUX` |
+| What is on the screen | context | `UttrflowContext` |
+| Account | session, entitlements | `UttrflowAccount` |
+| Settings | settings | `UttrflowSettings` |
+
 ## Across every feature
 
 | Rule | Limit | Held by |
@@ -17,6 +35,7 @@ pull request.
 | The log never carries text a person typed, read or said | 0 such messages | `make log-audit`, `Docs/logging.md` |
 | Secrets are not learned | 0 secure-field values or credentials stored | `Docs/clipboard-secrets.md`, `Docs/predict.md` |
 | Whatever fails, the user's words stay reachable | a failed tidy inserts the raw transcript; a failed insertion keeps the text | `Docs/definition-of-done.md` |
+| Reading the screen never makes the user wait | a context read is bounded at 100 ms (`MacContextEngine.budget`); 0 blocking Accessibility calls on the main thread | `Docs/context-budget.md` |
 | One answer to "is this on" | each setting has 1 stored value; no second flag | `Docs/settings-decoding.md` |
 | The user never learns which engine ran | 0 engine, model or vendor names on any pane, menu or error | tests listed in `Docs/definition-of-done.md` |
 
@@ -101,6 +120,25 @@ A change to ranking, verification, generation or quieting runs the reliability l
 | Crash reports | opt-in; what is sent and how it is scrubbed is `Docs/crash-reporting.md` |
 | Updates | Sparkle holds the install handle (`Docs/app-updates.md`) |
 | Startup | the speech model is loaded before dictation starts, and the user sees "Loading speech model…" until then (`Docs/startup.md`) |
+
+## Interface and design
+
+| Rule | Limit | Held by |
+|---|---|---|
+| Colours | one source, `BrandPalette`; a new colour is a new token there, never an inline literal | `Docs/redesign-tokens.md` |
+| Artboards match the app | 0 hex mismatches between `Design/_gen_*.py` and `BrandPalette`, light or dark | `Scripts/design_token_parity_audit.py` |
+| Contrast | every text and surface pair meets the audited ratio | `Scripts/design_contrast_audit.py` |
+| Screen contracts | sidebar, chrome, dictation, diagnostics, insights, identity and sign-in artboards match their presentation models | `make docs-audit` |
+| Artboard changes | edit the generator in `Design/`, regenerate; never edit a `*.dc.html` by hand | `make docs-audit` |
+| Appearance | every screen is checked in light and dark | the `-Dark` artboards |
+
+## Applications
+
+A change to insertion, input, context reading or suggestions names the kinds of application it
+affects (native, web or Electron, terminal, composing input method) and gives the evidence for
+each from a real application: `Docs/compatibility.md`, `Docs/insertion.md`,
+`Docs/context-accessibility.md`, `Docs/predict-ime.md`. A kind with no evidence is listed as
+unverified in the PR.
 
 ## Scope of a change
 

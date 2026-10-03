@@ -21,5 +21,8 @@ Each of these costs time the first time and is cheap once known.
   `git ls-files --cached --others --exclude-standard`.
 - **`secrets` is not available in a workflow step's `if:`.** The condition evaluates to nothing
   and every guarded step runs.
+- **Quote every glob in zsh.** `grep --include='*.swift'` unquoted aborts the whole command with
+  "no matches found" when nothing matches, and the failure reads like an empty result. Quote the
+  pattern, and quote paths that contain spaces.
 - **A shared `.build` corrupts under two concurrent builds.** Run `swift build` and
   `swift test` only inside your own worktree, and give parallel subagents their own.

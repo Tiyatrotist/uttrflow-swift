@@ -32,6 +32,7 @@ make lint          # style and documentation violations
 make format        # rewrite sources in canonical style
 make build         # compile every module
 make test          # run the test suite
+swift test --filter <TestCase>   # one test case or method, the fast loop
 make coverage      # tests plus the per-module coverage floor
 make bakeoff       # score every clean-up engine against the corpus
 make hooks         # install the commit-msg and pre-push gates (once per clone)
@@ -78,19 +79,40 @@ Every row is checked by a command. Breaking one is a bug whatever it improves.
    0 behaviour-neutral reformatting, renames or reflows outside the lines the task changes.
    Anything else you notice becomes a follow-up in the PR, not a change.
 2. **Goal first.** Before coding, write the success check: one command and its expected result.
-3. **Honest reports.** Every "passes" or "works" cites the command and its exit code. List each
+3. **No invention.** 0 invented APIs, defaults or behaviours: read the code or run it before
+   stating a fact about it.
+4. **Honest reports.** Every "passes" or "works" cites the command and its exit code. List each
    check you did not run, and why. 0 claims without evidence.
-4. **Assume, then say so.** Ask only for the triggers under "Stop and ask"; for anything else
+5. **Assume, then say so.** Ask only for the triggers under "Ask first"; for anything else
    take the reasonable assumption and record it under "Assumed" in the PR.
 
-## Stop and ask
+## Boundaries
 
-Stop, report what you saw, and wait, never force-fixing and never deleting state to make a
-command succeed, when you meet any of: a commit on `main`; a branch, worktree or pull request
-you did not create; a merge, rebase or cleanup you cannot complete cleanly; a secret, personal
-data or session-only text already committed or published; a gate that fails for a reason you
-cannot explain; or a change that needs a new workflow, a new dependency or a different promise
-in `Docs/definition-of-done.md`.
+**Always**
+- run `make verify` before every push and stage paths by name;
+- work in a worktree cut from freshly fetched `origin/main`, and read `git status -sb` before the
+  first edit so changes you did not make stay untouched;
+- write the five PR fields and name the command behind every claim;
+- run a change to input, insertion or context reading once in a real target app;
+- capture a long command's output to a file once and read the file; rerunning the command to
+  filter its output is 0.
+
+**Ask first**: stop, report what you saw, and wait; never force-fix and never delete state to
+make a command succeed.
+- a commit on `main`, or a branch, worktree or pull request you did not create;
+- a merge, rebase or cleanup you cannot complete cleanly;
+- a secret, personal data or session-only text already committed or published;
+- a gate that fails for a reason you cannot explain;
+- a new workflow, a new dependency, a protected file, or a different promise in
+  `Docs/definition-of-done.md`.
+
+**Never**
+- commit to `main`, tag, force-push, or skip a hook (`--no-verify`);
+- raise a baseline (except the reported `--after-merge` case) or loosen a gate;
+- add a `Co-Authored-By` trailer;
+- commit a secret, personal data or session-only text;
+- hand-edit a generated file;
+- merge a pull request unless a maintainer says so for that pull request.
 
 ## What must never reach a tracked file
 
@@ -102,11 +124,13 @@ what to do when something is already committed:
 
 ## Changing these files
 
-1. A new rule states a measure, a limit and a check command, or says it is judgement and names
+1. A new rule or gate names the mistake it prevents and has been seen to prevent it. Time
+   pressure never waives a gate.
+2. A new rule states a measure, a limit and a check command, or says it is judgement and names
    who checks it.
-2. It is present tense. It carries 0 incidents, 0 dates, 0 issue or pull-request numbers and 0
+3. It is present tense. It carries 0 incidents, 0 dates, 0 issue or pull-request numbers and 0
    anecdotes; `make docs-audit` fails on dates and on issue or pull-request numbers. Evidence
    goes on a `Docs/` page, linked in one line.
-3. It goes in the one file that owns it. A rule about a single module goes on that module's
+4. It goes in the one file that owns it. A rule about a single module goes on that module's
    `Docs/` page or in a nested `AGENTS.md` beside the code. Do not add a competing rule here.
-4. A rule that no longer prevents a mistake is deleted.
+5. A rule that no longer prevents a mistake is deleted.

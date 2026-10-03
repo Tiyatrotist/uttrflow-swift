@@ -6,6 +6,9 @@ branch, `main`, is always releasable; a release is a tag, not a branch.
 
 ## Branching and pull requests
 
+0. **Check for overlapping work first.** `gh pr list --state open --search "<file or keyword>"`
+   and `gh issue list --search "<keyword>"` return 0 pull requests or issues covering the same
+   change, or you link them in the description.
 1. **Cut every branch from `origin/main`**, freshly fetched.
 2. **Every PR targets `main`**: `gh pr create --base main`.
 3. **Open the PR with 0 commits behind `origin/main`:** `git rev-list --count HEAD..origin/main`
@@ -28,6 +31,43 @@ branch, `main`, is always releasable; a release is a tag, not a branch.
 There is no staging branch and none should be proposed; the reasoning is in `CONTRIBUTING.md`.
 Releases are batched; see `RELEASING.md` and `Docs/releasing.md`.
 
+## Change types and the evidence each needs
+
+| Type | Required evidence in the PR |
+|---|---|
+| Bug fix | the new test fails on the original code and passes on the fix; both runs shown |
+| Feature | tests for the behaviour, the `Docs/` page, and the measurement its area records |
+| Refactor | 0 behaviour change: no existing assertion edited or removed, all existing tests unchanged and green |
+| Docs only | `make docs-audit` and `make disclosure-audit` pass |
+| App shell, resources or entitlements (`Sources/Uttrflow/`, `Resources/`) | `make app-hardened` builds the bundle; `swift build` does not build the app |
+| Dependency or workflow | maintainer approval linked, and `make verify` green on the PR |
+
+Every commit in the branch builds, and `git log origin/main..HEAD --format=%s \| grep -c -E '^(fixup\|squash)!'`
+prints 0.
+
+## Pull request size
+
+One logical change per pull request, at most 400 changed lines excluding generated files,
+baselines and `Docs/`: `git diff --shortstat origin/main`. A larger change is split into a series
+that each pass `make verify`.
+
+## Issues
+
+1. **Issue first, then fix.** A bug fix has an issue: 0 fixes land without one, even for a one-line
+   change. Open it with the code trace and evidence before branching.
+2. **One issue, one branch, one pull request.** The description closes the issue it fixes, and a
+   bug found along the way gets its own issue instead of a drive-by change.
+3. **Security.** An issue that exposes user text, secrets, keystrokes, tokens, stored data or
+   supply-chain trust carries the `security` and `P0` labels. An exploitable vulnerability is
+   reported privately as `SECURITY.md` says, never in a public issue.
+4. **Platform floor.** A change to the minimum macOS or Xcode version is its own pull request.
+
+## Commit messages
+
+Subject: imperative mood, at most 72 characters (1 of the last 200 subjects exceeds it). Body: why,
+in 2 to 4 lines. A fix states the root cause and how the fix works. No `Co-Authored-By` trailer, and
+nothing from `AGENTS.local.md` or the session (`make disclosure-audit` rejects it).
+
 ## Pull request title
 
 The title becomes the squash commit subject: imperative mood, at most 72 characters, no trailing
@@ -35,7 +75,7 @@ period, no `fix:` or `feat:` prefix.
 
 ## Pull request description
 
-Five labelled fields, each filled:
+Five labelled fields, each filled and each at most 5 lines, with no filler and no praise:
 
 | Field | Content |
 |---|---|
@@ -108,6 +148,8 @@ Each worktree carries its own `.build` of 0.5–5 GB.
 |---|---|
 | Stage paths by name; 0 uses of `git add -A`, `git add .`, `git commit -a` | `git status --short` shows only your paths |
 | 0 rewrites of pushed history; 0 rebases while another session commits | `ps aux \| grep -c '[c]laude.*--add-dir'` before any rebase |
+| A failing test after your change is yours until it fails on a clean `origin/main` worktree | run it in a second worktree; never stash or revert your change to check |
+| 0 uses of `--no-verify` or any flag that skips a hook or a check | `git log` shows the hooks ran; a blocked push is fixed, not bypassed |
 | 0 rebases, amends or force-pushes after the first push; bring in `main` with a merge | `git merge origin/main` |
 | 0 commits on `main` by an agent; changes arrive by pull request only | `git log origin/main..main` is empty |
 | 0 `Co-Authored-By` trailers | `git log origin/main..HEAD --format=%B \| grep -c Co-Authored-By` prints 0 |
