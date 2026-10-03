@@ -2280,11 +2280,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 secure=\(outcome.intoSecureField, privacy: .public)
                 """)
             // A secure field's words are kept nowhere: not as the last transcript, in history, or as a clip.
-            guard let kept = outcome.wordsToKeep,
-                let record = DictationRecordMapping.record(for: state, when: Date(), id: UUID())
+            guard let record = DictationRecordMapping.record(for: state, when: Date(), id: UUID())
             else { break }
-            lastTranscript = kept
-            lastTranscriptID = record.id
             keep(record)
         case .failed(let notice):
             if notice.speechEngineKind == .appleSpeech,
@@ -2298,9 +2295,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 salvaged=\(notice.transcript != nil, privacy: .public) \
                 kept=\(notice.recovery == .retryFromRecording, privacy: .public)
                 """)
-            if notice.wordsToKeep != nil,
-                let record = DictationRecordMapping.record(for: state, when: Date(), id: UUID())
-            {
+            if let record = DictationRecordMapping.record(for: state, when: Date(), id: UUID()) {
                 // Not an empty set: unmeasured is a different fact from nothing changed.
                 keep(record)
             }
@@ -2350,8 +2345,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             userInfo: [.announcement: text, .priority: priority.rawValue])
     }
 
-    /// Keeps one dictation, echoed on screen at once because the menu cannot await the store.
+    /// Keeps one dictation, inserted or salvaged, and makes it what the last-transcript shortcuts act on.
     private func keep(_ record: DictationRecord) {
+        lastTranscript = record.text
+        lastTranscriptID = record.id
         recents.add(record)
         let days = settings.transcriptRetentionDays
         Task { [weak self] in
