@@ -402,7 +402,9 @@ let package = Package(
         ),
         .testTarget(
             name: "UttrflowInputTests",
-            dependencies: ["UttrflowInput", "UttrflowPredict", "UttrflowTestSupport"],
+            dependencies: [
+                "UttrflowClipboard", "UttrflowInput", "UttrflowPredict", "UttrflowTestSupport",
+            ],
             swiftSettings: sharedSwiftSettings
         ),
         .testTarget(
