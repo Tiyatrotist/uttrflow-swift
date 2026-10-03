@@ -27,6 +27,216 @@ rules are split by concern; read the file for the work you are doing before you 
 ## Commands
 
 ```bash
+python3 Scripts/disclosure_audit.py --show-terms     # see the lists decoded
+python3 Scripts/disclosure_audit.py --history        # every commit on every ref
+make hooks                                           # install both git hooks
+```
+
+The ratchet refuses a rise, and there is one sanctioned way past it. A document that
+states the rule has to name the category it forbids — this file says "competitor" six
+times — so `--update-baseline --absorb` records a rise and prints every one of them,
+which puts it in the baseline's diff where a reviewer sees it. Reach for it when the word
+is the subject, never to make a paragraph fit.
+
+**Never weaken this gate to make a commit pass**, and never add a path exemption to get
+past it. There is exactly one exemption in the file — the evaluation corpus, from the
+phrase patterns only, because a corpus of dictated English legitimately contains "churn
+rate" — and it does not cover names. A failing gate is the gate working.
+
+`--history` is what a repository is judged on before it is made public: a tree can be
+cleaned in one commit, and history cannot be cleaned at all.
+
+## Where this sits
+
+Four pieces: this app, `uttrflow-backend` (Go on ECS, the only thing that touches the
+server's database), `uttrflow-fe` (Next.js on ECS, the site), and `uttrflow-panel` (design
+source). Infrastructure is shared with the open-llm AWS account; the data is not.
+
+**Two databases, and they hold different things.** The server's holds an account: who
+somebody is, what they have paid for, which machines are signed in. This app's local store
+— under Application Support — holds the clipboard, the dictation history, the personal
+dictionary and the snippets, and **none of it is ever sent anywhere**. Transcriptions are
+local, full stop: the product's whole claim is that dictation happens on this Mac and stays
+here. If that ever changes it is a product decision with a privacy page attached, not a
+refactor.
+
+Network access is not limited to the account backend: sign-in/session calls live in
+`UttrflowAccount`, speech-model/tokenizer assets can be downloaded, and Sparkle checks for
+and downloads app updates. The networking audit and its limits are recorded in
+[`Docs/offline.md`](Docs/offline.md). Opt-in crash diagnostics also send scrubbed crash and
+hang reports to Sentry from `UttrflowDiagnostics`; see [`Docs/crash-reporting.md`](Docs/crash-reporting.md)
+for what is sent and why.
+
+## What dictation is for — NON-NEGOTIABLE
+
+**The goal is an accurate transcript of what the speaker said, cleaned of the noise of
+speaking and laid out the way they would have typed it. It is not a rewrite.**
+
+The tidier is a filter. It removes what was never meant as words — "um", "hmm", "aah",
+stammers, false starts, the discarded half of a spoken self-correction — and adds what
+speech leaves implicit: punctuation, question marks where a question was asked,
+capitalisation, numerals, line and paragraph breaks, a list when the speaker plainly
+spoke one. Every word the speaker meant survives, in their order and their register.
+
+It never shortens, summarises, changes tone, swaps synonyms, reorders, answers, obeys,
+or finishes a thought. Those are rewrites; a user who wants one asks for it, and it is
+a different feature. `Docs/cleanup.md` is the catalogue — three tiers, what is done,
+what is not yet, what is forbidden — and every change to the prompt or the rules is
+measured against the corpus before it lands (`make bakeoff`). An agent proposing "make
+the output more polished" is proposing a rewrite; the answer is no.
+
+## Latin letters only — NON-NEGOTIABLE
+
+**Uttrflow writes English/Latin script only. Hindi and Hinglish speech is romanised the way
+people type it, never written in Devanagari and never translated.**
+
+"हाँ ठीक है" is inserted as "Haan thik hai" — not in Devanagari, and not as "Yes, okay".
+Uttrflow is not a translator. This binds every path that inserts dictated text: a model's
+rewrite, the rules, and the untidied fallback. The Languages setting steers what recognition
+listens for; it never chooses the output script. `Docs/latin-output.md` is how it is enforced
+and measured: the romaniser the rules use, the guard that refuses a translation, and the last
+check before insertion. A change that lets Devanagari or a translation reach the screen is a
+bug, whatever it improves.
+
+## No patchy fixes: root cause and long-term design — NON-NEGOTIABLE
+
+**Find why the defect exists and fix that. A patch, a workaround or a special case is never
+the answer here, however small the bug looks.**
+
+1. **Root cause first.** Before changing code, say why the bug exists and why it was not
+   caught. A fix that makes one symptom go away and leaves the cause in place is rejected.
+2. **No special cases.** Nothing keyed to one phrase, one app, one fixture or one reported
+   sentence. If a rule cannot be stated for the whole class of input, the design is wrong.
+3. **Refactor what you meet.** Code that is the wrong shape for the change is reshaped into
+   a clean seam first: SOLID, DRY, and no abstraction that nothing needs yet (YAGNI). A
+   ground-up rewrite is acceptable when the evidence says the design cannot carry the
+   change; lowering the quality of the code is not acceptable under any deadline.
+4. **Measure before it lands.** A change to recognition, correction or cleanup is judged
+   against the corpus (`make bakeoff`) and records the before and after.
+5. **Extendable by default.** Ask what the next case of the same kind needs, and make that
+   a data or configuration change rather than another branch in the code.
+6. **One path per capability.** Never ship two implementations of the same job: two
+   language models for tidying, two scorers, two seam deciders, two lexicons. When a choice
+   is needed, measure the candidates against the corpus, keep one, and delete the other in
+   the same pull request. Two parallel paths are a standing maintenance cost that no
+   measurement ever pays back.
+
+The pull request states the root cause and why it cannot recur; a description that only
+says what changed is incomplete. This is a rule rather than a preference because a fix
+that treats the symptom is cheap today and is paid for by every agent that works in that
+file afterwards.
+
+## Rules that are not preferences
+
+**Never put a real email address or a real postal address in a fixture.** Use
+`example.com` and an invented street; `Scripts/pii_audit.sh` fails the build on anything
+else, and it runs first in `make verify` so you find out in two seconds rather than after
+a build.
+
+This is a rule because it has already happened twice. A stranger's real address — real
+complex, real road, real pincode — was the sample expansion for the "my address" snippet
+and had reached eleven files before anyone noticed; the owner's personal email was the
+account fixture. Both looked exactly like the sample data around them, which is the whole
+problem: fixture data has to look real to be useful, and the most available realistic
+value is the one you can see from where you are sitting. **This repository is being
+open-sourced, and a published address cannot be taken back by a later commit.**
+
+**Never decide that two spellings are the same word by their shape.** Not a prefix of
+*n* characters, not "is one of them a substring of the other". Ask
+`MeaningPreservationGuard.sameForm` whether two spellings are one word, `spelledInto` or
+`isWritten` whether a word is written out at its own boundaries, and
+`WordErrorRate.measure` whether it is still there *in the order it was said*. Those are
+the single home for each of those questions, and a local reimplementation is how this
+goes wrong.
+
+A shape match can only fail in one direction: it says "same" too easily, every one of
+these sits on a path whose failure is *acceptance*, and an acceptance leaves no trace —
+so the bug ships silently and no test that was written goes red. A three-character stem
+let "confirm" become "confuse" and "Aarav" become "Aaron" past the guard whose entire job
+is to refuse that; a two-character one decided whether a model had echoed the line.
+`Scripts/loose_match_audit.py` counts these per file against
+`Scripts/loose_match_baseline.json` and runs in `make verify`. It ratchets like the
+comment and disclosure baselines: a count may fall and may never rise.
+
+```bash
+make match-report                                            # what is left, with the line
+python3 Scripts/loose_match_audit.py --update                # re-record after tightening one
+python3 Scripts/loose_match_audit.py --update --after-merge  # only when main moved under you
+```
+
+One match is baselined today, and it is the shape with a legitimate answer:
+`CaretEchoPass` asks which completion targets begin with what the user has typed, where
+a prefix is the question rather than a stand-in for one. That is what the baseline is
+for — the audit reports the shape, and you say why this one is right.
+
+**Do not do a `good first issue` yourself, and never take an issue somebody has claimed.**
+Those labels are inventory for somebody else, not a task queue. Before opening a branch for
+any issue, read its thread: if anyone outside has asked for it or said they are on it, it is
+theirs — add the `claimed` label, reply, and find other work. If it carries `good first
+issue` and nobody has claimed it, still leave it alone. `CONTRIBUTING.md` sets out what a
+claim guarantees a contributor, and that is a promise this side has to keep. If a branch is
+already open against one, take the label off the issue rather than leaving free work
+advertised that is about to be closed underneath whoever picks it up.
+
+This is a rule because the project has already broken it. #51 was labelled *good first
+issue*; a first-time contributor asked for it on the thread and got no reply; a maintainer
+branch opened shortly afterwards, did the same work as part of something larger, and closed
+the issue on merge while their pull request (#62) sat unreviewed. A README section left
+alone for a week costs nothing next to that.
+
+**CI exists now, and it is `.github/workflows/`.** This reverses a rule that was absolute
+in the private repository, so it is worth saying why rather than leaving two agents to
+argue about it. The old rule was: never add a workflow, because macOS runners bill at ten
+times Linux, this project cannot use Linux (it builds against macOS 26 frameworks and
+drives the real Accessibility, clipboard and speech APIs), and fifty-one runs over two days
+ate 97% of a month's included minutes — after which jobs stopped starting silently, for
+days, while the repository went on looking green.
+
+Every part of that is still true except the part that mattered: **a public repository does
+not pay for standard runners.** The constraint was cost, the cost is gone, and the local
+gate — `.githooks/pre-push`, installed with `make hooks` — is still worth having because it
+is still the fastest answer.
+
+The tracked workflows are CI (build and test), CodeQL (weekly static analysis), dependency
+review (new dependency vulnerabilities and licences), Oracle sweep (exhaustive randomized
+clipboard-reader tests, nightly and on related pull requests), Quality (disclosure, workflow,
+spelling and link checks), Release (build and publish releases), Scorecard (supply-chain
+posture), and Security (secret, workflow and dependency scans). Adding a workflow requires
+explicit approval.
+
+**Never run `git add -A`, `git add .`, or `git commit -a`.** More than one agent works in
+this repository at once, and a blanket add sweeps another session's half-finished work
+into your commit under your message. This has happened four times. Stage the paths you
+touched, by name.
+
+**Never rewrite pushed history, and never rebase while another session is committing.**
+Check first: `ps aux | grep -c '[c]laude.*--add-dir'`.
+
+**Rebase onto `origin/main` before opening the pull request.** `main` moves under you while
+you work — it is where everything lands — so a branch cut this morning is behind by
+lunchtime, and rebasing is what keeps the diff in the pull request the change you actually
+made. Rebasing an unpushed branch is not rewriting pushed history,
+so the rule above does not conflict with this one.
+
+**Nothing an agent does touches `main` except through a pull request.** Not a direct
+push, not a rebase onto it, not a tag, not a docs commit that seems too small to matter.
+A ruleset blocks it at the server, so this is a description of what will happen rather
+than a request. If you find yourself with a commit on `main`, stop and say so rather
+than tidying it away.
+
+**Commit messages carry no `Co-Authored-By` trailer.** Not for an agent, not for a tool.
+The message says what the change does; who typed it is what `git log` already records.
+
+**Merging is not reviewing.** Nobody else read the change, so the pull request is where
+you write down what you would have wanted a reviewer to know: what was measured, what
+was assumed, and what you are least sure of. A merge that ends the conversation is worse
+than no merge at all.
+
+## Building and releasing
+
+`Docs/releasing.md` covers a release by hand; `RELEASING.md` covers the tag workflow. In short:
+
+```bash
 make verify        # the whole gate: audits, lint, build, tests, coverage, offline audit
 make lint          # style and documentation violations
 make format        # rewrite sources in canonical style
