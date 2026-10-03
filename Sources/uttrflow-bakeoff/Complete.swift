@@ -303,7 +303,7 @@ struct Complete: AsyncParsableCommand {
             role: fixture.situation.application == "Terminal" ? "AXTextArea" : "AXTextView",
             scope: fixture.situation.application == "Terminal" ? directory : nil)
         let store = FixturePredictionStore(candidates: fixture.seededCandidates)
-        let index = EnvironmentIndex(reader: FixtureArbitrationMachine(fixture.machine ?? [:]))
+        let index = EnvironmentIndex(reader: FixtureArbitrationMachine(answers: fixture.machine ?? [:]))
         for lookup in Verification.offerings(
             for: CompletionToken(fixture.typed) ?? CompletionToken(leading: "", token: ""))
         {
