@@ -551,6 +551,14 @@ struct SignOffTests {
                 == "Thanks, Sam Collins")
     }
 
+    @Test("A recipient name in the typed text is not treated as the sender's signature")
+    func aRecipientNameDoesNotBecomeTheSendersName() {
+        #expect(
+            SignOff.unsigned(
+                "Thanks Rahul, regards, Rahul", typed: "Thanks Rahul, ", ownLines: [])
+                == "Thanks Rahul, regards,")
+    }
+
     @Test("A closing after a greeting or sentence is not signed with an invented name")
     func anInventedNameAfterEarlierCommasIsCut() {
         #expect(
