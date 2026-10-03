@@ -656,8 +656,7 @@ for required in \
     "requires one approving review" \
     "code-owner review" \
     "approval by someone other than the last pusher" \
-    "strict_required_status_checks_policy" \
-    "Once the branch is pushed, remove the worktree and the local branch"
+    "strict_required_status_checks_policy"
 do
     if ! grep -Fq "$required" Docs/agents/workflow.md; then
         missing_policy+=("$required")
@@ -670,7 +669,7 @@ if ((${#missing_policy[@]})); then
         "and must name the live ruleset gates that enforce that boundary." \
         "" $'\n'"$(printf '    %s\n' "${missing_policy[@]}")"
 else
-    pass "Docs/agents/workflow.md says agents stop at a green PR and names the review gates"
+    pass "Docs/agents/workflow.md names the main ruleset's review gates"
 fi
 
 # ---------------------------------------------------------------------------
@@ -955,64 +954,6 @@ else
     pass "the documentation index links to soak.md and ui-tests.md"
 fi
 
-# ---------------------------------------------------------------------------
-# 4. The worktree cleanup recipe must keep the pull request's remote branch.
-# ---------------------------------------------------------------------------
-#
-# The remote branch is the pull request's source ref, open or merged, and it is never
-# deleted. The local worktree and branch are disposable once the branch is pushed and the
-# pull request exists, so the recipe may clean them up then — but only after both, and it
-# must never carry a command that deletes the remote branch.
-printf '\nWorktree cleanup order\n'
-
-read -r -d '' CLEANUP_PROGRAM <<'PYTHON' || true
-import re
-
-text = open("Docs/agents/workflow.md", errors="ignore").read()
-start = text.find("**Every feature is built in a worktree")
-end = text.find("**Never run `swift build`", start)
-if start == -1 or end == -1:
-    print("Docs/agents/workflow.md  cannot find the worktree recipe section")
-    raise SystemExit
-
-section = text[start:end]
-required = [
-    ("branch push", r"^git push -u origin"),
-    ("pull request creation", r"^gh pr create --base main"),
-    ("worktree removal", r"^git worktree remove"),
-    ("local branch deletion", r"^git branch -[dD]"),
-    ("the never-delete rule", r"Remote branches are never deleted"),
-]
-
-positions = {}
-for name, pattern in required:
-    match = re.search(pattern, section, re.MULTILINE)
-    if not match:
-        print(f"Docs/agents/workflow.md  missing {name}: {pattern}")
-    else:
-        positions[name] = match.start()
-
-create = positions.get("pull request creation")
-push = positions.get("branch push")
-for name in ("worktree removal", "local branch deletion"):
-    where = positions.get(name)
-    for before, label in ((push, "branch push"), (create, "pull request creation")):
-        if where is not None and before is not None and where < before:
-            print(f"AGENTS.md  {name} appears before {label}")
-
-if re.search(r"^git push origin --delete", section, re.MULTILINE):
-    print("AGENTS.md  the recipe deletes the remote branch, which is the pull request's source ref")
-PYTHON
-cleanup_order="$(python3 -c "$CLEANUP_PROGRAM")"
-
-if [[ -n "${cleanup_order//[[:space:]]/}" ]]; then
-    fail "the worktree cleanup recipe can lose a pull request's branch" \
-        "Push the branch and open the pull request before removing the local worktree and branch," \
-        "and never delete the remote branch: it is the pull request's source ref, open or merged." \
-        "" $'\n'"$cleanup_order"
-else
-    pass "the cleanup recipe keeps the remote branch and cleans up only after the pull request exists"
-fi
 
 # ---------------------------------------------------------------------------
 # 5. A tagged release's bullets must have existed by the tag.

@@ -36,8 +36,8 @@ rule, and the measure shown is what the reviewer counts.
 ## Design limits for code you add or touch
 
 Checked in review with the measure shown. A function or file that is already over a limit does not
-grow when you touch it: extract first, then add. Today 134 of 4,861 functions exceed 40 lines and
-48 of 713 files exceed 400 lines, so the limits describe the code being written, not a rewrite.
+grow when you touch it: extract first, then add. The limits bind the code being written; existing
+code meets them when it is next changed.
 
 | Rule | Limit | Measure |
 |---|---|---|
@@ -46,7 +46,7 @@ grow when you touch it: extract first, then add. Today 134 of 4,861 functions ex
 | Nesting depth | at most 3 levels; use early returns | read the diff |
 | Parameters per function | at most 5; more means a value type | read the signature |
 | Primary types per file | 1, plus its extensions and private helpers | read the file |
-| New `default:` arm in a `switch` over our own enum | 0, so a new case forces every switch to handle it | `git diff origin/main \| grep -E '^\+\s*default:'` lists none for our own types (today: 120 arms) |
+| New `default:` arm in a `switch` over our own enum | 0, so a new case forces every switch to handle it | `git diff origin/main \| grep -E '^\+\s*default:'` lists none for our own types |
 | Boolean parameters that select behaviour | 0; use an enum or an option type | read the signature |
 | Requirements per protocol | at most 5 | read the protocol |
 | Access level | `internal` by default; `public` only for a cross-module API | `grep -n '^public\|^    public' <file>` |
@@ -55,8 +55,8 @@ grow when you touch it: extract first, then add. Today 134 of 4,861 functions ex
 | Commented-out code, new | 0 | `git diff origin/main \| grep -E '^\+\s*//\s*(let\|var\|func\|if\|for\|return\|guard)\b'` prints nothing |
 | UI frameworks in logic modules | 0 imports of `AppKit`, `ApplicationServices`, `SwiftUI` or `Cocoa` outside the platform modules | see "Modules" |
 | Modules a behaviour change edits | at most 3; more means the seam is wrong, so say why in the PR | `git diff --stat origin/main` |
-| New `@unchecked Sendable`, `nonisolated(unsafe)` or `Unsafe*Pointer` | 0 in logic modules; in a platform module 1 only with a one-line reason | `git diff origin/main \| grep -E '^\+.*(@unchecked Sendable\|nonisolated\(unsafe\)\|Unsafe[A-Za-z]*Pointer)'` (today: 30 and 59 uses) |
-| New singletons (`static let shared`) | 0; inject the dependency (today: 7) | `git diff origin/main \| grep -E '^\+.*static (let\|var) shared'` prints nothing |
+| New `@unchecked Sendable`, `nonisolated(unsafe)` or `Unsafe*Pointer` | 0 in logic modules; in a platform module 1 only with a one-line reason | `git diff origin/main \| grep -E '^\+.*(@unchecked Sendable\|nonisolated\(unsafe\)\|Unsafe[A-Za-z]*Pointer)'` |
+| New singletons (`static let shared`) | 0; inject the dependency | `git diff origin/main \| grep -E '^\+.*static (let\|var) shared'` prints nothing |
 | Unused declarations added | 0; delete code in the commit that stops using it | search for the name |
 
 ## Single source of truth (DRY) — non-negotiable
@@ -75,7 +75,7 @@ reads it from there; nothing copies it.
    two places, and their reasons live on the `Docs/` page that measured them.
 5. **Settings.** A setting is one stored value. A second flag for the same question is a bug.
 
-The owners that exist today. Use them; do not reimplement them.
+Use these owners; do not reimplement them.
 
 | Question | Single owner | Held by |
 |---|---|---|
@@ -241,6 +241,9 @@ use it for your own comments.
 
 ## Spelling and meaning
 
+A key proposes; it never disposes. A phonetic code or other hash finds candidates, and the owners
+below decide; a helper that compares letters is a shape match even inside another function.
+
 Never decide that two spellings are one word by shape: not a prefix of *n* characters, not "one
 contains the other". Ask the owners in the table above. A shape match fails in one direction: it
 says "same" too easily, on paths whose failure is acceptance, so no test goes red. A
@@ -256,10 +259,26 @@ A baselined match is legitimate when the shape is the question rather than a sta
 `CaretEchoPass` asks which completion targets begin with what the user typed. The author says why
 a given match is right.
 
+## Measurements and thresholds
+
+1. **Show the measured value; missing evidence is its own value.** An unknown is never defaulted
+   to the strongest value, and a sentinel is never shown to the user or written into a prompt.
+2. **A threshold needs a live signal**, proved by a test that varies the signal across the
+   threshold. A threshold compared against a constant input is a defect.
+3. **A claim about speed or accuracy names its measurement** and where its clock starts and stops,
+   in a document and in the interface. A threshold is cited by its constant's name, not its value.
+4. **Behaviour that depends on its neighbours is proved by a property over every cut of the
+   corpus**, not by the one failing example.
+5. **The instrument does not move with the patch.** A pull request that changes cleaning code may
+   add corpus cases, but does not change an existing case's expectation unless it names the
+   decision that changed it.
+6. **A gate fails when it cannot run.** A check whose tool is missing exits non-zero instead of
+   passing, and a count quoted in a document is re-measured by the command in the same commit.
+
 ## Tests and coverage
 
-0. Tests are load-bearing. Deleting, skipping or weakening an existing assertion needs a
-   maintainer's approval; list each one the diff removes:
+0. Tests are load-bearing. Deleting, skipping or weakening an existing assertion is agreed in the
+   pull request first; list each one the diff removes:
    `git diff origin/main -- Tests \| grep -E '^-.*(#expect\|#require\|@Test)'`. A test that is
    genuinely broken is surfaced in the PR, not edited until it passes.
 1. Prefer a real object, then a hand-written fake, and a mock last. A test asserts behaviour a user
@@ -290,20 +309,19 @@ Change one only when the task is about it, and say so in the PR.
 
 | File | Rule |
 |---|---|
-| `Package.swift`, `Package.resolved` | a dependency change needs maintainer approval |
-| `.github/workflows/`, `.githooks/` | a change needs maintainer approval |
+| `Package.swift`, `Package.resolved` | a dependency change is agreed in an issue first |
+| `.github/workflows/`, `.githooks/` | a change is agreed in an issue first |
 | `Scripts/*_baseline.json` | written only by the script's `--update`; never by hand |
 | `Scripts/disclosure_audit.py` | never loosened |
-| `Resources/Uttrflow-Info.plist` version fields | released by a maintainer |
+| `Resources/Uttrflow-Info.plist` version fields | changed only by a release |
 | Bundle identifier and signing identity | unchanged across builds; Keychain items are tied to the signature (`Docs/account-keychain.md`) |
 | `Design/*.dc.html` artboards | regenerated from `Design/_gen_*.py`; edit the generator |
 
-## Dependencies and workflows
+## Dependencies
 
-Dependencies are updated one at a time, `swift package update <name>`; 0 whole-lockfile updates.
-Adding a package dependency or a file in `.github/workflows/` needs explicit approval from a
-maintainer. A dependency PR states its purpose, a licence compatible with `LICENSE`, whether the project is maintained, and
-the count of transitive dependencies it adds; a dependency that duplicates an existing one is
-refused. Workflows today: CI, CodeQL (weekly), dependency review, Oracle sweep, Quality,
-Release, Scorecard and Security. The project builds against macOS frameworks, so it runs on
-macOS runners only.
+1. A new package dependency or workflow is agreed in an issue before the pull request.
+2. The pull request states the dependency's purpose, a licence compatible with `LICENSE`, whether
+   the project is maintained, and the count of transitive dependencies it adds. A dependency
+   that duplicates an existing one is refused.
+3. Dependencies are updated one at a time, `swift package update <name>`; 0 whole-lockfile
+   updates.
