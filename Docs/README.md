@@ -157,6 +157,12 @@ place to start; if you want to change it, [CONTRIBUTING](../CONTRIBUTING.md) and
 | [preferences-suites.md](preferences-suites.md) | Temporary `UserDefaults` suites in tests |
 | [ux-test-harness.md](ux-test-harness.md) | UX test harness traps |
 | [account-tests-keychain-adhoc.md](account-tests-keychain-adhoc.md) | Ad-hoc-signed builds and the data-protection keychain |
+| [agents/code-quality.md](agents/code-quality.md) | Code quality: limits, checks, comments, tests |
+| [agents/product.md](agents/product.md) | Product rules and invariants |
+| [agents/workflow.md](agents/workflow.md) | Branches, pull requests, sessions |
+| [agents/public-boundary.md](agents/public-boundary.md) | What must never reach a tracked file |
+| [disclosure-gate.md](disclosure-gate.md) | The disclosure gate |
+| [tooling-traps.md](tooling-traps.md) | Tooling traps |
 
 Two pages here tell an operator to run a command in the private backend repository:
 [operator-runbook.md](operator-runbook.md) and [releasing.md](releasing.md). Everything else

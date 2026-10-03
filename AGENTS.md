@@ -1,277 +1,30 @@
-# Working in this repository
+# AGENTS.md
 
-<!-- release-policy:v4 -->
-## Branching & Release Policy — NON-NEGOTIABLE
+Uttrflow is a macOS clipboard manager with dictation built in, entirely on-device. This file is
+the entry point for every agent (Claude, Codex, Cursor, Copilot, any other) and every
+contributor. `CLAUDE.md`, `.cursor/rules/` and `.github/copilot-instructions.md` only point
+here.
 
-`AGENTS.md` is the one rulebook for every agent — Claude, Codex, Cursor, Copilot or any
-other. `CLAUDE.md`, `.cursor/rules/` and `.github/copilot-instructions.md` only point here;
-put new rules in this file, never in theirs. There is no `beta` branch, and agents do not
-merge their own pull requests.
+Each rule states a measure, a limit and the command that checks it. "Pass" means exit 0. The
+rules are split by concern; read the file for the work you are doing before you start it.
 
-**One long-lived branch, `main`, always releasable. A release is a tag, not a branch.**
+## Read first
 
-```
-branch / fork  ──PR──>  main  ──tag v26.0926.0-rc.1──>  prerelease  (soak)
-   (CI runs)          (CI runs)  ──tag v26.0926.0────>  release
-```
+1. This file.
+2. `AGENTS.local.md`, if it exists. It is private and gitignored; see
+   [public-boundary](Docs/agents/public-boundary.md#local-rules-file).
+3. The file below that matches your work.
+4. [`Docs/README.md`](Docs/README.md), then the page for the module you change.
 
-1. **Cut every branch from `origin/main`.** Short-lived. A branch that lives for weeks is a
-   merge conflict being written slowly.
-2. **Every PR targets `main`** — `gh pr create --base main`. There is no second trunk to
-   choose between any more.
-3. **CI runs on every pull request and must be green.** `.github/workflows/ci.yml` runs
-   `make verify` and builds the app bundle; dependency review and the text checks run
-   beside it. CodeQL is weekly, not per-PR, and gates nothing.
-   Run `make verify` locally anyway — it is the same command, and finding out here is
-   faster than finding out in a queue.
-4. **Nobody pushes to `main` directly.** A ruleset blocks force-pushes and deletions,
-   and everything reaches `main` through a pull request. Never force-push `main`, and
-   never tag: tagging is the release, and the release is the operator's.
-5. **An agent stops at a green pull request.** The live `main` ruleset requires one approving review.
-   It also requires code-owner review, resolution of review threads, dismissal of stale
-   reviews after a push, and approval by someone other than the last pusher. The branch
-   must be up to date with `main`, enforced by `strict_required_status_checks_policy`, so
-   what merges is what was tested.
-6. **Green means green, not nearly.** A check still running is not a passed check. If
-   you merge past a failing or unfinished check, you are doing it because the operator
-   said to, and you say so plainly when you report it — never silently with `--admin`.
-7. **Your implementation task is done when the pull request is open, green, and documented
-   for review — and the session has ended clean** (next section). Do not tag, and do not
-   release.
-
-**Releases stay batched and infrequent.** That has not changed; only the mechanism has.
-`main` accumulates merged work, and the operator decides when a commit on it becomes
-`v26.0926.0`. See `RELEASING.md`.
-
-**Why there is no staging branch, since an agent reasoning from first principles will
-propose reinstating one.** The gate belongs on the pull request, not after it. A staging
-branch tests code that has *already been merged* — the bad change is in a shared branch,
-blocking everything else waiting there, and somebody has to notice and back it out. CI on a
-PR tests the merge result *before* the merge is allowed, so it never lands. Same check,
-earlier. What a staging branch additionally gave — a build real people run before it is the
-default — is what `-rc` tags give, without a permanent branch to keep in sync.
-
-Read this before doing anything. Most of it exists because the obvious path was tried,
-cost something, and was abandoned — so an agent that reasons from first principles will
-propose things that have already been rejected here for reasons the code does not show.
-
-`PLAN.md` is the live phase tracker. Read it rather than reconstructing the state of the
-project from `git log`.
-
-## Every session ends clean — NON-NEGOTIABLE
-
-**A session that starts work finishes it: it leaves no worktree, no local branch, no build
-output and no running process behind.** Dozens of agents work here; each worktree carries
-its own `.build` (0.5–5 GB), and 185 abandoned ones once held 89 GB of disk. An abandoned
-worktree is indistinguishable from work in progress, so the next session cannot safely
-remove it — only the session that made it can.
-
-1. **Worktrees live in `.claude/worktrees/<name>` and nowhere else** — not beside the repo,
-   not in a scratchpad or `/tmp`. One place is what makes leftovers findable.
-2. **Never end with work only on this disk.** Commit and push it to `origin/<name>` — a
-   draft pull request is fine — or, if it is abandoned, say so and discard it. Uncommitted
-   work in a worktree is lost work that nobody else may delete.
-3. **Once the branch is pushed, remove the worktree and the local branch** — as soon as the
-   pull request is open, not when it merges. `origin/<name>` is what keeps it reachable.
-4. **Stop what you started** — dev servers, `make` runs in the background, simulators,
-   monitors, scheduled loops — and delete scratch output outside the worktree.
-5. **Close the thread.** In the Claude desktop app, archive the session; in any other tool,
-   end the conversation. An open idle thread holds its worktree and its slot.
-6. **Check before you say done.** `git worktree list` shows nothing of yours, and
-   `git branch --list <name>` prints nothing.
-
-**Never remove a worktree you did not create** unless it is clean, every commit on it is on
-`origin`, and no process is working in it (`lsof -a -d cwd | grep <path>`). If any of the
-three fails, it is somebody's work: leave it and report it.
-
-**Every feature is built in a worktree cut from `origin/main`, then merged into `main` by
-PR.** The feature branch exists only for the length of the work, and nothing reaches `main`
-except through a reviewed pull request — see the release policy at the top of this file.
-
-```bash
-git fetch origin
-git worktree add .claude/worktrees/<name> -b <name> origin/main   # from main, not from HEAD
-cd .claude/worktrees/<name>                                       # and stay there
-export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-… work, commit by name, `make verify` before every push …
-# the pre-push hook runs `make verify` for main; CI runs it once more on the PR
-git push -u origin <name>
-gh pr create --base main --head <name>
-cd "$(git rev-parse --git-common-dir)/.."                        # back to the main checkout
-git worktree remove .claude/worktrees/<name>                      # refuses if anything is unsaved
-git branch -d <name> 2>/dev/null || git branch -D <name>          # safe: the commits are on origin
-# no `git push origin --delete` — the remote branch stays, always
-```
-
-**Remote branches are never deleted, merged or not.** `origin/<name>` is the pull request's
-source ref, and it is what makes the local copies disposable. When CI or review asks for a
-change after cleanup, re-fetch it rather than opening a new branch or pull request:
-
-```bash
-git fetch origin
-git worktree add .claude/worktrees/<name> origin/<name>
-```
-
-The isolation is the point, and it is not bureaucracy: more than one agent works in this
-repository at once and a shared `.build` corrupts under two concurrent builds, which is
-why `swift build` in the main checkout while anyone else is working is separately
-forbidden next. A worktree gives the work its own `.build`, its own index, and a `git
-status` that shows only what this task changed — which is what makes staging paths by
-name possible at all.
-
-**Never run `swift build` or `swift test` in the main checkout while subagents are
-working.** They share `.build` and corrupt each other. Give parallel agents
-`isolation: "worktree"` — or, when the session's working directory is not itself a git
-repository and that fails, cut the worktrees by hand with the recipe above and point each
-agent at one by absolute path.
-
-**`export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`** before any swift
-command, in every shell and in every agent prompt. A hook or a subagent does not inherit
-it from an interactive profile.
-
-## Comments: one line, present tense — NON-NEGOTIABLE
-
-**A comment is one line. A doc comment is one line. Both say what the code does now.**
-
-```swift
-/// Refuses audio with no speech in it, so silence is not transcribed as words.
-```
-
-Not:
-
-```swift
-/// Refuses audio with no speech in it.
-///
-/// This used to return quietly to idle, which was indistinguishable from the app
-/// being broken — the user held the key, spoke, let go, and nothing happened. It was
-/// then changed to throw, but the error had no severity, so the menu bar showed it as
-/// a fault. Three attempts later it became what it is now...
-```
-
-Both describe the same function. Only the first is still true in four months.
-
-### The rule
-
-1. **One line per comment block.** No `///` or `//` run longer than one line.
-2. **Present tense, about the present code.** What this function does, what this line
-   is for, what the value means. Not what it did before, not what somebody tried,
-   not how many times something has gone wrong.
-3. **A reason is allowed when it changes what a reader would do** — "kept under the
-   lock because `deinit` can run on any thread" earns its place. A reason that is only
-   a story does not.
-4. **The trailing comment on a line of code is exempt from the length rule** and still
-   bound by the rest.
-5. **Document a parameter only where one line covers it.** `swift-format` rejects a
-   singular `- Parameter` on a function that has more than one, and a plural
-   `- Parameters:` block is multi-line by construction — so a function with several
-   parameters documents all of them or none, and none is what this rule chooses. Say what
-   is surprising about an argument in the summary line instead. Swift labels arguments at
-   the call site, so the loss is smaller than it looks.
-
-### Where the rest goes
-
-Some of what these comments carry is genuinely worth keeping: a measured number, a
-platform trap, an approach that was tried and does not work. That belongs in `Docs/`,
-under a heading, where it can be read on purpose and revised as a piece —
-`Docs/silence.md` and `Docs/stuck-recording.md` are what this looks like. Link to it in
-the one line:
-
-```swift
-/// Judges the audio before it is decoded. See `Docs/silence.md`.
-```
-
-**Deleting a hard-won measurement is not the point of this rule.** Moving it somewhere
-it stays true is.
-
-### Why
-
-The comments in this repository were written as a running account of how each decision
-was reached, and there are 17,000 lines of them against 36,000 lines of code. After a
-few months that account is a liability rather than an asset: it describes code that has
-since moved, it buries the one sentence a reader needs under six they do not, and the
-reader cannot tell which parts still hold. What a function *does* is checkable against
-the code in front of you. What it *used to do* is not checkable at all.
-
-### How it is enforced
-
-`Scripts/comment_audit.py` counts multi-line comment blocks per file and fails when any
-file gains one, against `Scripts/comment_baseline.json`. It runs in `make verify`.
-
-The baseline only ever goes down — `--update` refuses to record a higher count for any
-file, and shrinking one file does not pay for growing another. Bring a file you are
-already editing down to the rule and re-record; do not rewrite the whole repository in
-one pass.
-
-```bash
-python3 Scripts/comment_audit.py --report                 # what is left, worst first
-python3 Scripts/comment_audit.py --update                 # re-record after improving a file
-python3 Scripts/comment_audit.py --update --after-merge   # only when main moved under you
-```
-
-`--after-merge` is the one way a count may rise, and it exists because rebasing onto
-`main` brings in files this rule has not reached yet — blocking a branch on those would
-punish whoever rebased rather than whoever wrote them. It prints every rise and records
-it, so the increase appears in `comment_baseline.json`'s diff where a reviewer can see
-it. Do not reach for it to excuse your own comments.
-
-## What must never reach a tracked file — NON-NEGOTIABLE
-
-This repository is public. Everything in it is read by strangers, indexed by search
-engines, and kept forever in git history. The conversation that produces the work is
-not public, and the boundary between the two is one way.
-
-Never write any of the following into a tracked file, a commit message, a PR title or
-body, an issue, or a code comment:
-
-- **Named competitors, or their products, docs, pricing, screenshots or behaviour.**
-  Not as a citation, not as a source list, not as "how X does it", not in a design
-  rationale. If a competitor's behaviour informed a decision, describe the behaviour
-  generically — "some dictation tools rewrite for brevity" — and never say whose.
-- **Growth, marketing, positioning or business strategy.** Treating stars as a target,
-  when to announce, how attention is acquired, what to post where, how to attract
-  contributors.
-- **Anything a user said in a working session** that is not a technical requirement:
-  frustrations, comparisons, commercial reasoning, personal context.
-- **Screenshots or transcripts from another product**, in any form, including as a
-  design reference committed "temporarily".
-
-Reference material a user shares during development is for reading, not for keeping. Take
-the requirement out of it, state the requirement in the product's own words, and let the
-reference go. A design may be *informed* by something seen elsewhere and must never
-*record* that it was.
-
-History counts. A reference removed from the working tree is still in the commits that
-introduced it, and on a public repository that is still published. Say so plainly when it
-happens rather than assuming a later edit undid it.
-
-**This file is tracked, and stays tracked.** The rule above binds anybody who opens a pull
-request here, not only the person who wrote it, so it is product rather than working
-material — and a rule that lives only on one machine is invisible to a fresh clone, to a
-worktree, to a fork and to CI, which is every place the mistake actually gets made.
-
-### How it is enforced
-
-Five layers, because no single one holds. The hooks are skipped by `--no-verify`, the
-workflow is skipped by an admin merge, and the settings hook binds only agents on this
-machine — but the ways around each of them do not overlap.
-
-| Where | What it sees |
+| You are... | Read |
 |---|---|
-| `make verify` | the working tree, before the build, beside the PII audit |
-| `.githooks/pre-push` | every commit being pushed, to **any** branch |
-| `.githooks/commit-msg` | the message, before it is even recorded |
-| `.github/workflows/quality.yml` | the pull request's whole range, plus its title and body |
-| `.claude/settings.json` | the text of a command an agent is about to run |
+| writing or changing code, tests or comments | [Docs/agents/code-quality.md](Docs/agents/code-quality.md) |
+| changing what dictation, the clipboard or the data stores do | [Docs/agents/product.md](Docs/agents/product.md) |
+| branching, committing, opening or cleaning up after a pull request | [Docs/agents/workflow.md](Docs/agents/workflow.md) |
+| writing any text that will be committed, pushed or posted | [Docs/agents/public-boundary.md](Docs/agents/public-boundary.md) |
+| hitting a tooling failure | [Docs/tooling-traps.md](Docs/tooling-traps.md) |
 
-All five run `Scripts/disclosure_audit.py`. It reads two kinds of pattern: names and
-strategy phrases, which fail outright, and vocabulary that is usually innocent and
-occasionally the tell, which is counted against `Scripts/disclosure_baseline.json` and may
-fall but never rise. In text being written now — a message, a PR body, an added line —
-both kinds fail, because new writing has no legacy to grandfather.
-
-The terms are stored base64 for the same reason as the address constants in
-`Scripts/pii_audit.sh`, and it is not obfuscation: a plain-text list would publish, inside
-the gate, exactly what the gate exists to keep out, and would match itself on every run.
+## Commands
 
 ```bash
 python3 Scripts/disclosure_audit.py --show-terms     # see the lists decoded
@@ -484,80 +237,110 @@ than no merge at all.
 `Docs/releasing.md` covers a release by hand; `RELEASING.md` covers the tag workflow. In short:
 
 ```bash
-make verify        # lint, build, 8,000+ tests, coverage floor — what the gate runs
-make hooks         # once per clone; hooks are not cloned
+make verify        # the whole gate: audits, lint, build, tests, coverage, offline audit
+make lint          # style and documentation violations
+make format        # rewrite sources in canonical style
+make build         # compile every module
+make test          # run the test suite
+swift test --filter <TestCase>   # one test case or method, the fast loop
+make coverage      # tests plus the per-module coverage floor
+make bakeoff       # score every clean-up engine against the corpus
+make hooks         # install the commit-msg and pre-push gates (once per clone)
 make app-hardened  # a build fit to test on another Mac
-make dmg           # the disk image
-make publish       # to the public downloads repository: this Mac's gh login by hand, RELEASES_TOKEN in the workflow
 ```
 
-Versioning is **`YY.MMDD.REVISION`** (`26.0926.0`; tag `v26.0926.0`), hand-edited in
-`Resources/Uttrflow-Info.plist`; a second release that day is `26.0926.1`. Month before day,
-leading zero kept, so versions sort in date order. `2026.9.14` (`YEAR.MONTH.DAY`) and, before
-it, semver up to 0.5.0 are retired. See `Docs/releasing.md`. `CFBundleVersion` is what the updater compares, so it goes up by one every
-release. The five-part `YEAR.MONTH.DAY.HOUR.PATCH` scheme stays rejected, as `Docs/releasing.md` says.
+Run `make verify` before every push; CI runs the same command. Each target's one-line
+description is in the `Makefile`. `PLAN.md` is the live phase tracker.
 
-Downloads go to the public **uttrflow/releases** repository, separate from this source
-repository, holding disk images and `latest.json` but no source code. The published asset
-is `Uttrflow.dmg` with **no version in the name** — that is
-what makes the `/releases/latest/download/` URL permanent.
+## Layout
 
-**The tag names the release, and notarisation has nothing to do with it.** A run
-triggered by a pushed tag publishes under exactly that tag — `release.yml` has already
-checked it against the plist — and a hand-run publish uses `v<version>` from the plist.
-Signed or not, the release is a full release, so `/releases/latest/download/` resolves to
-the newest build and the download button never has to change.
+- `Sources/`: one SwiftPM target per module (`Uttrflow*`) plus the `uttrflow-dev`,
+  `uttrflow-eval` and `uttrflow-bakeoff` tools. `Tests/` mirrors it.
+- `Docs/`: a page per subsystem, holding the measurements, platform traps and rejected
+  approaches the code cannot say for itself.
+- `Scripts/`: audits, release and packaging. `Design/`: design canvases. `Resources/`: bundle
+  resources and `Uttrflow-Info.plist`.
+- `uttrflow-backend`, `uttrflow-fe` and `uttrflow-panel` are separate repositories. This one
+  never reaches into them.
 
-**A tag with anything after the version is a prerelease**: `v26.0926.0-rc.1` publishes as one,
-GitHub keeps it out of `/latest/`, and `publish.sh` leaves `latest.json` and `appcast.xml`
-untouched so neither the site nor the updater offers it. That is the soak. `v26.0926.0`
-releases it.
+## Hard gates
 
-`latest.json` records `gatekeeper`, and the site shows or hides the `xattr` instruction
-from that field — publishing a notarised image is the whole migration.
+Every row is checked by a command. Breaking one is a bug whatever it improves.
 
-## Tooling traps, each of which cost real time
+| Gate | Limit | Command |
+|---|---|---|
+| Comment block length | 1 line | `make comment-audit` |
+| Coverage per module | at least 95% | `make coverage` |
+| Force unwraps, `try!`, implicitly unwrapped optionals | 0 | `make lint` |
+| Compiler warnings | 0 | `make build` |
+| Spelling matches decided by shape | never rises | `make match-audit` |
+| Real personal data in fixtures | 0 | `make pii-audit` |
+| Connections on the dictation path | 0 | `make offline-audit` |
+| Session-only text in a tracked file, commit or PR | 0 | `make disclosure-audit` |
+| Docs contradict the tree; history or numbers in rule files | 0 | `make docs-audit` |
+| Failing or pending checks when a PR is called done | 0 | `gh pr checks` |
+| Commits behind `origin/main` when the PR opens | 0 | `git rev-list --count HEAD..origin/main` |
+| Agent commits on `main`, tags, or direct pushes to it | 0 | ruleset, `git log origin/main..main` |
+| Worktrees, branches, processes left by a session | 0 | `git worktree list` |
 
-- **`swift-format` is not on `PATH`** — it is `xcrun swift-format`, via `make lint` /
-  `make format`. Capture its exit code explicitly; reading the output through a pipe
-  swallows the failure. zsh has `$pipestatus` (lowercase, 1-indexed), not `$PIPESTATUS`.
-- **zsh does not word-split unquoted variables.** `kill -9 $PIDS` passes one newline-joined
-  blob and fails with "illegal pid". Pipe to `xargs -n1`, or use `${=PIDS}`.
-- **MLX targets cannot be built by `swift build`** — they need `xcodebuild` plus the Metal
-  Toolchain (~690 MB). MLX is quarantined in `UttrflowLocalModel` and `uttrflow-bakeoff` so
-  that nothing else ever needs it.
-- **The app is built with `xcodebuild`, not `swift build`.** SwiftPM bakes an absolute path
-  into the generated resource-bundle accessor and puts the bundles where a signed app
-  cannot carry them. `Docs/packaging.md` has the measurements.
-- **`git ls-files` and `git grep` only see tracked files.** A repo-wide rename using them
-  silently skipped four new files and then reported "clean". Use `find` when the change
-  must cover work in progress.
-- **`secrets` is not available in a workflow step's `if:`** — the condition evaluates to
-  nothing and every guarded step runs. (Kept here in case a workflow is ever written
-  elsewhere; see the first rule.)
+## Working agreement
 
-## The method that has repeatedly paid off
+1. **Surgical.** `git diff --stat origin/main` lists only files the task needs; 0 drive-by edits.
+   0 behaviour-neutral reformatting, renames or reflows outside the lines the task changes.
+   Anything else you notice becomes a follow-up in the PR, not a change.
+2. **Goal first.** Before coding, write the success check: one command and its expected result.
+3. **No invention.** 0 invented APIs, defaults or behaviours: read the code or run it before
+   stating a fact about it.
+4. **Honest reports.** Every "passes" or "works" cites the command and its exit code. List each
+   check you did not run, and why. 0 claims without evidence.
+5. **Assume, then say so.** Ask only for the triggers under "Ask first"; for anything else
+   take the reasonable assumption and record it under "Assumed" in the PR.
 
-**Probe the real API before coding, and distrust an implausible number.** That is what
-caught `AVAudioConverter` silently truncating 51% of audio, Apple's undocumented Hindi
-ability, train-on-test contamination in the prompt examples, and the local models scoring
-13% only because nobody was stripping their `Cleaned: "…"` wrapper.
+## Boundaries
 
-**A CLI is not a representative test bed for the Accessibility API**, and a well-behaved
-target never exercises the broken path. `Docs/` and the comments in
-`Sources/UttrflowInput/` carry the specific traps.
+**Always**
+- run `make verify` before every push and stage paths by name;
+- work in a worktree cut from freshly fetched `origin/main`, and read `git status -sb` before the
+  first edit so changes you did not make stay untouched;
+- write the five PR fields and name the command behind every claim;
+- run a change to input, insertion or context reading once in a real target app;
+- capture a long command's output to a file once and read the file; rerunning the command to
+  filter its output is 0.
 
-## Quality bar
+**Ask first**: stop, report what you saw, and wait; never force-fix and never delete state to
+make a command succeed.
+- a commit on `main`, or a branch, worktree or pull request you did not create;
+- a merge, rebase or cleanup you cannot complete cleanly;
+- a secret, personal data or session-only text already committed or published;
+- a gate that fails for a reason you cannot explain;
+- a new workflow, a new dependency, a protected file, or a different promise in
+  `Docs/definition-of-done.md`.
 
-- 95% line coverage per module, enforced by `Scripts/coverage.sh`. Exclusions live in
-  `Scripts/coverage_report.py` **with a stated reason each, printed on every run** — an
-  exclusion is never silent. An excluded file has to be small enough that reading it is a
-  sufficient review: `make exclusion-audit` prints every exclusion's line count and fails
-  over 400 lines, unless the file is listed in `OVERSIZED_EXCLUSIONS` with what reviews it
-  instead. Adding tests until the exclusion can go is the way out; a shallow test that
-  executes lines without asserting behaviour is worse than the exclusion it hides.
-- Root cause, not patches: see "No patchy fixes" above.
-- Swift 6 language mode, strict concurrency, warnings as errors.
-- No force unwraps, no force try, no implicitly unwrapped optionals (lint-enforced).
-- Nothing about the evaluation corpus may reach a shipped app; `Scripts/bundle.sh` checks
-  the built artefact for it and refuses.
+**Never**
+- commit to `main`, tag, force-push, or skip a hook (`--no-verify`);
+- raise a baseline (except the reported `--after-merge` case) or loosen a gate;
+- add a `Co-Authored-By` trailer;
+- commit a secret, personal data or session-only text;
+- hand-edit a generated file;
+- merge a pull request unless a maintainer says so for that pull request.
+
+## What must never reach a tracked file
+
+A tracked file, commit message, pull-request title or body, issue or code comment states
+technical requirements and technical decisions, in the product's own words, and nothing else.
+Run `python3 Scripts/disclosure_audit.py` before every commit; it must exit 0. Details, and
+what to do when something is already committed:
+[Docs/agents/public-boundary.md](Docs/agents/public-boundary.md).
+
+## Changing these files
+
+1. A new rule or gate names the mistake it prevents and has been seen to prevent it. Time
+   pressure never waives a gate.
+2. A new rule states a measure, a limit and a check command, or says it is judgement and names
+   who checks it.
+3. It is present tense. It carries 0 incidents, 0 dates, 0 issue or pull-request numbers and 0
+   anecdotes; `make docs-audit` fails on dates and on issue or pull-request numbers. Evidence
+   goes on a `Docs/` page, linked in one line.
+4. It goes in the one file that owns it. A rule about a single module goes on that module's
+   `Docs/` page or in a nested `AGENTS.md` beside the code. Do not add a competing rule here.
+5. A rule that no longer prevents a mistake is deleted.

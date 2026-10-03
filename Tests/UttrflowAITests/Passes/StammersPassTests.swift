@@ -149,4 +149,21 @@ struct StammersPassTests {
     func keepsDoubledNumberAtPieceEdge(input: String) {
         #expect(cleaned(input, by: sut) == input)
     }
+
+    /// A doubled number directly after "point" is a digit of the decimal, not a stammer.
+    @Test(
+        "keeps a doubled number directly after \"point\" so the decimal survives",
+        arguments: [
+            "apr is nineteen point nine nine percent",
+            "the rate is three point five five percent",
+            "the price is two point five five dollars",
+            "we scored ninety nine point nine nine percent",
+            "the interest is four point four four percent a year",
+            "the area is twelve point two two square metres",
+            "the dose is point five five milligrams",
+        ]
+    )
+    func keepsDoubledNumberAfterPoint(input: String) {
+        #expect(cleaned(input, by: sut) == input)
+    }
 }

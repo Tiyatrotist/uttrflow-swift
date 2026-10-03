@@ -6,6 +6,7 @@ struct FixtureResult: Encodable {
     let name: String
     let category: String
     let typed: String
+    /// Whether the fixture was hit and the model did not error, so a thrown error always reads as a miss.
     let hit: Bool
     /// Whether the hit was checked against a named answer, rather than any continuation counting.
     let judged: Bool
@@ -27,6 +28,8 @@ struct FixtureResult: Encodable {
     let lengthStopped: Bool
     /// Whether the alternatives pass ended because it reached its token budget.
     let alternativesLengthStopped: Bool
+    /// The error the generator threw for this fixture, when one was thrown rather than offered nothing; a generator that throws is not one that named silence.
+    let error: String?
     /// What the confidence floor made of the first line.
     let gate: Gate
 
@@ -46,14 +49,16 @@ struct FixtureResult: Encodable {
         name: String, category: String, typed: String, hit: Bool, judged: Bool, conforms: Bool,
         elapsedMs: Int, first: String?, source: String? = nil,
         raw: String?, invented: Bool, rescued: Bool = false, secondOpinionMs: Int? = nil,
-        lengthStopped: Bool = false, alternativesLengthStopped: Bool = false, gate: Gate = .open
+        lengthStopped: Bool = false, alternativesLengthStopped: Bool = false, error: String? = nil,
+        gate: Gate = .open
     ) {
         self.name = name
         self.category = category
         self.typed = typed
-        self.hit = hit
+        // An errored pass is not a hit and not in register, even when silence would have been the right answer.
+        self.hit = hit && error == nil
         self.judged = judged
-        self.conforms = conforms
+        self.conforms = conforms && error == nil
         self.elapsedMs = elapsedMs
         self.first = first
         self.source = source
@@ -63,6 +68,7 @@ struct FixtureResult: Encodable {
         self.secondOpinionMs = secondOpinionMs
         self.lengthStopped = lengthStopped
         self.alternativesLengthStopped = alternativesLengthStopped
+        self.error = error
         self.gate = gate
     }
 
@@ -70,14 +76,15 @@ struct FixtureResult: Encodable {
     var shown: Bool { offered && !gate.held }
 
     /// Whether the model offered a line, drawn or held back by the floor.
-    var offered: Bool { (first?.isEmpty == false) && first?.hasPrefix("error:") != true }
+    var offered: Bool { error == nil && (first?.isEmpty == false) && first?.hasPrefix("error:") != true }
 
     /// Whether this row belongs in the failures section.
     var failed: Bool { !hit || !conforms }
 
     /// The row as the table prints it while the run is under way.
     var row: String {
-        "\(hit ? "✓" : "✗")\(conforms ? "✓" : "✗") \(String(elapsedMs).leftPadded(to: 5))ms  "
+        let mark = error != nil ? "E" : (hit ? "✓" : "✗")
+        return "\(mark)\(conforms ? "✓" : "✗") \(String(elapsedMs).leftPadded(to: 5))ms  "
             + "\(name.padded(to: 44)) \((first ?? "-").debugDescription)"
     }
 }
@@ -96,6 +103,8 @@ struct FixtureSummary: Encodable {
     let total: Int
     let hits: Int
     let conforming: Int
+    /// How many fixtures the generator threw on, which is what fails the run and was not counted as silence.
+    let errors: Int
     /// How many answers the model wrote that named what the machine does not have, which the sieve kept off the screen.
     let invented: Int
     /// First passes that reached their token budget, whether or not the completion was withheld.
@@ -127,6 +136,7 @@ struct FixtureSummary: Encodable {
         total = results.count
         hits = results.filter(\.hit).count
         conforming = results.filter(\.conforms).count
+        errors = results.filter { $0.error != nil }.count
         invented = results.filter(\.invented).count
         lengthStopped = results.filter(\.lengthStopped).count
         alternativesLengthStopped = results.filter(\.alternativesLengthStopped).count
@@ -219,6 +229,7 @@ struct FixtureReport: Encodable {
                 + "  invented \(summary.invented)  length-stopped \(summary.lengthStopped)"
                 + "  alternatives length-stopped \(summary.alternativesLengthStopped)"
                 + "  shown from length stop \(summary.shownFromLengthStop)"
+                + "  errors \(summary.errors)"
                 + "  p50 \(summary.p50Ms)ms  p95 \(summary.p95Ms)ms")
         print("hits judged \(summary.judgedHits)  unjudged \(summary.unjudgedHits)")
         // Precision is what a person feels: of the judged times it spoke, how often it was right. Coverage is how often it spoke at all.

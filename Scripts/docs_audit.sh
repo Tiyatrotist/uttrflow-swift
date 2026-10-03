@@ -643,8 +643,8 @@ pass "$DOC_COUNT Markdown files (tracked, plus written-but-not-yet-staged)"
 # that boundary until the ruleset is deliberately changed.
 printf '\nPull request lifecycle\n'
 
-if grep -Fq "**An agent may merge its own pull request once it is green**" AGENTS.md; then
-    fail "AGENTS.md still documents the removed self-merge rule" \
+if grep -Fq "**An agent may merge its own pull request once it is green**" Docs/agents/workflow.md; then
+    fail "Docs/agents/workflow.md still documents the removed self-merge rule" \
         "The live main ruleset requires an approving review, code-owner review and" \
         "last-pusher approval. A local policy that says agents may merge themselves" \
         "sends finished pull requests into a gate they cannot satisfy."
@@ -659,18 +659,36 @@ for required in \
     "strict_required_status_checks_policy" \
     "Once the branch is pushed, remove the worktree and the local branch"
 do
-    if ! grep -Fq "$required" AGENTS.md; then
+    if ! grep -Fq "$required" Docs/agents/workflow.md; then
         missing_policy+=("$required")
     fi
 done
 
 if ((${#missing_policy[@]})); then
-    fail "AGENTS.md no longer records the review-required main ruleset" \
+    fail "Docs/agents/workflow.md no longer records the review-required main ruleset" \
         "The policy must tell agents that implementation stops at a green pull request," \
         "and must name the live ruleset gates that enforce that boundary." \
         "" $'\n'"$(printf '    %s\n' "${missing_policy[@]}")"
 else
-    pass "AGENTS.md says agents stop at a green PR and names the review gates"
+    pass "Docs/agents/workflow.md says agents stop at a green PR and names the review gates"
+fi
+
+# ---------------------------------------------------------------------------
+# 0b. The rule files carry rules, not history.
+# ---------------------------------------------------------------------------
+#
+# A rule is stated in the present tense with a measure and a check. An issue or pull-request
+# number, or a calendar date, is history: it goes stale and names a conversation a reader
+# cannot see. Evidence belongs on a Docs/ page, linked from the rule in one line.
+printf '\nRule files carry no history\n'
+
+history_findings=$(grep -n -E '(^|[^A-Za-z0-9_&])#[0-9]{2,}|\b20[0-9]{2}-[0-9]{2}-[0-9]{2}\b' AGENTS.md Docs/agents/*.md || true)
+if [[ -n "$history_findings" ]]; then
+    fail "AGENTS.md or Docs/agents/ cites an issue number, pull-request number or date" \
+        "State the rule in the present tense and move the evidence to a Docs/ page." \
+        "" $'\n'"$(printf '    %s\n' "$history_findings")"
+else
+    pass "AGENTS.md and Docs/agents/ cite no issue, pull-request number or date"
 fi
 
 # ---------------------------------------------------------------------------
@@ -950,11 +968,11 @@ printf '\nWorktree cleanup order\n'
 read -r -d '' CLEANUP_PROGRAM <<'PYTHON' || true
 import re
 
-text = open("AGENTS.md", errors="ignore").read()
+text = open("Docs/agents/workflow.md", errors="ignore").read()
 start = text.find("**Every feature is built in a worktree")
 end = text.find("**Never run `swift build`", start)
 if start == -1 or end == -1:
-    print("AGENTS.md  cannot find the worktree recipe section")
+    print("Docs/agents/workflow.md  cannot find the worktree recipe section")
     raise SystemExit
 
 section = text[start:end]
@@ -970,7 +988,7 @@ positions = {}
 for name, pattern in required:
     match = re.search(pattern, section, re.MULTILINE)
     if not match:
-        print(f"AGENTS.md  missing {name}: {pattern}")
+        print(f"Docs/agents/workflow.md  missing {name}: {pattern}")
     else:
         positions[name] = match.start()
 

@@ -103,6 +103,9 @@ public enum DestructiveCommand {
         "poweroff", "dropdb", "dropuser",
     ]
 
+    /// `find` action flags whose clauses run an inner command terminated by `;` or `+`.
+    private static let findActionFlags: Set<String> = ["-exec", "-execdir", "-ok", "-okdir"]
+
     private enum Command {
         case none
         case unresolved
@@ -374,11 +377,25 @@ public enum DestructiveCommand {
             if matchesDestructiveSubversion(arguments) { return true }
         case "find":
             if lowered.contains("-delete") { return true }
-            // The command `-exec` runs is judged as its own clause, so a wrapper in front of it is read past.
-            if let exec = tokens.firstIndex(where: { ["-exec", "-execdir"].contains($0.text.lowercased()) }),
-                destroys(Array(tokens[(exec + 1)...]), failClosedOnUnresolved: failClosedOnUnresolved)
-            {
-                return true
+            // Every -exec, -execdir, -ok and -okdir clause is judged up to its terminating `;` or `+`, so a destroyer in a later clause is still found.
+            var i = 0
+            while i < tokens.count {
+                guard findActionFlags.contains(tokens[i].text.lowercased()) else { i += 1; continue }
+                let start = i + 1
+                var end = tokens.count
+                var j = start
+                while j < tokens.count {
+                    let text = tokens[j].text
+                    if text == ";" || text == "+" {
+                        end = j
+                        break
+                    }
+                    j += 1
+                }
+                if destroys(Array(tokens[start..<end]), failClosedOnUnresolved: failClosedOnUnresolved) {
+                    return true
+                }
+                i = end + 1
             }
         case "diskutil":
             let verbs = [
