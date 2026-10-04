@@ -337,7 +337,8 @@ public enum SecretShapes {
             total -= share * log2(share)
         }
         // Decoded only past the floor, which few tokens reach, so the common path stays byte-wise.
-        return bits >= entropyFloor && !isJoinedWords(String(decoding: token, as: UTF8.self))
+        guard bits >= entropyFloor else { return false }
+        return !isEntropyExemption(String(decoding: token, as: UTF8.self))
     }
 
     static func looksGenerated(_ token: String) -> Bool {
@@ -352,7 +353,12 @@ public enum SecretShapes {
             token.contains(where: \.isNumber),
             token.contains(where: \.isLetter)
         else { return false }
-        return entropy(of: token) >= entropyFloor && !isJoinedWords(token)
+        return entropy(of: token) >= entropyFloor && !isEntropyExemption(token)
+    }
+
+    /// Whether a token is a UUID, a path, or joined words rather than a generated credential.
+    private static func isEntropyExemption(_ token: String) -> Bool {
+        isPathLike(token) || isUUID(token) || isJoinedWords(token)
     }
 
     /// Whether a token has the canonical 8-4-4-4-12 hexadecimal UUID shape.

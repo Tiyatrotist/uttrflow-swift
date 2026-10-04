@@ -176,10 +176,12 @@ word must be at least 12 characters (shorter values are too common in identifier
 ASCII letters, digits or the printable ASCII symbols the scanner allows, and contain both a
 letter and a digit. The byte and character readers use the same alphabet. Hex of 32 or more
 characters is a digest outright, because a sixteen-symbol alphabet can never reach the general
-floor. Anything that opens like a path is left to the general rules.
+floor. Canonical UUIDs and joined words are exempted by the same rule in both the byte and
+character readers. Values that open like a path are left to the general rules; a quoted value is
+left alone as a path only when its unquoted contents match the complete local-path shape in
+`PathShape`.
 The entropy rule also leaves `mailto:`, `spotify:`, `magnet:`, `urn:` and `tel:` URIs alone,
-including forms without `://`. A quoted value is left alone as a path only when its unquoted
-contents match the complete local-path shape in `PathShape`.
+including forms without `://`.
 
 Characters outside the token alphabet at the edge of an ASCII run do not become part of the
 credential: each ASCII run in a whitespace-delimited word is judged on its own. The byte reader
