@@ -138,9 +138,10 @@ It recognises:
   `--db-pass`, `--api-key`), with its value joined by `=` or in the next word. `--no-…`,
   `--password-stdin` and `--token-file` do not pass one.
 - An uppercase variable assignment whose name ends in one (`PGPASSWORD=…`, `MYSQL_PWD=…`).
-- An `Authorization:` or `Proxy-Authorization:` header in any scheme, or a header whose name ends
-  in a secret's name (`X-Api-Key:`), quoted or not, with the value in the same word or the next
-  two. A scheme alone (`Authorization: Bearer`) sends nothing.
+- An `Authorization:` or `Proxy-Authorization:` header in any scheme, including a `curl -H` value
+  attached to its flag, or a header whose name ends in a secret's name (`X-Api-Key:`), quoted or
+  not, with the value in the same word or the next two. A scheme alone (`Authorization: Bearer`)
+  sends nothing.
 - A `Cookie:` or `Set-Cookie:` header scans through its value up to the next cookie header, so
   repeated headers are read once across the line.
 
