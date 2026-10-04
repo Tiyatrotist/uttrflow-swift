@@ -978,6 +978,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func queueDictationSessionEnd() async {
         await controller?.endForSessionEnding()
+        closeQuickPanel()
     }
 
     /// Builds tab-to-complete, or leaves it unbuilt, which is what everybody who has not asked for it gets.
