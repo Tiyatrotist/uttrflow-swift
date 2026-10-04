@@ -24,6 +24,8 @@ public struct SpokenCommand: DataTableRow, Equatable {
         case casing
         /// An option marker written before the word after it at a command line; `destinations` are where every dash is one.
         case flag
+        /// A lead-in kept as spoken, with `text` written onto its last word when the clause goes on after it.
+        case leadIn
     }
 
     /// How many of the following words a casing command covers.
@@ -96,6 +98,9 @@ public enum SpokenCommands {
     public static let casings = rows(.casing)
     /// Option markers said by name, longest first.
     public static let flags = rows(.flag).sorted { $0.words.count > $1.words.count }
+    /// Phrases that introduce what follows them, such as a list.
+    public static let leadIns = rows(.leadIn)
+
     /// Whether `text` is a single bracket, opening or closing.
     public static func isBracket(_ text: String) -> Bool {
         guard text.count == 1, let character = text.first else { return false }

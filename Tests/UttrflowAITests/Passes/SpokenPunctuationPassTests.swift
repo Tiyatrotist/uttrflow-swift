@@ -44,6 +44,22 @@ struct SpokenPunctuationPassTests {
     }
 
     @Test(
+        "sets off what a lead-in introduces with a colon and keeps the case after it",
+        arguments: [
+            ("the steps are as follows build the app", "the steps are as follows: build the app"),
+            ("the steps are as follows First build", "the steps are as follows: First build"),
+            ("the steps are as follows colon build", "the steps are as follows: build"),
+            ("the steps are as follows", "the steps are as follows"),
+            ("the steps are as follows. build it", "the steps are as follows. build it"),
+            ("the steps are first second", "the steps are first second"),
+            ("note the build failed", "note the build failed"),
+        ]
+    )
+    func marksLeadIns(input: String, expected: String) {
+        #expect(cleaned(input, by: sut) == expected)
+    }
+
+    @Test(
         "writes a spoken bracket pair around the words it encloses and leaves an unpaired or named one as words",
         arguments: [
             ("the report open paren draft two close paren is attached", "the report (draft two) is attached"),
