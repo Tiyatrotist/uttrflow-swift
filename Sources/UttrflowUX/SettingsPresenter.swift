@@ -691,6 +691,10 @@ public enum SettingsPresenter {
             return SettingsBanner(
                 symbolName: "clock", title: "Starting suggestions…",
                 message: "Suggestions will be ready shortly.")
+        case .tapResting:
+            return SettingsBanner(
+                symbolName: "clock", title: "Suggestions are paused briefly",
+                message: "Suggestions will resume automatically.")
         case .restarting:
             return SettingsBanner(
                 symbolName: "clock", title: "Restarting suggestions…",
