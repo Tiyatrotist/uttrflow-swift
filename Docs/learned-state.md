@@ -101,6 +101,26 @@ on at least 3 separate days and outweigh edits the other way, so a lone edit is 
 the preference writes `spellingPreferenceCleared`, which hides every earlier row for the pair in
 both directions. Applying the projection waits on the canonical-spelling step.
 
+## The persona projection
+
+`PersonaProjection.standing` (`Sources/UttrflowDictionary/PersonaProjection.swift`) is the
+persona: kept recent use per dictionary entry, `use` rows minus `revert` rows not covered by a
+`restore`, each weighted on the `WorkingSet` recency curve. It is computed on read and stored
+nowhere. `WorkingSet` adds it to an entry's value as `p / (1 + p)`, at most one, the same ceiling
+as frequency. `DictionaryVocabulary` reads the ledger for it only while the `persona-vocabulary`
+quality layer is on, which it is not by default: the layer turns on only after the
+developer-vocabulary corpus measures `wer-biased` with it on and off.
+
+## Where the rows come from
+
+`EvidenceSources` (`Sources/Uttrflow/EvidenceSources.swift`) is the one place the app builds
+ledger rows outside `StyleSignals` and `SpellingPreferences`. A landed dictation writes one `use`
+row per dictionary entry `DictionaryAppearances.used` returns, after the dictionary counts the
+same set. Undoing a correction writes one `revert` row for its entry. The retention sweep
+backfills History's dictations from days before the ledger's first row, as `use` and style rows
+with provenance `migration`, once: a ledger holding any `migration` row is not backfilled again.
+No row carries a word of the text, and nothing leaves this Mac.
+
 ## Still open
 
 The downgrade rule for the ledger's own file belongs to the store compatibility contract. The
