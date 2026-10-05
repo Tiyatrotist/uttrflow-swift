@@ -182,7 +182,7 @@ public actor WhisperKitBackend: TranscriptionBackend {
 
 /// Flattens WhisperKit's per-window results into one transcript.
 fileprivate func rawTranscript(
-    from results: [TranscriptionResult], vocabularyPrompt: [String] = []
+    from results: [TranscriptionResult], promptPositions: Int = 0, vocabularyPrompt: [String] = []
 ) -> RawTranscript {
     TranscriptAssembly.whisper(
         results.map { result in
@@ -206,6 +206,7 @@ fileprivate func rawTranscript(
                 },
                 effort: effort(of: [result]),
                 tokensUsed: result.segments.reduce(0) { $0 + $1.tokens.count },
+                promptPositions: promptPositions,
                 vocabularyPrompt: vocabularyPrompt)
         })
 }
@@ -248,7 +249,9 @@ private struct RetryBackend: TranscriptionBackend {
         do {
             let decoded = try await kit.transcribe(
                 samples, languageHint: languageHint, biasedTowards: vocabulary)
-            return rawTranscript(from: decoded.results, vocabularyPrompt: decoded.vocabularyPrompt)
+            return rawTranscript(
+                from: decoded.results, promptPositions: decoded.promptPositions,
+                vocabularyPrompt: decoded.vocabularyPrompt)
         } catch {
             throw .transcriptionFailed(description: error.localizedDescription)
         }
@@ -285,7 +288,7 @@ private final class LoadedKit: @unchecked Sendable {
 
     func transcribe(
         _ samples: [Float], languageHint: LanguageCode?, biasedTowards vocabulary: [String]
-    ) async throws -> (results: [TranscriptionResult], vocabularyPrompt: [String]) {
+    ) async throws -> (results: [TranscriptionResult], promptPositions: Int, vocabularyPrompt: [String]) {
         // Passed through optional, so a half-loaded kit gives an unbiased dictation, not a crash.
         let tokenizer = kit.tokenizer
         let promptTokenizer = tokenizer.map { WhisperPromptTokenizer(tokenizer: $0) }
@@ -303,6 +306,12 @@ private final class LoadedKit: @unchecked Sendable {
         return (
             try await kit.transcribe(
                 audioArray: samples, decodeOptions: options, callback: Self.loopStop(windowOf: samples.count)),
+            tokenizer.map {
+                DecoderPrefill(
+                    promptTokens: options.promptTokens, specialTokenBegin: $0.specialTokens.specialTokenBegin,
+                    isMultilingual: !$0.allLanguageTokens.isEmpty
+                ).transcriptStart
+            } ?? 0,
             packing?.words ?? []
         )
     }
