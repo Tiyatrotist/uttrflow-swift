@@ -141,6 +141,10 @@ public enum DestinationRules {
                 "org.telegram", "com.hnc.Discord", messages, "com.microsoft.teams",
                 "org.whispersystems.signal",
             ],
+            hostSuffixes: [
+                "app.slack.com", "discord.com", "web.whatsapp.com", "web.telegram.org",
+                "teams.microsoft.com", "teams.live.com",
+            ],
             titleContains: [
                 "Slack", "Discord", "Messages", "WhatsApp", "Telegram", "Telegram Web", "Teams",
                 "Microsoft Teams", "Signal",
@@ -153,6 +157,9 @@ public enum DestinationRules {
         DestinationRule(
             bundlePrefixes: [
                 mail, outlook, "com.superhuman", "com.readdle.smartemail",
+            ],
+            hostSuffixes: [
+                "mail.google.com", "outlook.office.com", "outlook.live.com", "mail.superhuman.com",
             ],
             titleContains: ["Gmail", "Mail", "Outlook", "Spark", "Superhuman"],
             nameWords: ["mail", "outlook", "spark", "superhuman"],
