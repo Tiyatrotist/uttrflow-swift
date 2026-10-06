@@ -330,8 +330,9 @@ final class SuggestionCoordinator {
         let capture = self.capture
         let store = self.store
         try await forgetWhatThisLoopRemembers(clearingCorpus: {
-            try await capture.forgetEverythingLearned()
+            await capture.forgetLearnedLines()
             try await store.forgetEverything()
+            try await capture.forgetEveryAnswer()
         })
     }
 
