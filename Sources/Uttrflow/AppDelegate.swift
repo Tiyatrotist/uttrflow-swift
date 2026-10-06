@@ -133,6 +133,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Whether the recogniser can dictate, which is not whether its files are on disk.
     private var speechReadiness: SpeechModelReadiness = .notInstalled
+    /// Why the last speech model load failed, as the pipeline classed it; Diagnostics names it.
+    private var speechLoadFailure: SpeechLoadFailureClass?
     /// The input UID the next recording opens, read off the main actor at every open.
     private let chosenMicrophone = MicrophoneChoice()
     /// When the load under way began, so the estimate is said only once a load has run long enough to need it.
@@ -699,6 +701,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             guard let self else { return }
             speechInUse = await pipeline.speechKind
             speechReadiness = settle(isReady: await pipeline.isReady)
+            speechLoadFailure = await pipeline.lastLoadFailure
             speechLoadTicker?.cancel()
             speechLoadTicker = nil
             refreshSpeechModelSurfaces()
@@ -3075,6 +3078,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     engines: settings.engines, speechInUse: speechInUse,
                     transformerAvailability: transformerAvailability,
                     speechModel: speechModelPresence, speechReadiness: speechReadiness,
+                    speechLoadFailure: speechLoadFailure,
                     permissions: knownPermissions,
                     dictationShortcutArmed: surfaces.listensForDictation
                         && shortcutArming.failure == nil,
