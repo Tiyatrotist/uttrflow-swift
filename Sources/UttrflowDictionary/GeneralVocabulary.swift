@@ -92,6 +92,7 @@ public enum GeneralVocabulary {
         too why where while whom whose off once ago yet else though since until upon per
         via ever soon later things quite rather almost enough instead however therefore
         actually basically probably definitely hi hey bye cool nice mint receive separate address occurred
+        monday tuesday wednesday thursday friday saturday sunday
         rest arm ram
         """)
 
