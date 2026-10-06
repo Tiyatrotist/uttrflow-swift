@@ -75,8 +75,13 @@ public enum CaptureGate {
         }
     }
 
-    /// Whether a value has the shape of a credential, asked of the rules the clipboard already uses.
-    public static func looksLikeSecret(_ text: String) -> Bool { SecretShapes.matches(text) }
+    /// Whether a value, or any line of it, has the shape of a credential, asked of the clipboard's rules.
+    public static func looksLikeSecret(_ text: String) -> Bool {
+        // A learned value's lines come back one at a time, so each is judged as the one-line clip it becomes.
+        SecretShapes.matches(text)
+            || (text.contains(where: \.isNewline)
+                && text.split(whereSeparator: \.isNewline).contains { SecretShapes.matches(String($0)) })
+    }
 
     /// Whether a value is only digits, at least two, grouped by whitespace, hyphens or periods: a code, PIN, phone or account number at any length.
     public static func looksLikeSensitiveValue(_ text: String, from reading: FieldReading) -> Bool {
