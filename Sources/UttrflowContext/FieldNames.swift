@@ -1,5 +1,4 @@
 import UttrflowCore
-import UttrflowPredict
 
 enum FieldNamesReadStatus: Sendable, Equatable {
     case complete
