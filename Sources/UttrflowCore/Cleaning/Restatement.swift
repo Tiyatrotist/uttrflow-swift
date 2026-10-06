@@ -230,8 +230,7 @@ public enum Restatement {
         return draft.shape(at: live[candidate + 1]).key == draft.shape(at: live[restart + 1]).key
     }
 
-    /// A camel-case dictionary word can retain the first heard word as a component, such as `payment` in `PaymentSheet`.
-    /// Reads `written` as spoken, before lower-casing, since the components are found at its capitals.
+    /// A camel-case word can retain a heard word ending at one of its components, such as `payment` in `PaymentSheet`.
     private static func camelCaseAnchorStart(
         _ heard: String, the written: String, endingAt candidate: Int, in live: [Int], of draft: Draft
     ) -> Int? {
