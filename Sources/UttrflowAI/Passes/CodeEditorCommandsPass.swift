@@ -4,6 +4,7 @@ import UttrflowCore
 /// Writes spoken symbol commands in executable code, abstaining where the words read as prose.
 struct CodeEditorCommandsPass: PieceCleaningPass {
     static let id: PassID = .codeEditorCommands
+    static let laws: Set<PassLaw> = Set(PassLaw.allCases)
 
     /// Articles code is never dictated with: any of them marks the whole utterance as prose.
     static let proseEvidence: Set<String> = ["the", "an", "these", "those"]
