@@ -4,9 +4,6 @@ public import UttrflowDictionary
 
 /// Proposes, never applies, dictionary words for doubted runs. See Docs/ai-correction-thresholds.md.
 public struct WordCorrectionEngine: Sendable {
-    /// Below this a word may be replaced; at or above it a word may corroborate, so none vouches for itself.
-    public static let certaintyThreshold = 0.5
-
     /// Changing more than one spoken word in this many abandons the whole utterance, not just the excess.
     static let maximumChangedInEvery = 5
 
@@ -178,14 +175,13 @@ public struct WordCorrectionEngine: Sendable {
         // Candidates arrive in the index's usefulness order, so the first that earns its place is offered.
         for candidate in candidates {
             // Condition 3.
-            guard
-                let reason = evidence.decisiveReason(
-                    preferring: candidate.entry.word, over: candidate.heard)
+            guard Self.spells(candidate.entry, asHeard: candidate.heard),
+                let decision = evidence.decision(preferring: candidate.entry.word, over: candidate.heard)
             else { continue }
-            return .change(
-                WordCorrection(
-                    heard: span.text, replacement: candidate.word, wordRange: span.range,
-                    entryID: candidate.entry.id, reason: reason, heardConfidence: span.confidence))
+            return WordCorrection(
+                heard: span.text, replacement: candidate.word, wordRange: span.range,
+                entryID: candidate.entry.id, reason: decision.reason, heardConfidence: span.confidence,
+                evidence: decision.evidence)
         }
         return .keep
     }
@@ -285,13 +281,13 @@ struct UncertainSpan: Sendable, Equatable {
     let reason: DoubtReason
 
     /// Every run up to the index's word limit in which every word is doubted, most deserving first.
-    static func spans(in utterance: Utterance, below threshold: Double) -> [UncertainSpan] {
-        spans(in: utterance.words.map { ($0.text, $0.confidence) }, below: threshold)
+    static func spans(in utterance: Utterance) -> [UncertainSpan] {
+        spans(in: utterance.words.map { ($0.text, $0.confidence, false) })
     }
 
     /// The same runs over a draft, reading the words as the passes left them and skipping what nobody said.
-    static func spans(in draft: Draft, below threshold: Double) -> [UncertainSpan] {
-        spans(in: saidWords(in: draft).map { ($0.text, $0.confidence) }, below: threshold)
+    static func spans(in draft: Draft) -> [UncertainSpan] {
+        spans(in: saidWords(in: draft).map { ($0.text, $0.confidence, $0.settled) })
     }
 
     /// The draft's words a run's range counts over: those still standing that the recogniser heard.
@@ -299,17 +295,11 @@ struct UncertainSpan: Sendable, Equatable {
         draft.words.filter { $0.isPresent && !$0.isLayoutMark && !$0.heard.isEmpty }
     }
 
-    /// Why one word is doubted, or `nil` when it is not: a low score first, else membership of a homophone group.
-    private static func doubt(text: String, confidence: Double, below threshold: Double) -> DoubtReason? {
-        if confidence < threshold { return .lowScore }
-        return Homophones.group(containing: text) == nil ? nil : .homophoneClass
-    }
-
     /// The runs themselves, over anything that can name a word and how sure the recogniser was of it.
-    static func spans(
-        in words: [(text: String, confidence: Double)], below threshold: Double
-    ) -> [UncertainSpan] {
-        let doubts = words.map { doubt(text: $0.text, confidence: $0.confidence, below: threshold) }
+    static func spans(in words: [(text: String, confidence: Double, settled: Bool)]) -> [UncertainSpan] {
+        let doubts = words.map {
+            DoubtPolicy.reason(text: $0.text, confidence: $0.confidence, settled: $0.settled)
+        }
         var spans: [UncertainSpan] = []
         for start in words.indices {
             for length in 1...PhoneticIndex.maximumWordsPerEntry where start + length <= words.count {
