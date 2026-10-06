@@ -553,10 +553,10 @@ public enum DictionaryPresenter {
             isRetired: isRetired,
             soundsLike: rival.map { "Sounds like \u{2018}\($0.word)\u{2019}" },
             actions: (merge.map { [$0] } ?? [])
-                + (isRetired ? [MainAction(title: "Restore", intent: .restoreWord(entry.id))] : [])
+                + (isRetired ? [MainAction(title: "Restore", intent: .restoreWords([entry.id]))] : [])
                 + [
                     MainAction(title: "Edit", symbolName: "pencil", intent: .editWord(entry.id)),
-                    .delete(.forgetWord(entry.id)),
+                    .delete(.forgetWords([entry.id])),
                 ])
     }
 

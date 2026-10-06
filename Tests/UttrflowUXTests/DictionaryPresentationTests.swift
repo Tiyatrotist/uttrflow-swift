@@ -145,7 +145,7 @@ struct DictionaryPageTests {
     func actions() {
         let entry = HistoryFixture.word()
         let row = HistoryFixture.dictionary(entries: [entry]).rows[0]
-        #expect(row.actions.map(\.intent) == [.editWord(entry.id), .forgetWord(entry.id)])
+        #expect(row.actions.map(\.intent) == [.editWord(entry.id), .forgetWords([entry.id])])
         #expect(!row.actions[0].isDestructive)
         #expect(row.actions[1].isDestructive)
         #expect(row.id == entry.id)
@@ -221,7 +221,7 @@ struct DictionaryRetirementTests {
         let entry = HistoryFixture.word(used: 10, reverted: 7)
         let row = HistoryFixture.dictionary(entries: [entry]).rows[0]
         #expect(row.actions.map(\.title) == ["Restore", "Edit", "Delete"])
-        #expect(row.actions[0].intent == .restoreWord(entry.id))
+        #expect(row.actions[0].intent == .restoreWords([entry.id]))
         #expect(!row.actions[0].isDestructive)
     }
 
