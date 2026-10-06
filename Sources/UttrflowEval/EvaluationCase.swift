@@ -20,6 +20,8 @@ public struct EvaluationCase: Sendable, Equatable, Identifiable {
         case secondLanguage
         /// An entry into a one-line field of no known purpose, which is a value and takes no stop alone.
         case oneLineField
+        /// A dictation of three hundred words or more, where sentence ends are what a tidier drops first.
+        case longInput
         /// A dictation that is only an address or a path, which is a literal and takes no capital or stop.
         case bareLiteral
         /// A query or command for a launcher panel, which keeps the heard case and takes no stop.
@@ -60,6 +62,8 @@ public struct EvaluationCase: Sendable, Equatable, Identifiable {
     public let mustBeginWith: String?
     /// Exactly how the output must end, for a case about its final mark.
     public let mustEndWith: String?
+    /// The fewest sentences the output must close, for a long case one run-on sentence must fail.
+    public let minimumSentences: Int?
     /// The one written form a structured output must take, character for character, where any other spelling is wrong.
     public let expectedExact: String?
     /// The spoken runs the recogniser was unsure of, which is what makes a case about a doubtful reading fire.
@@ -89,6 +93,7 @@ public struct EvaluationCase: Sendable, Equatable, Identifiable {
         destination: Destination = .plain,
         mustBeginWith: String? = nil,
         mustEndWith: String? = nil,
+        minimumSentences: Int? = nil,
         expectedExact: String? = nil,
         doubtful: [String] = [],
         classes: [FormattingClass] = [],
@@ -113,6 +118,7 @@ public struct EvaluationCase: Sendable, Equatable, Identifiable {
         self.destination = destination
         self.mustBeginWith = mustBeginWith
         self.mustEndWith = mustEndWith
+        self.minimumSentences = minimumSentences
         self.expectedExact = expectedExact
         self.doubtful = doubtful
         self.classes = classes
