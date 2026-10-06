@@ -353,6 +353,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// The history record the last transcript came from, so deleting that record forgets it too.
     private(set) var lastTranscriptID: UUID?
     private var lastTranscriptGeneration = 0
+    /// The newest history write, awaited before the last transcript is checked against history.
+    private var historyWrite: Task<Void, Never>?
     /// Asked when the panel opens whether a paste can be placed, held so the answer costs one call.
     private let accessibility = AccessibilityPermissionGate()
     private let microphone = MicrophonePermissionGate()
@@ -2625,7 +2627,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         lastTranscriptID = record.id
         recents.add(record)
         let days = settings.transcriptRetentionDays
-        Task { [weak self] in
+        let previous = historyWrite
+        historyWrite = Task { [weak self] in
+            await previous?.value
             guard let self else { return }
             do {
                 _ = try await history.append(record, keeping: Retention(days: days, now: Date()))
@@ -2890,6 +2894,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private func keptLastTranscript() async -> String? {
         guard let text = lastTranscript, !text.isEmpty, let id = lastTranscriptID else { return nil }
         let generation = lastTranscriptGeneration
+        await historyWrite?.value
         let retention = Retention(days: settings.transcriptRetentionDays, now: Date())
         let kept = await history.records(keeping: retention).contains { $0.id == id }
         guard generation == lastTranscriptGeneration, id == lastTranscriptID else { return nil }
