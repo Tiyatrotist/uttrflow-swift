@@ -47,10 +47,11 @@ public enum SentenceBoundaryEvidence {
         guard let last = previous.last, seamPrepositions.contains(last.key), following.count > 1 else {
             return false
         }
-        if previous.count > 1, objectPronouns.contains(previous[previous.count - 2].key) { return false }
         let clauseEnd = following.firstIndex(where: \.endsSentence).map { $0 + 1 } ?? following.count
         let fragment = following.prefix(clauseEnd)
-        let tags = LexicalClass.tags(ofWords: (previous + fragment).map(\.core)).dropFirst(previous.count)
+        let allTags = LexicalClass.tags(ofWords: (previous + fragment).map(\.core))
+        if previous.count > 1, allTags[previous.count - 2] == .pronoun { return false }
+        let tags = allTags.dropFirst(previous.count)
         guard !tags.contains(.verb), !tags.contains(.otherWord), let opening = tags.first else {
             return false
         }
@@ -108,9 +109,6 @@ public enum SentenceBoundaryEvidence {
     private static let seamPrepositions: Set<String> = ["on", "in", "up", "around"]
     private static let seamObjectEndings: [[String]] = [
         ["could", "finish"], ["pick", "up"], ["look"], ["covers"],
-    ]
-    private static let objectPronouns: Set<String> = [
-        "it", "them", "him", "her", "me", "us", "you", "this", "that",
     ]
     private static let copulas: Set<String> = ["is", "are", "was", "were"]
     private static let subordinators: Set<String> = ["although", "because", "if", "when"]
