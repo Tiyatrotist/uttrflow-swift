@@ -883,6 +883,9 @@ public actor DictationPipeline {
         // Checked before the state moves, so an abandoned run never overwrites the rest a cancel sets.
         guard !wasCancelled(mine) else { return }
         if state != .transcribing { transition(to: .transcribing) }
+        if let quality = CaptureQuality.measure(samples: audio.samples, sampleRate: audio.sampleRate) {
+            await metrics.recordCaptureQuality(quality)
+        }
         show(heard: nil)
 
         // A piece under way is finished, not thrown away: its words are needed either way.
