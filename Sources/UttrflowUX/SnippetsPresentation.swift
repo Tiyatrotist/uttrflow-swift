@@ -1,5 +1,6 @@
 // The Snippets page: its rows, the inline editor, and the presenter that draws them.
 public import UttrflowCore
+public import UttrflowDictionary
 public import Foundation
 
 /// One snippet ready to draw: the phrase you say, and the block of text you get instead.
@@ -61,6 +62,8 @@ public struct SnippetEditor: Sendable, Equatable {
     public let caution: String?
     /// Saves the snippet under the words that arrive, so it fires; absent when there is no arrival or a problem.
     public let saveArrived: MainAction?
+    /// Names a trigger word the Dictionary may rewrite, since the matcher sees the rewritten word; absent when none.
+    public let dictionaryNote: String?
     /// Commits the snippet.
     public let save: MainAction
     /// Closes the editor unchanged.
@@ -82,6 +85,7 @@ public struct SnippetEditor: Sendable, Equatable {
         arrival: String? = nil,
         caution: String? = nil,
         saveArrived: MainAction? = nil,
+        dictionaryNote: String? = nil,
         save: MainAction,
         cancel: MainAction
     ) {
@@ -96,6 +100,7 @@ public struct SnippetEditor: Sendable, Equatable {
         self.arrival = arrival
         self.caution = caution
         self.saveArrived = saveArrived
+        self.dictionaryNote = dictionaryNote
         self.save = save
         self.cancel = cancel
     }
@@ -151,13 +156,17 @@ public struct SnippetsSnapshot: Sendable, Equatable {
     public let now: Date
     /// How the draft's trigger arrives when said, once measured; one for an older trigger is ignored.
     public let arrival: SnippetArrival?
+    /// The Dictionary as last read, so the editor can say which trigger words it may rewrite.
+    public let dictionary: [DictionaryEntry]
 
     /// Builds a snapshot; everything but the clock defaults to empty.
     public init(
         snippets: [Snippet] = [], draft: SnippetDraft? = nil, refusal: String? = nil,
-        query: String = "", sort: String = "", now: Date, arrival: SnippetArrival? = nil
+        query: String = "", sort: String = "", now: Date, arrival: SnippetArrival? = nil,
+        dictionary: [DictionaryEntry] = []
     ) {
         self.arrival = arrival
+        self.dictionary = dictionary
         self.snippets = snippets
         self.draft = draft
         self.refusal = refusal
@@ -304,6 +313,7 @@ public enum SnippetsPresenter {
                         title: "Save as “\($0)”",
                         intent: .saveSnippet(trigger: $0, text: draft.text, replacing: draft.editing))
                 } : nil,
+            dictionaryNote: dictionaryNote(for: draft.trigger, in: snapshot.dictionary),
             save: MainAction(
                 title: "Save",
                 intent: .saveSnippet(
@@ -320,6 +330,30 @@ public enum SnippetsPresenter {
         let arrives = arrival.arrives.trimmingCharacters(in: .whitespacesAndNewlines)
         let heard = matchKey(arrives)
         return heard.isEmpty || heard == matchKey(trigger) ? nil : arrives
+    }
+
+    /// Names the first Dictionary entry whose spelling or "Say it like" appears among the trigger's words.
+    static func dictionaryNote(for trigger: String, in dictionary: [DictionaryEntry]) -> String? {
+        let words = matchKey(trigger)
+        guard !words.isEmpty else { return nil }
+        for entry in dictionary {
+            let spelt = matchKey(entry.word)
+            if contains(words, spelt) {
+                return "“\(entry.word)” is a Dictionary word, so dictation may change how it arrives."
+            }
+            if let sound = entry.pronunciation, case let heard = matchKey(sound), heard != spelt,
+                contains(words, heard)
+            {
+                return "Dictation may write “\(sound)” as “\(entry.word)”, from your Dictionary."
+            }
+        }
+        return nil
+    }
+
+    /// Whether `part` occurs as a run of whole words inside `words`.
+    private static func contains(_ words: [String], _ part: [String]) -> Bool {
+        guard !part.isEmpty, part.count <= words.count else { return false }
+        return (0...(words.count - part.count)).contains { Array(words[$0..<($0 + part.count)]) == part }
     }
 
     /// Warns about a one-word trigger, since it fires on that word wherever it is said.
