@@ -17,6 +17,7 @@ public actor DictationPipeline {
     let corrector: any WordCorrecting
     let snippets: any SnippetExpanding
     private let learner: any DictationLearning
+    private let consent: any LearningConsent
     private let vocabulary: any VocabularyLearning
     let metrics: any MetricsRecording
     /// Which quality layers run; a layer that is off leaves its stage's input as it came.
@@ -117,6 +118,7 @@ public actor DictationPipeline {
         snippets: any SnippetExpanding = NoTextChanges(),
         learner: any DictationLearning = NoTextChanges(),
         vocabulary: any VocabularyLearning = NoTextChanges(),
+        consent: any LearningConsent = NothingAskedYet(),
         metrics: any MetricsRecording = NoOpMetricsRecorder(),
         cleaningRecorder: any CleaningRecording = NoOpCleaningRecorder(),
         destinationOverrides: DestinationOverrides = .none,
@@ -142,6 +144,7 @@ public actor DictationPipeline {
         self.snippets = snippets
         self.learner = learner
         self.vocabulary = vocabulary
+        self.consent = consent
         self.metrics = metrics
         self.cleaningRecorder = cleaningRecorder
         self.destinationOverrides = destinationOverrides
@@ -1008,6 +1011,9 @@ public actor DictationPipeline {
             early.pendingInsertion = toWrite
             return
         }
+        // An application the user declined is learned nothing from, by counting or by the dictionary.
+        guard await consent.mayLearn(from: landedIn(attempt)?.bundleIdentifier ?? appContext?.bundleIdentifier)
+        else { return }
         // A secret is not a word to learn or count, by the same gate that keeps it out of History.
         let kept = KeptWords.of(toWrite, intoSecureField: wasSecure)
         // Both run after the words are on screen, and neither can fail the dictation. §19.
