@@ -74,12 +74,13 @@ public struct EncryptedStore: Sendable {
                 case .unknown: return .unreadable(setAside: nil)
                 }
             }
-            let value: Value
-            do {
-                value = try JSONDecoder().decode(type, from: payload)
-            } catch {
-                if !isEnvelope { return .unreadable(setAside: sealedSetAside(url, now: now)) }
-                throw error
+            guard let value = LocalStore.decodeKeepingReadable(
+                type, from: payload, readFrom: url, now: now,
+                onPreservedOriginal: { copy in
+                    if !isEnvelope { sealSetAsideCopy(copy) }
+                })
+            else {
+                return .unreadable(setAside: sealedSetAside(url, now: now))
             }
             if !isEnvelope {
                 do {
@@ -103,15 +104,20 @@ public struct EncryptedStore: Sendable {
     /// Sets an unreadable file aside and seals a plaintext copy in place, so the copy is never readable beside the encrypted store.
     func sealedSetAside(_ url: URL, now: Date) -> URL? {
         guard let copy = LocalStore.setAside(url, now: now) else { return nil }
-        guard let data = try? Data(contentsOf: copy), !Self.isSealed(data) else { return copy }
+        sealSetAsideCopy(copy)
+        return copy
+    }
+
+    /// Seals a preserved legacy plaintext copy while leaving an encrypted envelope unchanged.
+    private func sealSetAsideCopy(_ copy: URL) {
+        guard let data = try? Data(contentsOf: copy), !Self.isSealed(data) else { return }
         do {
             let key = try keys.key(createIfMissing: true)
             try PrivateFile.write(Self.seal(data, key: key, name: copy.lastPathComponent), to: copy)
         } catch {
             // The copy stays as it is rather than being lost; it still expires with the others.
-            Self.log.error("Could not seal a set-aside \(url.lastPathComponent, privacy: .public)")
+            Self.log.error("Could not seal a set-aside \(copy.lastPathComponent, privacy: .public)")
         }
-        return copy
     }
 
     /// Writes JSON only after sealing it with filename-bound authenticated data.
