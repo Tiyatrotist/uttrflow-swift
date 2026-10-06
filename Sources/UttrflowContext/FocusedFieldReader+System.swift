@@ -275,8 +275,8 @@ public enum FocusedFieldReader {
             stable = value
         }
         let identity = stable.identity
-        // Decided before the value is fetched, so a declared secure field's contents are never read at all.
-        let declaredSecure = identity.isDeclaredSecure
+        // Decided before any field text or marker read, so secure or unknown fields are not read further.
+        let secureOrUnknown = identity.isSecureOrUnknown
         guard goOn() else { return nil }
         let selected = SurfaceProbe.selection(field)
         if case .discontinuous = selected { return nil }
@@ -285,7 +285,7 @@ public enum FocusedFieldReader {
             range = value
         } else {
             range =
-                declaredSecure || !goOn()
+                secureOrUnknown || !goOn()
                 ? nil
                 : markerSelection(field).map {
                     CFRange(location: $0.range.location, length: $0.range.length)
@@ -538,11 +538,32 @@ public enum FocusedFieldReader {
 
         /// Whether the element declares itself secure by role or subrole, or as a field by name, asked of the answers already fetched.
         var isSecure: Bool {
-            SecureField.isDeclaredSecureOnScreen(
+            guard Self.securityAttributes.allSatisfy({ hasUsableSecurityAnswer(for: $0) }) else {
+                return true
+            }
+            return SecureField.isDeclaredSecureOnScreen(
                 role: role, subrole: self[kAXSubroleAttribute] as? String,
                 identifier: self[kAXIdentifierAttribute] as? String,
                 placeholder: self[kAXPlaceholderValueAttribute] as? String,
                 description: self[kAXDescriptionAttribute] as? String)
+        }
+
+        /// The role is required; errors in optional security names fail closed except when explicitly unsupported/empty.
+        private static let securityAttributes = [
+            kAXRoleAttribute, kAXSubroleAttribute, kAXIdentifierAttribute,
+            kAXPlaceholderValueAttribute, kAXDescriptionAttribute,
+        ]
+
+        private func hasUsableSecurityAnswer(for attribute: String) -> Bool {
+            guard let value = self[attribute] else { return false }
+            if attribute == kAXRoleAttribute { return value as? String != nil }
+            if CFGetTypeID(value) == CFNullGetTypeID() { return true }
+            guard CFGetTypeID(value) == AXValueGetTypeID() else { return value as? String != nil }
+            let axValue = unsafeDowncast(value, to: AXValue.self)
+            guard AXValueGetType(axValue) == .axError else { return true }
+            var error = AXError.failure
+            guard AXValueGetValue(axValue, .axError, &error) else { return false }
+            return error == .attributeUnsupported || error == .noValue
         }
 
         /// What the element says: the end of its value, else its title, else its description, and nothing for a secure element.
