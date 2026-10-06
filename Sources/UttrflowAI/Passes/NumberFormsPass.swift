@@ -327,7 +327,9 @@ public struct NumberFormsPass: PieceCleaningPass {
         _ ordinal: (value: Int, count: Int), at position: Int, keys: [String], shapes: [WordShape],
         policy: NumberPolicy
     ) -> Phrase? {
-        if ordinal.value >= 21, !isDateShapedOrdinal(at: position, ordinal: ordinal, keys: keys) {
+        if ordinal.value >= 21,
+            !isDateShapedOrdinal(at: position, ordinal: ordinal, keys: keys, shapes: shapes)
+        {
             return Phrase(text: "\(ordinal.value)\(ordinalSuffix(ordinal.value))", count: ordinal.count)
         }
         var end = position + ordinal.count
@@ -1060,8 +1062,12 @@ public struct NumberFormsPass: PieceCleaningPass {
 
     /// Keeps date-like and interrupted date forms intact for the existing date parser to handle.
     private static func isDateShapedOrdinal(
-        at position: Int, ordinal: (value: Int, count: Int), keys: [String]
+        at position: Int, ordinal: (value: Int, count: Int), keys: [String], shapes: [WordShape]
     ) -> Bool {
+        // A day after a dated month is the date parser's, which refuses an impossible one: "March thirty second".
+        if position > 0, joined(position, shapes), monthIsDated(at: position - 1, keys: keys, shapes: shapes) {
+            return true
+        }
         let end = position + ordinal.count
         guard end < keys.count else { return false }
         return keys[end] == "of" || monthDays[keys[end]] != nil
