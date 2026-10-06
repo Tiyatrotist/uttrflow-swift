@@ -17,11 +17,15 @@ public actor WhisperKitBackend: TranscriptionBackend {
     private var modelUseLease: ModelDirectoryUseLease?
     /// Where each finished load is kept for the Diagnostics page; `nil` in a measurement harness.
     private let loadLog: SpeechModelLoadLog?
+    /// Log-odds that help a begun dictionary word finish; zero turns the bias off.
+    private let phraseBias: Float
 
     public init(
         model: SpeechModel, modelFolder: URL, prewarm: Bool = true, compute: SpeechComputePlan = .shipping,
-        fallback: SpeechFallbackPlan = .shipping, loadLog: SpeechModelLoadLog? = nil
+        fallback: SpeechFallbackPlan = .shipping, loadLog: SpeechModelLoadLog? = nil,
+        phraseBias: Float = 0
     ) {
+        self.phraseBias = phraseBias
         self.model = model
         self.modelFolder = modelFolder
         self.prewarm = prewarm
@@ -96,7 +100,7 @@ public actor WhisperKitBackend: TranscriptionBackend {
             // Detection may only answer in a language the product transcribes, so Hindi is never heard as Urdu.
             whisper.textDecoder = LanguageHeldDecoder(
                 wrapping: whisper.textDecoder, languages: LanguageCode.transcribed)
-            kit = LoadedKit(whisper, fallback: fallback)
+            kit = LoadedKit(whisper, fallback: fallback, phraseBias: phraseBias)
         } catch {
             modelUseLease = nil
             throw WeightsAssets.loadFailure(
@@ -295,10 +299,12 @@ extension FileSystemSpeechModelStore {
 private final class LoadedKit: @unchecked Sendable {
     private let kit: WhisperKit
     private let fallback: SpeechFallbackPlan
+    private let phraseBias: Float
 
-    init(_ kit: WhisperKit, fallback: SpeechFallbackPlan) {
+    init(_ kit: WhisperKit, fallback: SpeechFallbackPlan, phraseBias: Float) {
         self.kit = kit
         self.fallback = fallback
+        self.phraseBias = phraseBias
     }
 
     /// What the load cost, as WhisperKit measured it while doing it.
@@ -325,7 +331,11 @@ private final class LoadedKit: @unchecked Sendable {
             fallback: fallback
         )
         // Reassigned on every call, including to nothing, so a rule never outlives the prompt it was measured for.
-        kit.textDecoder.logitsFilters = Self.rules(for: options, tokenizer: tokenizer)
+        kit.textDecoder.logitsFilters = Self.rules(
+            for: options, tokenizer: tokenizer,
+            bias: promptTokenizer.map {
+                PhraseBias(words: packing?.words ?? [], using: $0, strength: phraseBias)
+            })
         // Reassigned with the rules, so word timings always read the rows this call's prompt left them.
         kit.segmentSeeker = Self.seeker(for: options, tokenizer: tokenizer)
         return (
@@ -361,11 +371,11 @@ private final class LoadedKit: @unchecked Sendable {
         ).segmentSeeker()
     }
 
-    /// The timestamp rules a prompted decode loses, and nothing at all without a prompt, where WhisperKit's own still fire.
+    /// The prompt's own rules: the timestamp rules it loses and the bias towards its words; nothing without a prompt.
     private static func rules(
-        for options: DecodingOptions, tokenizer: (any WhisperTokenizer)?
+        for options: DecodingOptions, tokenizer: (any WhisperTokenizer)?, bias: PhraseBias?
     ) -> [any LogitsFiltering] {
-        guard options.promptTokens != nil, let tokenizer, !options.withoutTimestamps else {
+        guard options.promptTokens != nil, let tokenizer else {
             return []
         }
         let prefill = DecoderPrefill(
@@ -373,7 +383,14 @@ private final class LoadedKit: @unchecked Sendable {
             specialTokenBegin: tokenizer.specialTokens.specialTokenBegin,
             isMultilingual: !tokenizer.allLanguageTokens.isEmpty
         )
-        return prefill.logitsFilters(specialTokens: tokenizer.specialTokens)
+        let timestamps =
+            options.withoutTimestamps ? [] : prefill.logitsFilters(specialTokens: tokenizer.specialTokens)
+        guard let bias, bias.isActive else { return timestamps }
+        return timestamps + [
+            PhraseBiasFilter(
+                bias: bias, sampleBegin: prefill.count,
+                firstSpecialToken: tokenizer.specialTokens.specialTokenBegin)
+        ]
     }
 }
 
