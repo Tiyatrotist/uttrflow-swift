@@ -2943,6 +2943,7 @@
     "UttrflowInput enum KeyStrokeReturn": 1,
     "UttrflowInput enum Outcome": 1,
     "UttrflowInput enum PasteboardWriteResult": 1,
+    "UttrflowInput enum RecordedEdit": 1,
     "UttrflowInput enum SyntheticEvent": 1,
     "UttrflowInput enum TextInsertion": 1,
     "UttrflowInput enum UndoProbe": 1,
@@ -2989,7 +2990,7 @@
     "UttrflowInput func releaseHeldKeys": 1,
     "UttrflowInput func replaceSelection": 1,
     "UttrflowInput func replacing": 1,
-    "UttrflowInput func run": 1,
+    "UttrflowInput func run": 2,
     "UttrflowInput func sendPaste": 1,
     "UttrflowInput func sendUndo": 1,
     "UttrflowInput func setConcealedText": 2,
@@ -3014,7 +3015,7 @@
     "UttrflowInput func writeConcealedText": 3,
     "UttrflowInput func writeText": 3,
     "UttrflowInput func writeTransientText": 3,
-    "UttrflowInput init init": 27,
+    "UttrflowInput init init": 29,
     "UttrflowInput let after": 2,
     "UttrflowInput let before": 2,
     "UttrflowInput let budget": 1,
@@ -3066,6 +3067,7 @@
     "UttrflowInput struct InsertionRecord": 1,
     "UttrflowInput struct PasteConfirmation": 1,
     "UttrflowInput struct PasteboardImageInsertionEngine": 1,
+    "UttrflowInput struct RecordedEditor": 1,
     "UttrflowInput struct SuggestionAcceptor": 1,
     "UttrflowInput struct SystemPasteboard": 1,
     "UttrflowInput struct TextInsertionCoordinator": 1,
@@ -5240,5 +5242,5 @@
     "UttrflowUX var weeks": 1,
     "UttrflowUX var words": 2
   },
-  "total": 7281
+  "total": 7286
 }
