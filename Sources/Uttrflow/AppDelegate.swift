@@ -126,7 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Counts and timings, sent hourly unless Settings says not to. See `Docs/account-telemetry.md`.
     private var telemetry: UsageTelemetry?
     /// Whether secure keyboard entry is hiding the shortcut, checked on app switches and menu opens rather than on a timer.
-    private let secureInput = SecureInputWatch()
+    private let secureInput: SecureInputWatch
     private var secureInputObserver: (any NSObjectProtocol)?
     private var dictationSessionObservers: [any NSObjectProtocol] = []
     private var screenLockObserver: (any NSObjectProtocol)?
@@ -274,9 +274,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         waitForCalm: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         transformerReadiness: @escaping @Sendable (UserProfile) async -> Set<TransformerKind> = {
             profile in await SettingsCapabilities.refreshed(for: profile).readyTransformers
-        }, pasteboard: (any UttrflowInput.Pasteboard)? = nil
+        }, pasteboard: (any UttrflowInput.Pasteboard)? = nil,
+        secureInput: SecureInputWatch = SecureInputWatch()
     ) {
         self.container = container
+        self.secureInput = secureInput
         self.onboardingRecordStore = onboardingRecordStore
         self.encryptedStore = encryptedStore
         self.localTidier = localTidier
@@ -2463,6 +2465,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Internal so a test can end a dictation without a microphone.
     func render(_ state: DictationState) {
         getOutOfTheWay(for: state)
+        // A press that started or failed a dictation is an event that already arrived, so no timer is needed.
+        switch state {
+        case .recording, .failed: checkSecureInput()
+        default: break
+        }
         telemetry?.observe(state, language: settings.profile.preferredLanguages.first)
         if case .inserted(let outcome) = state { noteCleanUp(outcome) }
         // Recorded before the menu is drawn, and kept even when insertion failed. §19.
@@ -2663,8 +2670,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         refreshMenuBar()
     }
 
-    /// Why the shortcut cannot be heard, for both surfaces that say so.
-    private var shortcutUnheard: String? {
+    /// Why the shortcut cannot be heard, for both surfaces that say so. Internal so a test can read it.
+    var shortcutUnheard: String? {
         ShortcutArming.unheard(
             secureInputBlocking: secureInput.isBlocking, failure: shortcutArming.failure)
     }
