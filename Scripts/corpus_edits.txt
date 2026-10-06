@@ -2,6 +2,7 @@
 code-comment-keeps-spoken-commands comment prose after a comment marker is capitalised like other line markers (#5693)
 code-editor-comment-gets-a-stop comment prose after a comment marker is capitalised like other line markers (#5693)
 code-editor-comment-keeps-its-stop comment prose after a comment marker is capitalised like other line markers (#5693)
+code-editor-large-number-ungrouped The code editor writes a spoken "equals" as "=", as code-editor-spoken-equals expects; the reference kept the word.
 fmt-code-markdown-heading-kept an identity reference pins its shape: a heading takes no stop (#5700)
 fmt-list-lead-in-chat bounds the first and last word the destination's casing and stop policies decide (#5581)
 fmt-list-lead-in-document bounds the first and last word the destination's casing and stop policies decide (#5581)
