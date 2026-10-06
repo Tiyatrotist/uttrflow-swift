@@ -1870,6 +1870,7 @@
     "UttrflowCore var detail": 1,
     "UttrflowCore var diagnosticDescription": 1,
     "UttrflowCore var dictationMayLearn": 1,
+    "UttrflowCore var dictionaryRevision": 1,
     "UttrflowCore var diskReads": 1,
     "UttrflowCore var duration": 1,
     "UttrflowCore var earlyLength": 1,
@@ -2092,6 +2093,7 @@
     "UttrflowDictionary let origin": 1,
     "UttrflowDictionary let primary": 1,
     "UttrflowDictionary let pronunciation": 1,
+    "UttrflowDictionary let revision": 1,
     "UttrflowDictionary let spellings": 1,
     "UttrflowDictionary let text": 1,
     "UttrflowDictionary let unaddressable": 1,
@@ -3253,6 +3255,7 @@
     "UttrflowPipeline let primaryLine": 1,
     "UttrflowPipeline let reason": 1,
     "UttrflowPipeline let recovery": 1,
+    "UttrflowPipeline let revision": 1,
     "UttrflowPipeline let secondaryLine": 1,
     "UttrflowPipeline let secondsAfter": 1,
     "UttrflowPipeline let severity": 1,
@@ -3316,6 +3319,7 @@
     "UttrflowPipeline var modifierSettle": 1,
     "UttrflowPipeline var onOneLine": 1,
     "UttrflowPipeline var repeatWindow": 1,
+    "UttrflowPipeline var revision": 1,
     "UttrflowPipeline var scoredWords": 1,
     "UttrflowPipeline var setup": 1,
     "UttrflowPipeline var speechKind": 1,
@@ -5242,5 +5246,5 @@
     "UttrflowUX var weeks": 1,
     "UttrflowUX var words": 2
   },
-  "total": 7286
+  "total": 7290
 }

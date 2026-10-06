@@ -733,7 +733,9 @@ public actor DictationPipeline {
     /// Hands the dictation's account to its page when anything was tidied or skipped; never a secure field.
     private func reportCleaning(for delivery: Delivery) async {
         if !cleaningRecords.isEmpty, !destinationIsSecure, delivery != .command {
-            await cleaningRecorder.record(CleaningRecord.merging(cleaningRecords.map(\.record)))
+            var record = CleaningRecord.merging(cleaningRecords.map(\.record))
+            record.dictionaryRevision = dictationContext?.corrector.revision
+            await cleaningRecorder.record(record)
         }
     }
 
