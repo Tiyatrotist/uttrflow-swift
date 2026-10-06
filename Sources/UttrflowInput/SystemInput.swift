@@ -430,6 +430,13 @@ public struct AXAccessibilityFocus: AcceptanceFieldReader {
         focusedElement().flatMap(Self.identity(of:))
     }
 
+    /// Asks the window server for that one window, which answers nothing once it has closed.
+    public func windowIsOpen(_ windowNumber: UInt32) -> Bool? {
+        let info = CGWindowListCopyWindowInfo(.optionIncludingWindow, CGWindowID(windowNumber))
+        guard let windows = info as? [Any] else { return nil }
+        return !windows.isEmpty
+    }
+
     /// The element's owner, window and hash, the same three the context read records.
     private static func identity(of element: AXUIElement) -> FieldIdentity? {
         var owner: pid_t = 0
