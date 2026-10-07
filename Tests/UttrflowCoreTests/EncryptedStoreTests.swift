@@ -340,8 +340,8 @@ struct EncryptedStoreTests {
         #expect(FileManager.default.fileExists(atPath: file.path))
     }
 
-    @Test("sets malformed legacy JSON aside without asking for a key")
-    func malformedLegacyIsSetAside() throws {
+    @Test("keeps malformed legacy JSON in place when it cannot be encrypted")
+    func malformedLegacyStaysWhenSealingFails() throws {
         let directory = try folder()
         defer { try? FileManager.default.removeItem(at: directory) }
         let file = directory.appending(path: "history.v1.json")
@@ -351,11 +351,11 @@ struct EncryptedStoreTests {
         let stored = EncryptedStore(keys: MissingKey()).read([String].self, from: file)
 
         #expect(stored.isUnreadable)
-        #expect(!FileManager.default.fileExists(atPath: file.path))
-        #expect(LocalStore.hasSetAside(file))
-        guard case .unreadable(let moved) = stored else { return }
-        let setAside = try #require(moved)
-        #expect(try Data(contentsOf: setAside) == source)
+        #expect(stored.isLeftInPlace)
+        #expect(try Data(contentsOf: file) == source)
+        #expect(!LocalStore.hasSetAside(file))
+        let remaining = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        #expect(remaining == [file.lastPathComponent])
     }
 
     @Test("seals a plaintext file it sets aside, so the copy is not readable beside the encrypted store")
@@ -365,7 +365,9 @@ struct EncryptedStoreTests {
         let file = directory.appending(path: "history.v1.json")
         let source = Data("[\"private\", ".utf8)
         try source.write(to: file)
-        let store = EncryptedStore(keys: Keys(value: SymmetricKey(size: .bits256)))
+        let store = EncryptedStore(
+            keys: Keys(value: SymmetricKey(size: .bits256)),
+            markerURL: directory.appending(path: "legacy-migration.marker"))
 
         let stored = store.read([String].self, from: file)
 
