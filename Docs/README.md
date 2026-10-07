@@ -29,6 +29,7 @@ place to start; if you want to change it, [CONTRIBUTING](../CONTRIBUTING.md) and
 | [silence.md](silence.md) | Silence, and why it has to be caught before the recogniser |
 | [speech-engines.md](speech-engines.md) | The speech engines, and what WhisperKit does when nobody is looking |
 | [decoder-evidence.md](decoder-evidence.md) | What WhisperKit can say about a doubtful word |
+| [recogniser-evidence.md](recogniser-evidence.md) | What each recogniser signal can and cannot say |
 | [unknown-confidence.md](unknown-confidence.md) | What each layer does when a word's confidence is unknown |
 | [decode-session.md](decode-session.md) | The decode loop the repository owns, and its parity with WhisperKit's |
 | [speech-vocabulary-prompt.md](speech-vocabulary-prompt.md) | Conditioning Whisper on the user's own words |
