@@ -291,17 +291,21 @@ public struct AppliedChanges: Sendable, Equatable {
     public let entriesTaken: [UUID]
     /// Words the recogniser heard before any rewrite; the space ``DictationCorrection/wordRange`` indexes.
     public let spokenWords: Int?
+    /// Where the rules passes changed the written words; nil when unlocated, as on the model path.
+    public let changeLedger: [ChangeLedgerEntry]?
     /// Words script enforcement wrote in Latin letters: romanised from Devanagari or transliterated from another script.
     public let scriptConversions: ScriptConversions
 
     public init(
         corrections: [DictationCorrection] = [], snippets: [SnippetUse] = [],
-        entriesTaken: [UUID] = [], spokenWords: Int? = nil, scriptConversions: ScriptConversions = .none
+        entriesTaken: [UUID] = [], spokenWords: Int? = nil, changeLedger: [ChangeLedgerEntry]? = nil,
+        scriptConversions: ScriptConversions = .none
     ) {
         self.corrections = corrections
         self.snippets = snippets
         self.entriesTaken = entriesTaken
         self.spokenWords = spokenWords
+        self.changeLedger = changeLedger
         self.scriptConversions = scriptConversions
     }
 

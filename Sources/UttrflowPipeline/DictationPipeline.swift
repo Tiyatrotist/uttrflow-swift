@@ -1146,6 +1146,8 @@ public actor DictationPipeline {
             entriesTaken: whole.cleaned.entriesTaken,
             // The unrewritten sentence, which is the space the corrections' word ranges index.
             spokenWords: whole.heard.text.spokenWords.count,
+            // A snippet changes the word count, so the ledger's positions hold only when none fired.
+            changeLedger: expanded.snippets.isEmpty ? whole.cleaned.changeLedger : nil,
             scriptConversions: joined.scriptConversions + ScriptConversions(finalEnforcement))
         guard
             let attempt = await insert(
