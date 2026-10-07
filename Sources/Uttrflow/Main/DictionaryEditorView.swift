@@ -1,4 +1,4 @@
-// The Dictionary page's editor card: the word, its pronunciations, a try, and save.
+// The Dictionary page’s editor card: the word, its pronunciations, a try, and save.
 
 import UttrflowUX
 import SwiftUI
@@ -18,9 +18,13 @@ struct DictionaryEditorView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("New word")
-                    .font(BrandFont.display(size: 14, weight: .semibold))
-                    .foregroundStyle(PagePalette.text)
+                Text(
+                    String(
+                        localized: "New word",
+                        comment: "Title of the dictionary editor card when adding a word")
+                )
+                .font(BrandFont.display(size: 14, weight: .semibold))
+                .foregroundStyle(PagePalette.text)
                 Spacer(minLength: 0)
                 PageBadge(text: editor.badge.text)
             }

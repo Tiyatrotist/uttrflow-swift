@@ -1,4 +1,4 @@
-// The Dictionary page: today's fixes, the filter chips, the words table and its editor card.
+// The Dictionary page: today's fixes, the filter chips and the words table.
 
 import UttrflowUX
 import SwiftUI
