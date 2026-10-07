@@ -3117,6 +3117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             knownWords = await dictionary.allEntries()
             knownRefusals = await dictionary.refusedWords()
             knownPairs = await readPairs()
+            ledgerRefusal = await evidence?.refusal()
             knownSnippets = await snippets.snippets()
             let suggestionCounts: SuggestionCounts?
             if settings.suggestions.isEnabled, let completions {
@@ -3227,7 +3228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     lastCleanedBy: lastCleanedBy,
                     suggestionModel: suggestionModel, version: .ofThisBuild,
                     machine: MachineDescription.current, arrivals: entries.map(\.arrival),
-                    qualityLayers: qualityLayers)),
+                    qualityLayers: qualityLayers, learnedState: ledgerRefusal)),
             account: accountPage(at: now),
             shortcutKeycaps: SettingsShortcut.keycaps(for: settings.hotkey))
     }
@@ -3350,6 +3351,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var knownRecordings: [KeptRecording] = []
     /// What the ledger says about each heard-to-meant pairing, as of the last refresh.
     private var knownPairs: [String: ConfusionPairs.Feature] = [:]
+    /// Why the ledger is set aside, as of the last refresh, so Diagnostics can say so.
+    private var ledgerRefusal: EvidenceLedgerError?
     /// The recording the pipeline is running again, so its row can say so.
     private var retryBadge = RetryBadgeOwnership()
     private var retryingRecording: UUID? { retryBadge.recording }
