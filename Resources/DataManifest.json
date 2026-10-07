@@ -196,8 +196,8 @@
       "licence": "MIT",
       "redistribution": true,
       "note": "read through DataTable; see Docs/data-tables.md",
-      "sha256": "70d6d11dd1842510f8f06c2575da202c063199f4b6d3d2d7330130ffa76ece68",
-      "bytes": 8585
+      "sha256": "bcc18030aadeee971070e2a3c24917dcc4875644462aeca38e9e0f9f96a49cce",
+      "bytes": 8637
     },
     {
       "path": "Sources/UttrflowCore/Resources/Tables/romanised-variants.json",
