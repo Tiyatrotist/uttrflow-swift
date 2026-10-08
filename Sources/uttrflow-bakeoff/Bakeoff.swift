@@ -138,6 +138,10 @@ struct Bakeoff: AsyncParsableCommand {
                 + "\(contextNote)")
         print(header.summary)
         print(Self.provenance(of: scored))
+        // Keep the full-corpus matrix visible even when this run scores one selected case.
+        print(
+            "\nCases by destination and field kind\n" + DestinationMatrix().lines.joined(separator: "\n")
+                + "\n")
         print(await Self.guardFalseRefusals(over: scored) + "\n")
 
         var measured: [Measurement] = []
