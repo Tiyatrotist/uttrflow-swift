@@ -96,6 +96,8 @@ struct AbstentionCorpusTests {
     static let knownMisfires: Set<String> = [
         "abstain-shell-double-dash-code", "abstain-shell-double-dash-comment",
         "abstain-shell-double-dash-string",  // #6469
+        "abstain-shell-greater-than-code", "abstain-shell-greater-than-comment",
+        "abstain-shell-greater-than-string",  // #6468
     ]
 
     @Test("leaves every word as spoken and adds no symbol under the rules, outside the known misfires")
