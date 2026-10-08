@@ -21,6 +21,13 @@ final class PanelSearchMemo: Sendable, Equatable {
         let category: String?
         let locale: Locale
         let revealed: Set<Clip.ID>
+
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            guard lhs.clips == rhs.clips, lhs.needle == rhs.needle, lhs.filter == rhs.filter,
+                lhs.locale == rhs.locale, lhs.revealed == rhs.revealed
+            else { return false }
+            return !lhs.needle.isEmpty || (lhs.scope == rhs.scope && lhs.category == rhs.category)
+        }
     }
 
     /// What one view found, and the rows it was ranked and capped into.
