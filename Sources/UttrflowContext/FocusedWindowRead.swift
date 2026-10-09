@@ -271,7 +271,7 @@ extension MacContextEngine {
     }
 
     /// The line mode the field answered, else the one its role implies, else unknown.
-    private static func isMultiline(_ answered: Bool?, role: String?) -> Bool? {
+    static func isMultiline(_ answered: Bool?, role: String?) -> Bool? {
         answered
             ?? role.flatMap { role in
                 switch role {
