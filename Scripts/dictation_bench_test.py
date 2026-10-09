@@ -184,6 +184,35 @@ class BenchTests(unittest.TestCase):
         combined = run.stdout + run.stderr
         self.assertIn("unknown-clip", combined)
 
+    # baseline compare
+
+    def judge(self, run, baseline, *flags):
+        return self.run_bench("score", run, "--baseline", baseline, *flags)
+
+    def test_a_saved_baseline_passes_the_same_run_and_fails_a_worse_one(self):
+        # The paired bootstrap rules on a slice only with two utterances or more.
+        with open(os.path.join(self.out, "corpus.json"), "w") as handle:
+            json.dump([CLIP, dict(CLIP, id="second", wav="second.wav")], handle)
+        good = self.write_run(*("BENCH " + json.dumps(result_event(i)) for i in ("known", "second")))
+        baseline = os.path.join(self.out, "baseline.json")
+        saved = self.judge(good, baseline, "--save-baseline")
+        self.assertEqual(saved.returncode, 0, saved.stderr)
+        self.assertEqual(json.load(open(baseline))["entries"][0]["referenceWordCount"], 2)
+        same = self.judge(good, baseline, "--fail-on-regression")
+        self.assertEqual(same.returncode, 0, same.stdout + same.stderr)
+        self.assertIn("verdict: no change detectable", same.stdout)
+        worse = self.write_run(*("BENCH " + json.dumps(result_event(i, text="Hello there.")) for i in ("known", "second")))
+        judged = self.judge(worse, baseline, "--fail-on-regression")
+        self.assertNotEqual(judged.returncode, 0)
+        self.assertIn("verdict: worsened", judged.stdout)
+
+    def test_a_run_mixing_cleaners_is_refused_rather_than_judged_as_one(self):
+        rules = dict(result_event("known"), cleaner="rules")
+        run = self.write_run("BENCH " + json.dumps(result_event("known")), "BENCH " + json.dumps(rules))
+        judged = self.judge(run, os.path.join(self.out, "b.json"), "--save-baseline")
+        self.assertNotEqual(judged.returncode, 0)
+        self.assertIn("one cleaner and mode", judged.stderr)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)

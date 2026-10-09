@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Builds the synthetic dictation corpus, writes jobs for `uttrflow-dev bench`, and scores a run. See Docs/performance.md.
-import argparse, array, hashlib, json, math, os, random, re, statistics, subprocess, sys, unicodedata, wave
+import argparse, array, datetime, hashlib, json, math, os, random, re, statistics, subprocess, sys, unicodedata, wave
 from collections import Counter, defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -553,6 +553,54 @@ def score(args):
     failed = [(s["r"]["id"], s["r"]["failed"]) for s in scored if s["r"].get("failed")]
     print(f"\nfailed: {failed or 'none'}")
     unstable(scored)
+    if args.baseline:
+        gate(args, scored)
+
+
+def as_baseline(scored):
+    """The run's final rates as counts in AccuracyBaseline's format, so `uttrflow-eval compare` judges it."""
+    runs = {(s["r"]["cleaner"], s["r"]["mode"]) for s in scored}
+    if len(runs) != 1:
+        sys.exit(f"--baseline judges one cleaner and mode at a time; this run has {sorted(runs)}")
+    (cleaner, mode), = runs
+    entries = {}
+    for s in scored:
+        c = s["c"]
+        if c["language"] not in ("english", "hindi", "hinglish"):
+            sys.exit(f"clip {c['id']} has language {c['language']!r}, which the baseline format cannot hold")
+        entry = entries.setdefault(c["id"], dict(
+            caseID=c["id"], language=c["language"], stresses=sorted({c["category"], c["variant"]}),
+            cohortID=c["voice"], errors=0, referenceWordCount=0, isUnscorable=False,
+            recordingIdentity=audio_digest(c)))
+        if s["r"].get("failed"):
+            entry["isUnscorable"] = True
+            continue
+        entry["errors"] += s["out"][0]
+        entry["referenceWordCount"] += s["out"][1]
+    return dict(label=f"dictation bench final text, cleaner {cleaner}, mode {mode}",
+                recordedAt=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                normalisation=normalisation_rules().split(","),
+                entries=sorted(entries.values(), key=lambda e: e["caseID"]))
+
+
+def audio_digest(clip):
+    """The clip's audio digest, so a re-synthesised clip that changed makes the comparison refuse a verdict."""
+    if not os.path.exists(clip["wav"]):
+        return None
+    with open(clip["wav"], "rb") as handle:
+        return "sha256:" + hashlib.sha256(handle.read()).hexdigest()
+
+
+def gate(args, scored):
+    """Hands the run to `uttrflow-eval compare`, the one regression rule, and exits with its verdict."""
+    measured = os.path.join(args.out, "measured-baseline.json")
+    with open(measured, "w") as handle:
+        json.dump(as_baseline(scored), handle, indent=2)
+    command = [eval_tool(), "compare", "--measured", measured, "--baseline", args.baseline]
+    command += ["--save-baseline"] if args.save_baseline else []
+    command += ["--fail-on-regression"] if args.fail_on_regression else []
+    sys.stdout.flush()
+    sys.exit(subprocess.run(command).returncode)
 
 
 def term_heard(term, text):
@@ -611,6 +659,9 @@ def main():
     j.add_argument("--repeat", type=int, default=1)
     s = sub.add_parser("score", help="score the output of uttrflow-dev bench")
     s.add_argument("run")
+    s.add_argument("--baseline", help="compare the final text's rates with the baseline at this path")
+    s.add_argument("--save-baseline", action="store_true", help="write this run to --baseline instead")
+    s.add_argument("--fail-on-regression", action="store_true", help="exit non-zero when any slice got worse")
     args = parser.parse_args()
     {"corpus": corpus, "jobs": jobs, "score": score}[args.command](args)
 
