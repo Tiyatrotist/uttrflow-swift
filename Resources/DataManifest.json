@@ -352,8 +352,8 @@
       "licence": "MIT",
       "redistribution": true,
       "note": "evaluation cases read through CorpusFile",
-      "sha256": "38d96a64ee289cfd2ec316a96865b5bbda54db7befbdc4939bd3f8fe0b93d8b6",
-      "bytes": 42524
+      "sha256": "1e12502d5d6d4ca57ac86072a20e113bfafe4351c0887a1183aab688264d1f74",
+      "bytes": 43632
     },
     {
       "path": "Sources/UttrflowEval/Resources/Corpus/grammar.json",
@@ -370,8 +370,8 @@
       "licence": "MIT",
       "redistribution": true,
       "note": "evaluation cases read through CorpusFile",
-      "sha256": "3795dbb289b352720ed904d3e695f9da95c24d214f5c6d075e92f450b38530ef",
-      "bytes": 7929
+      "sha256": "49e118e6fda47ebbf8082b8df54a896462dd5a4960cb4554f85ee8f0fdebcd76",
+      "bytes": 15751
     },
     {
       "path": "Sources/UttrflowEval/Resources/Corpus/multilingual.json",
@@ -586,6 +586,24 @@
       "note": "the phoneme classes PhonemeLexicon weighs at half cost; see Docs/pronunciation-lexicon.md",
       "sha256": "7d9729277cb44bf775dd572486b74266d47d13d854fac985880d827f31c59ad0",
       "bytes": 232
+    },
+    {
+      "path": "Sources/UttrflowEval/Resources/Corpus/hinglishReply.json",
+      "origin": "authored",
+      "licence": "MIT",
+      "redistribution": true,
+      "note": "evaluation cases read through CorpusFile",
+      "sha256": "7935c6320a49210e3627bd70862f75ad7da953d1c5565deb7a0db5bba275f7fd",
+      "bytes": 2115
+    },
+    {
+      "path": "Sources/UttrflowEval/Resources/Corpus/homophone.json",
+      "origin": "authored",
+      "licence": "MIT",
+      "redistribution": true,
+      "note": "evaluation cases read through CorpusFile",
+      "sha256": "61b5a491dd2d6e94614eaed43f4e04597a8d83ccc142804100205694ad06337c",
+      "bytes": 1880
     }
   ]
 }
