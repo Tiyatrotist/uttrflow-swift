@@ -99,7 +99,10 @@ took out and says "undo that" brings them back; it never names a word.
 sequence by `WordForms`, the match nearest the end) and written by `RecordedEditor.rewrite` over
 the same span, so "undo that" puts the dictation back. When X is not in the last dictation the
 command refuses and nothing is written. Command words go through the dictionary before any
-command reads them, so Y is written in the spelling the user filed.
+command reads them, so Y is written in the spelling the user filed. Y is then tidied by the rules
+as a piece (`DictationPipeline.tidiedPhrase`: fillers, numbers and spoken marks, no model, and no
+casing or closing stop, which belong to where Y lands); the command words are not tidied. With
+more than one match the notice says the last was replaced (`ReplaceCommand.done`).
 
 ## Key presses
 
