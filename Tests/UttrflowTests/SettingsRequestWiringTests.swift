@@ -259,6 +259,7 @@ private func name(of change: SettingsChange) -> String {
     case .pauseClipboardCapture: "pauseClipboardCapture"
     case .checkForUpdatesNow: "checkForUpdatesNow"
     case .chooseApplicationToTurnOffSuggestions: "chooseApplicationToTurnOffSuggestions"
+    case .chooseApplicationForDestination: "chooseApplicationForDestination"
     case .retrySuggestionModel: "retrySuggestionModel"
     case .exportPersonalData: "exportPersonalData"
     case .importPersonalData: "importPersonalData"
@@ -342,6 +343,7 @@ private let samples: [Sample] = [
     Sample(.pauseSuggestions(isOn: true), from: suggesting),
     Sample(.checkForUpdatesNow),
     Sample(.chooseApplicationToTurnOffSuggestions, from: suggesting),
+    Sample(.chooseApplicationForDestination),
     Sample(.retrySuggestionModel),
     Sample(.openPage(.corrections)),
 ]
