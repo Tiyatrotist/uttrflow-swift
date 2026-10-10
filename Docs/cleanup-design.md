@@ -286,6 +286,12 @@ title, the selection and the text around the caret), **ordinary words** (`Phonet
 the Double Metaphone neighbours among `GeneralVocabulary`'s ordinary words), and **homophones**
 (`HomophoneCandidates`, a word's partner in the hand-kept `Homophones` table).
 
+The sources are feature producers, not choosers. Their answers for one span become a
+`HypothesisSet`: each reading once, with the first source that offered it and how many sources
+agreed. One `SpanScorer`, held by `DoubtfulWords`, ranks the set before the span's limit of
+readings is applied; the default `SourceOrderScorer` keeps the order above. A new signal is a
+feature or a scorer behind this seam, never a second path to a reading.
+
 The **chooser is the same model call**: the situation block lists each doubtful word
 with its candidates —
 
