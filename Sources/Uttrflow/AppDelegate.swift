@@ -2192,6 +2192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // Onto the clipboard and no further: the user will paste it somewhere else.
             if putOnClipboard(text, richText: richText, used: used) {
                 closeQuickPanel()
+                reportPanelPaste(.copied(.text))
             } else {
                 panel?.notice = Self.clipboardCopyFailedNotice
                 if let snapshot = panel { quickPanel.update(PanelPresenter.present(snapshot)) }
@@ -2199,6 +2200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .closeAndCopyConcealed(let text, let used):
             if putOnClipboard(text, concealed: true, used: used) {
                 closeQuickPanel()
+                reportPanelPaste(.copied(.hiddenText))
             } else {
                 panel?.notice = Self.clipboardCopyFailedNotice
                 if let snapshot = panel { quickPanel.update(PanelPresenter.present(snapshot)) }
@@ -2219,6 +2221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     return
                 }
                 closeQuickPanel()
+                reportPanelPaste(.copied(.picture))
             }
         case .applyAndRedraw(let change):
             if let snapshot = panel { quickPanel.update(PanelPresenter.present(snapshot)) }
@@ -2622,7 +2625,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
-    /// Says on the floating button, and aloud, what a panel paste left undone; the panel has already gone.
+    /// Says on the floating button, and aloud, what a panel action left on the clipboard.
     private func reportPanelPaste(_ result: PanelPasteResult) {
         guard let report = PanelPasteReport.after(result) else { return }
         var spoken = AttributedString(report.spoken)
@@ -3044,10 +3047,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .copyRecent(let id):
             guard let recent = recents.entries.first(where: { $0.id == id }) else { return }
             // And through the helper that announces the write, for the same reason.
-            if !putOnClipboard(
-                recent.text, concealed: DictationTextPresentation(recent.text).isSecret, used: nil)
-            {
+            let isSecret = DictationTextPresentation(recent.text).isSecret
+            if !putOnClipboard(recent.text, concealed: isSecret, used: nil) {
                 showClipboardCopyFailure()
+            } else {
+                reportPanelPaste(.copied(isSecret ? .hiddenText : .text))
             }
         case .insertClip(let id):
             guard let clip = menuClips.first(where: { $0.id == id }) else { return }
@@ -3061,12 +3065,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             if clip.image != nil {
                 Task { [weak self] in
                     guard let self else { return }
-                    if await putImageOnClipboard(clip) != .copied { showClipboardCopyFailure() }
+                    if await putImageOnClipboard(clip) == .copied {
+                        reportPanelPaste(.copied(.picture))
+                    } else {
+                        showClipboardCopyFailure()
+                    }
                 }
             } else {
-                if !putOnClipboard(
+                if putOnClipboard(
                     clip.text, richText: clip.richText, concealed: clip.kind == .secret, used: clip.id)
                 {
+                    reportPanelPaste(.copied(clip.kind == .secret ? .hiddenText : .text))
+                } else {
                     showClipboardCopyFailure()
                 }
             }
