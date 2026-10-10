@@ -178,23 +178,43 @@ public enum FocusedFieldReader {
         surroundings(of: app, while: { true })
     }
 
-    /// The same synchronous read, stopping before its next Accessibility message when its queue ticket is invalidated.
+    /// The same synchronous read, stopping at its budget or when its queue ticket is invalidated.
     private static func surroundings(
         of app: FrontmostApp, while isWanted: @escaping @Sendable () -> Bool
     ) -> Surroundings? {
+        // The budget covers the focus and window lookups too, and no message is sent once it is spent.
+        let deadline = ContinuousClock.now + .milliseconds(Surroundings.budgetInMilliseconds)
         // A field with no window, or a window focused as a whole, has nothing around it worth a walk.
-        guard AXIsProcessTrusted(), !slowFields.isQuiet(app.processIdentifier),
-            let field = SurfaceProbe.focusedField(of: app.processIdentifier),
+        guard isWanted(), AXIsProcessTrusted(), !slowFields.isQuiet(app.processIdentifier),
+            let field = SurfaceProbe.focusedField(of: app.processIdentifier), isWanted(),
             !slowFields.isResting(SlowFields.Key(process: app.processIdentifier, element: CFHash(field))),
-            let window = SurfaceProbe.element(
-                field, kAXWindowAttribute, timeoutInSeconds: elementTimeoutInSeconds),
+            prepareMessage(field, deadline: deadline), isWanted(),
+            let window = SurfaceProbe.element(field, kAXWindowAttribute),
             !CFEqual(field, window)
         else { return nil }
-        let answers = AXNode(window).answers
+        let answers = AXNode(window, deadline: deadline).answers
         return Surroundings.collect(
-            around: AXNode(field), in: AXElementTree(), windowTitle: answers.title,
-            windowFrame: answers.frame, isWanted: isWanted
+            around: AXNode(field, deadline: deadline), in: AXElementTree(), windowTitle: answers.title,
+            windowFrame: answers.frame, deadline: deadline, isWanted: isWanted
         )
+    }
+
+    /// Caps one Accessibility message to the walk's time left, or leaves it unsent once that time is spent.
+    static func prepareMessage(_ element: AXUIElement, deadline: ContinuousClock.Instant?) -> Bool {
+        prepareMessage(deadline: deadline, maximum: elementTimeoutInSeconds) { timeout in
+            AXUIElementSetMessagingTimeout(element, timeout) == .success
+        }
+    }
+
+    /// Applies one message timeout only while the deadline still has time to spend; no deadline leaves it as it is.
+    static func prepareMessage(
+        deadline: ContinuousClock.Instant?, maximum: Float, now: ContinuousClock.Instant = .now,
+        applyTimeout: (Float) -> Bool
+    ) -> Bool {
+        guard let deadline else { return true }
+        guard let timeout = WalkBudget(deadline: deadline).messageTimeoutInSeconds(maximum: maximum, now: now)
+        else { return false }
+        return applyTimeout(timeout)
     }
 
     /// The fields whose reads ran past their budget lately, which are left alone until their rest is over.
