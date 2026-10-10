@@ -45,7 +45,9 @@ struct SuggestionSelectionCadenceTests {
         #expect(reads.value == 300)
 
         // Dating the last activity past the window lets the next tick find the ghost idle without waiting for it.
-        coordinator.noteActivity(at: Date().addingTimeInterval(-(SuggestionTicking.window + 1)))
+        coordinator.noteActivity(
+            at: ContinuousClock.now.advanced(
+                by: .milliseconds(-Int64((SuggestionTicking.window + 1) * 1_000))))
         // Shown only across the tick, with no suspension, so no other test's panel count or display change sees it.
         let caret = CGRect(x: screen.minX + 200, y: screen.midY, width: 0, height: 17)
         panel.show(.certain("completion"), placement: .inlineGhost, caret: caret)
