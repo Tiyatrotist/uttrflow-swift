@@ -1092,6 +1092,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             let coordinator = try SuggestionCoordinator(
                 container: container, preferences: settings.suggestions, scoring: scoring,
                 generating: generating, encryptedStore: encryptedStore,
+                onCaptureSkipped: { [weak self] reason in
+                    await self?.diagnostics.recordCaptureSkip(reason)
+                },
                 editHeard: { [weak self] edit in
                     await MainActor.run {
                         guard let self, let evidence = self.evidence else { return }
@@ -3256,9 +3259,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         Task { [weak self] in
             guard let self else { return }
             let measurements = await diagnostics.recorded
+            let captureSkips = await diagnostics.recordedCaptureSkips
             let decoding = await diagnostics.decoding
             lastWaits = await diagnostics.waits.timed
             lastMeasurements = measurements
+            lastCaptureSkips = captureSkips
             lastDecoding = decoding
             lastSegmentReliability = await diagnostics.reliability
             lastSpeechModelLoads = speechModelLoadLog.history().records
@@ -3379,7 +3384,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     dictationShortcutArmed: surfaces.listensForDictation
                         && shortcutArming.failure == nil,
                     hasDefaultInputDevice: SettingsCapabilities.hasAudioInput,
-                    measurements: measurements, vocabularyPrompt: lastVocabularyPrompt,
+                    measurements: measurements, captureSkips: lastCaptureSkips,
+                    vocabularyPrompt: lastVocabularyPrompt,
                     decoding: lastDecoding, segmentReliability: lastSegmentReliability,
                     waits: lastWaits,
                     speechModelLoads: lastSpeechModelLoads,
@@ -3504,6 +3510,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var knownPicture: (path: String, bytes: Data)?
     /// The timings last read, so a keystroke redraws without hopping to the actor.
     private var lastMeasurements: [StageMeasurement] = []
+    /// Why suggestion lines were excluded, without retaining their text.
+    private var lastCaptureSkips: [CaptureSkipReason: Int] = [:]
     /// The decode effort last read, so a keystroke redraw uses the same bounded session window.
     private var lastDecoding: [DecodeEffort] = []
     /// The decoder's judgement of recent segments, read with the decode effort.
