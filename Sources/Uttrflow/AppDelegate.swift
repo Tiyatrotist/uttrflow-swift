@@ -1227,7 +1227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         Task { await speechEngine.release() }
     }
 
-    /// Releases the suggestion model under pressure, then permits a query-driven reload after calm. See `Docs/performance-suggestions.md`.
+    /// Releases the suggestion model under pressure, then recovers it after calm. See `Docs/performance-suggestions.md`.
     func memoryPressureChanged(to level: MemoryPressureLevel) {
         switch level {
         case .warning, .critical:
@@ -1238,7 +1238,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             // A model shown as failed may still be retrying its reload, so pressure lets that go too.
             guard settings.suggestions.isEnabled, isModelPreparing || suggestionModel == .loadFailed
             else { return }
-            memoryPressure.released(at: .now)
+            if case .downloading = suggestionModel {
+                memoryPressure.firstDownloadReleased(at: .now)
+            } else {
+                memoryPressure.released(at: .now)
+            }
             releaseTheModel()
             suggestionModel = .releasedForMemory
         case .normal:
@@ -1253,6 +1257,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 guard !Task.isCancelled, let self, memoryPressure.isReleased,
                     settings.suggestions.isEnabled
                 else { return }
+                // An incomplete first download cannot reload from disk, so it resumes through the fetching path instead.
+                if memoryPressure.shouldResumeFirstDownload {
+                    memoryPressure.reloaded(at: .now)
+                    return prepareTheModelIfNeeded()
+                }
                 await allowModelReload()
                 guard !Task.isCancelled, memoryPressure.isReleased,
                     settings.suggestions.isEnabled
